@@ -1,0 +1,46 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 每天北京时间早上 9 点（UTC 1:00）自动同步
+    - cron: '0 1 * * *'
+  workflow_dispatch: # 也支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync main from upstream
+        run: |
+          git remote add upstream https://github.com/Wei-Shaw/sub2api.git || true
+          git fetch upstream main
+          git merge upstream/main --no-edit
+          git push origin main
+
+      - name: Rebase custom branch
+        run: |
+          git fetch origin custom
+          git checkout custom
+          if git rebase main; then
+            git push origin custom --force-with-lease
+            echo "✅ custom branch rebased successfully"
+          else
+            git rebase --abort
+            echo "⚠️ Rebase conflict detected, skipping auto-rebase"
+            echo "Please manually rebase custom branch"
+          fi
