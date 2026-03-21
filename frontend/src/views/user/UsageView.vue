@@ -58,9 +58,7 @@
                 ${{ (usageStats?.total_actual_cost || 0).toFixed(4) }}
               </p>
               <p class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('usage.actualCost') }} /
-                <span class="line-through">${{ (usageStats?.total_cost || 0).toFixed(4) }}</span>
-                {{ t('usage.standardCost') }}
+                {{ t('usage.actualCost') }}
               </p>
             </div>
           </div>
@@ -449,23 +447,13 @@
               <span class="font-medium text-white">${{ tooltipData.cache_read_cost.toFixed(6) }}</span>
             </div>
           </div>
-          <!-- Rate and Summary -->
+          <!-- Service Tier and Total Cost -->
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.serviceTier') }}</span>
             <span class="font-semibold text-cyan-300">{{ getUsageServiceTierLabel(tooltipData?.service_tier, t) }}</span>
           </div>
-          <div class="flex items-center justify-between gap-6">
-            <span class="text-gray-400">{{ t('usage.rate') }}</span>
-            <span class="font-semibold text-blue-400"
-              >{{ (tooltipData?.rate_multiplier || 1).toFixed(2) }}x</span
-            >
-          </div>
-          <div class="flex items-center justify-between gap-6">
-            <span class="text-gray-400">{{ t('usage.original') }}</span>
-            <span class="font-medium text-white">${{ tooltipData?.total_cost.toFixed(6) }}</span>
-          </div>
           <div class="flex items-center justify-between gap-6 border-t border-gray-700 pt-1.5">
-            <span class="text-gray-400">{{ t('usage.billed') }}</span>
+            <span class="text-gray-400">{{ t('usage.totalCost') }}</span>
             <span class="font-semibold text-green-400"
               >${{ tooltipData?.actual_cost.toFixed(6) }}</span
             >
@@ -808,9 +796,7 @@ const exportToCSV = async () => {
       'Output Tokens',
       'Cache Read Tokens',
       'Cache Creation Tokens',
-      'Rate Multiplier',
-      'Billed Cost',
-      'Original Cost',
+      'Cost',
       'First Token (ms)',
       'Duration (ms)'
     ]
@@ -826,9 +812,7 @@ const exportToCSV = async () => {
         log.output_tokens,
         log.cache_read_tokens,
         log.cache_creation_tokens,
-        log.rate_multiplier,
         log.actual_cost.toFixed(8),
-        log.total_cost.toFixed(8),
         log.first_token_ms ?? '',
         log.duration_ms
       ].map(escapeCSVValue)
