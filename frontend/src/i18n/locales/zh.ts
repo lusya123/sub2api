@@ -2446,6 +2446,12 @@ export default {
           target: '目标 TTL',
           targetHint: '选择计费使用的 TTL 类型'
         },
+        virtualCache: {
+          label: '虚拟缓存',
+          hint: '为不支持 prompt caching 的上游模拟缓存效果。将 input_tokens 拆分为 input + cache_read + cache_creation，总成本保持不变。',
+          readRatio: '缓存读取比例',
+          readRatioHint: 'input tokens 中显示为 cache_read 的比例（0.01~0.21，默认 0.15）。cache_creation 自动按 3.6 倍计算。'
+        },
         clientAffinity: {
           label: '客户端亲和调度',
           hint: '启用后，新会话会优先调度到该客户端之前使用过的账号，避免频繁切换账号'

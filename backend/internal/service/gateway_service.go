@@ -6684,6 +6684,24 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			}
 		}
 
+		// Virtual Cache: 将 input_tokens 拆分为 input + cache_read + cache_creation
+		// 保持成本恒等式 I + 0.1*CR + 1.25*CC = T
+		if account.IsVirtualCacheEnabled() {
+			vcRatio := account.GetVirtualCacheReadRatio()
+			if eventType == "message_start" {
+				if msg, ok := event["message"].(map[string]any); ok {
+					if u, ok := msg["usage"].(map[string]any); ok {
+						eventChanged = applyVirtualCacheToUsageJSON(u, vcRatio) || eventChanged
+					}
+				}
+			}
+			if eventType == "message_delta" {
+				if u, ok := event["usage"].(map[string]any); ok {
+					eventChanged = applyVirtualCacheToUsageJSON(u, vcRatio) || eventChanged
+				}
+			}
+		}
+
 		// Cache TTL Override: 重写 SSE 事件中的 cache_creation 分类
 		if account.IsCacheTTLOverrideEnabled() {
 			overrideTarget := account.GetCacheTTLOverrideTarget()
@@ -7117,6 +7135,25 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 		}
 	}
 
+	// Virtual Cache: 将 input_tokens 拆分为 input + cache_read + cache_creation
+	if account.IsVirtualCacheEnabled() &&
+		response.Usage.CacheReadInputTokens == 0 && response.Usage.CacheCreationInputTokens == 0 &&
+		response.Usage.InputTokens > 0 {
+		vc := calculateVirtualCache(response.Usage.InputTokens, account.GetVirtualCacheReadRatio())
+		response.Usage.InputTokens = vc.InputTokens
+		response.Usage.CacheReadInputTokens = vc.CacheReadInputTokens
+		response.Usage.CacheCreationInputTokens = vc.CacheCreationInputTokens
+		if newBody, err := sjson.SetBytes(body, "usage.input_tokens", vc.InputTokens); err == nil {
+			body = newBody
+		}
+		if newBody, err := sjson.SetBytes(body, "usage.cache_read_input_tokens", vc.CacheReadInputTokens); err == nil {
+			body = newBody
+		}
+		if newBody, err := sjson.SetBytes(body, "usage.cache_creation_input_tokens", vc.CacheCreationInputTokens); err == nil {
+			body = newBody
+		}
+	}
+
 	// Cache TTL Override: 重写 non-streaming 响应中的 cache_creation 分类
 	if account.IsCacheTTLOverrideEnabled() {
 		overrideTarget := account.GetCacheTTLOverrideTarget()
@@ -7496,6 +7533,18 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		result.Usage.InputTokens = 0
 	}
 
+	// Virtual Cache: 将 input_tokens 拆分为 input + cache_read + cache_creation
+	// 保持成本恒等式 I + 0.1*CR + 1.25*CC = T，与 SSE 流中的展示一致
+	if account.IsVirtualCacheEnabled() && !input.ForceCacheBilling {
+		totalInput := result.Usage.InputTokens + result.Usage.CacheReadInputTokens + result.Usage.CacheCreationInputTokens
+		if result.Usage.CacheReadInputTokens == 0 && result.Usage.CacheCreationInputTokens == 0 && totalInput > 0 {
+			vc := calculateVirtualCache(totalInput, account.GetVirtualCacheReadRatio())
+			result.Usage.InputTokens = vc.InputTokens
+			result.Usage.CacheReadInputTokens = vc.CacheReadInputTokens
+			result.Usage.CacheCreationInputTokens = vc.CacheCreationInputTokens
+		}
+	}
+
 	// Cache TTL Override: 确保计费时 token 分类与账号设置一致
 	cacheTTLOverridden := false
 	if account.IsCacheTTLOverrideEnabled() {
@@ -7699,6 +7748,18 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 			result.Usage.InputTokens, account.ID)
 		result.Usage.CacheReadInputTokens += result.Usage.InputTokens
 		result.Usage.InputTokens = 0
+	}
+
+	// Virtual Cache: 将 input_tokens 拆分为 input + cache_read + cache_creation
+	// 保持成本恒等式 I + 0.1*CR + 1.25*CC = T，与 SSE 流中的展示一致
+	if account.IsVirtualCacheEnabled() && !input.ForceCacheBilling {
+		totalInput := result.Usage.InputTokens + result.Usage.CacheReadInputTokens + result.Usage.CacheCreationInputTokens
+		if result.Usage.CacheReadInputTokens == 0 && result.Usage.CacheCreationInputTokens == 0 && totalInput > 0 {
+			vc := calculateVirtualCache(totalInput, account.GetVirtualCacheReadRatio())
+			result.Usage.InputTokens = vc.InputTokens
+			result.Usage.CacheReadInputTokens = vc.CacheReadInputTokens
+			result.Usage.CacheCreationInputTokens = vc.CacheCreationInputTokens
+		}
 	}
 
 	// Cache TTL Override: 确保计费时 token 分类与账号设置一致

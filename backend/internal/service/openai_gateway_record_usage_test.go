@@ -261,6 +261,54 @@ func TestOpenAIGatewayServiceRecordUsage_IncludesEndpointMetadata(t *testing.T) 
 	require.Equal(t, "/v1/responses", *usageRepo.lastLog.UpstreamEndpoint)
 }
 
+func TestOpenAIGatewayServiceRecordUsage_AppliesVirtualCacheToUsageLog(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	subRepo := &openAIRecordUsageSubRepoStub{}
+	rateRepo := &openAIUserGroupRateRepoStub{}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, rateRepo)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID: "resp_virtual_cache",
+			Usage: OpenAIUsage{
+				InputTokens:  10000,
+				OutputTokens: 200,
+			},
+			Model:    "gpt-5.1",
+			Duration: time.Second,
+		},
+		APIKey: &APIKey{
+			ID:    1003,
+			Group: &Group{RateMultiplier: 1},
+		},
+		User: &User{ID: 2003},
+		Account: &Account{
+			ID: 3003,
+			Extra: map[string]any{
+				"virtual_cache_enabled":    true,
+				"virtual_cache_read_ratio": 0.15,
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, 3100, usageRepo.lastLog.InputTokens)
+	require.Equal(t, 1500, usageRepo.lastLog.CacheReadTokens)
+	require.Equal(t, 5400, usageRepo.lastLog.CacheCreationTokens)
+	require.Equal(t, 1.1, usageRepo.lastLog.RateMultiplier)
+
+	expected := expectedOpenAICost(t, svc, "gpt-5.1", OpenAIUsage{
+		InputTokens:              4600,
+		OutputTokens:             200,
+		CacheReadInputTokens:     1500,
+		CacheCreationInputTokens: 5400,
+	}, 1.1)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_FallsBackToGroupDefaultRateOnResolverError(t *testing.T) {
 	groupID := int64(12)
 	groupRate := 1.6
