@@ -32,6 +32,11 @@ func TestGatewayServiceRecordUsage_SubscriptionBillingUsesActualCost(t *testing.
 
 	// 倍率 0.3，模拟月卡场景
 	rateMultiplier := 0.3
+	group := &Group{
+		ID:               groupID,
+		RateMultiplier:   rateMultiplier,
+		SubscriptionType: SubscriptionTypeSubscription,
+	}
 
 	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
 		Result: &ForwardResult{
@@ -46,6 +51,7 @@ func TestGatewayServiceRecordUsage_SubscriptionBillingUsesActualCost(t *testing.
 		APIKey: &APIKey{
 			ID:      1,
 			GroupID: &groupID,
+			Group:   group,
 		},
 		User:    &User{ID: 1},
 		Account: &Account{ID: 1},
@@ -54,7 +60,6 @@ func TestGatewayServiceRecordUsage_SubscriptionBillingUsesActualCost(t *testing.
 			UserID:  1,
 			GroupID: groupID,
 		},
-		RateMultiplier: rateMultiplier,
 	})
 
 	require.NoError(t, err)
@@ -92,6 +97,11 @@ func TestGatewayServiceRecordUsage_BalanceBillingUsesActualCost(t *testing.T) {
 
 	// 倍率 0.3
 	rateMultiplier := 0.3
+	group := &Group{
+		ID:               groupID,
+		RateMultiplier:   rateMultiplier,
+		SubscriptionType: SubscriptionTypeSubscription,
+	}
 
 	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
 		Result: &ForwardResult{
@@ -106,11 +116,11 @@ func TestGatewayServiceRecordUsage_BalanceBillingUsesActualCost(t *testing.T) {
 		APIKey: &APIKey{
 			ID:      1,
 			GroupID: &groupID,
+			Group:   group,
 		},
 		User:         &User{ID: 1},
 		Account:      &Account{ID: 1},
 		Subscription: nil, // 无订阅，使用余额扣费
-		RateMultiplier: rateMultiplier,
 	})
 
 	require.NoError(t, err)
@@ -132,6 +142,11 @@ func TestGatewayServiceRecordUsage_SubscriptionAndBalanceUseSameCostLogic(t *tes
 
 	rateMultiplier := 0.5
 	groupID := int64(100)
+	group := &Group{
+		ID:               groupID,
+		RateMultiplier:   rateMultiplier,
+		SubscriptionType: SubscriptionTypeSubscription,
+	}
 
 	// 测试订阅计费
 	subRepo1 := &gatewayRecordUsageSubRepoStub{}
@@ -150,11 +165,10 @@ func TestGatewayServiceRecordUsage_SubscriptionAndBalanceUseSameCostLogic(t *tes
 			Model:     "claude-sonnet-4",
 			Duration:  time.Second,
 		},
-		APIKey:         &APIKey{ID: 1, GroupID: &groupID},
-		User:           &User{ID: 1},
-		Account:        &Account{ID: 1},
-		Subscription:   &UserSubscription{ID: 200, UserID: 1, GroupID: groupID},
-		RateMultiplier: rateMultiplier,
+		APIKey:       &APIKey{ID: 1, GroupID: &groupID, Group: group},
+		User:         &User{ID: 1},
+		Account:      &Account{ID: 1},
+		Subscription: &UserSubscription{ID: 200, UserID: 1, GroupID: groupID},
 	})
 	require.NoError(t, err)
 
@@ -175,11 +189,10 @@ func TestGatewayServiceRecordUsage_SubscriptionAndBalanceUseSameCostLogic(t *tes
 			Model:     "claude-sonnet-4",
 			Duration:  time.Second,
 		},
-		APIKey:         &APIKey{ID: 1, GroupID: &groupID},
-		User:           &User{ID: 1},
-		Account:        &Account{ID: 1},
-		Subscription:   nil,
-		RateMultiplier: rateMultiplier,
+		APIKey:       &APIKey{ID: 1, GroupID: &groupID, Group: group},
+		User:         &User{ID: 1},
+		Account:      &Account{ID: 1},
+		Subscription: nil,
 	})
 	require.NoError(t, err)
 
