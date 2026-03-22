@@ -1236,6 +1236,39 @@ func (a *Account) GetCacheTTLOverrideTarget() string {
 	return "5m"
 }
 
+// IsVirtualCacheEnabled 检查是否启用虚拟缓存模拟
+// 启用后将 input_tokens 拆分为 input + cache_read + cache_creation，
+// 保持总成本不变（数学恒等式：I + 0.1*CR + 1.25*CC = T）
+func (a *Account) IsVirtualCacheEnabled() bool {
+	if a.Extra == nil {
+		return false
+	}
+	if v, ok := a.Extra["virtual_cache_enabled"]; ok {
+		if enabled, ok := v.(bool); ok {
+			return enabled
+		}
+	}
+	return false
+}
+
+// GetVirtualCacheReadRatio 获取虚拟缓存的 cache_read 占比（α）
+// 返回值范围 [0, ~0.217]，默认 0.15
+// cache_creation 自动按 3.6 × cache_read 计算（由定价结构决定）
+func (a *Account) GetVirtualCacheReadRatio() float64 {
+	if a.Extra == nil {
+		return defaultVirtualCacheReadRatio
+	}
+	if v, ok := a.Extra["virtual_cache_read_ratio"]; ok {
+		if ratio := parseExtraFloat64(v); ratio > 0 {
+			if ratio > maxSafeReadRatio {
+				return maxSafeReadRatio
+			}
+			return ratio
+		}
+	}
+	return defaultVirtualCacheReadRatio
+}
+
 // GetQuotaLimit 获取 API Key 账号的配额限制（美元）
 // 返回 0 表示未启用
 func (a *Account) GetQuotaLimit() float64 {

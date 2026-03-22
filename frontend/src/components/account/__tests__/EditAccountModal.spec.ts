@@ -108,6 +108,32 @@ function buildAccount() {
   } as any
 }
 
+function buildAnthropicAPIKeyAccount() {
+  return {
+    id: 2,
+    name: 'Anthropic Key',
+    notes: '',
+    platform: 'anthropic',
+    type: 'apikey',
+    credentials: {
+      api_key: 'sk-ant-test',
+      base_url: 'https://api.anthropic.com'
+    },
+    extra: {
+      virtual_cache_enabled: true,
+      virtual_cache_read_ratio: 0.2
+    },
+    proxy_id: null,
+    concurrency: 1,
+    priority: 1,
+    rate_multiplier: 1,
+    status: 'active',
+    group_ids: [],
+    expires_at: null,
+    auto_pause_on_expired: false
+  } as any
+}
+
 function mountModal(account = buildAccount()) {
   return mount(EditAccountModal, {
     props: {
@@ -154,6 +180,23 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
       'gpt-5.2': 'gpt-5.2'
+    })
+  })
+
+  it('persists virtual cache settings for anthropic apikey accounts', async () => {
+    const account = buildAnthropicAPIKeyAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
+      virtual_cache_enabled: true,
+      virtual_cache_read_ratio: 0.2
     })
   })
 })

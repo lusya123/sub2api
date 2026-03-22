@@ -2312,6 +2312,12 @@ export default {
           target: 'Target TTL',
           targetHint: 'Select the TTL tier for billing'
         },
+        virtualCache: {
+          label: 'Virtual Cache',
+          hint: 'Simulate prompt caching for upstreams that don\'t support it. Splits input_tokens into input + cache_read + cache_creation while keeping the total cost identical.',
+          readRatio: 'Cache Read Ratio',
+          readRatioHint: 'Fraction of input tokens shown as cache_read (0.01~0.21, default 0.15). cache_creation is auto-calculated as 3.6× this value.'
+        },
         clientAffinity: {
           label: 'Client Affinity Scheduling',
           hint: 'When enabled, new sessions prefer accounts previously used by this client to reduce account switching'

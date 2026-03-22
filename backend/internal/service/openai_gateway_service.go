@@ -4127,6 +4127,12 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	account := input.Account
 	subscription := input.Subscription
 
+	// Virtual Cache: 将无缓存的 input_tokens 拆分为 OpenAI 风格的
+	// input_tokens(含 cache_read) + cache_read + cache_creation，便于后续计费与 usage log 展示。
+	if account.IsVirtualCacheEnabled() {
+		applyVirtualCacheToOpenAIUsage(&result.Usage, account.GetVirtualCacheReadRatio())
+	}
+
 	// 计算实际的新输入token（减去缓存读取的token）
 	// 因为 input_tokens 包含了 cache_read_tokens，而缓存读取的token不应按输入价格计费
 	actualInputTokens := result.Usage.InputTokens - result.Usage.CacheReadInputTokens
