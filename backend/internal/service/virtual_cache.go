@@ -130,7 +130,9 @@ func applyVirtualCacheToUsageJSON(usage map[string]any, readRatio float64) bool 
 //   - cache_read lives under input_tokens_details.cached_tokens
 //
 // To preserve the OpenAI invariant, we store:
-//   input_tokens = virtual_input_tokens + virtual_cache_read_tokens
+//
+//	input_tokens = virtual_input_tokens + virtual_cache_read_tokens
+//
 // while separately exposing cache_read / cache_creation for billing and usage logs.
 func applyVirtualCacheToOpenAIUsage(usage *OpenAIUsage, readRatio float64) bool {
 	if usage == nil {
