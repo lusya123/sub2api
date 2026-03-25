@@ -15325,7 +15325,6 @@ type RedeemCodeMutation struct {
 	value            *float64
 	addvalue         *float64
 	status           *string
-	is_trial         *bool
 	used_at          *time.Time
 	notes            *string
 	created_at       *time.Time
@@ -15601,42 +15600,6 @@ func (m *RedeemCodeMutation) OldStatus(ctx context.Context) (v string, err error
 // ResetStatus resets all changes to the "status" field.
 func (m *RedeemCodeMutation) ResetStatus() {
 	m.status = nil
-}
-
-// SetIsTrial sets the "is_trial" field.
-func (m *RedeemCodeMutation) SetIsTrial(b bool) {
-	m.is_trial = &b
-}
-
-// IsTrial returns the value of the "is_trial" field in the mutation.
-func (m *RedeemCodeMutation) IsTrial() (r bool, exists bool) {
-	v := m.is_trial
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldIsTrial returns the old "is_trial" field's value of the RedeemCode entity.
-// If the RedeemCode object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *RedeemCodeMutation) OldIsTrial(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldIsTrial is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldIsTrial requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldIsTrial: %w", err)
-	}
-	return oldValue.IsTrial, nil
-}
-
-// ResetIsTrial resets all changes to the "is_trial" field.
-func (m *RedeemCodeMutation) ResetIsTrial() {
-	m.is_trial = nil
 }
 
 // SetUsedBy sets the "used_by" field.
@@ -16028,7 +15991,7 @@ func (m *RedeemCodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RedeemCodeMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 10)
 	if m.code != nil {
 		fields = append(fields, redeemcode.FieldCode)
 	}
@@ -16040,9 +16003,6 @@ func (m *RedeemCodeMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, redeemcode.FieldStatus)
-	}
-	if m.is_trial != nil {
-		fields = append(fields, redeemcode.FieldIsTrial)
 	}
 	if m.user != nil {
 		fields = append(fields, redeemcode.FieldUsedBy)
@@ -16078,8 +16038,6 @@ func (m *RedeemCodeMutation) Field(name string) (ent.Value, bool) {
 		return m.Value()
 	case redeemcode.FieldStatus:
 		return m.Status()
-	case redeemcode.FieldIsTrial:
-		return m.IsTrial()
 	case redeemcode.FieldUsedBy:
 		return m.UsedBy()
 	case redeemcode.FieldUsedAt:
@@ -16109,8 +16067,6 @@ func (m *RedeemCodeMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldValue(ctx)
 	case redeemcode.FieldStatus:
 		return m.OldStatus(ctx)
-	case redeemcode.FieldIsTrial:
-		return m.OldIsTrial(ctx)
 	case redeemcode.FieldUsedBy:
 		return m.OldUsedBy(ctx)
 	case redeemcode.FieldUsedAt:
@@ -16159,13 +16115,6 @@ func (m *RedeemCodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
-		return nil
-	case redeemcode.FieldIsTrial:
-		v, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetIsTrial(v)
 		return nil
 	case redeemcode.FieldUsedBy:
 		v, ok := value.(int64)
@@ -16323,9 +16272,6 @@ func (m *RedeemCodeMutation) ResetField(name string) error {
 		return nil
 	case redeemcode.FieldStatus:
 		m.ResetStatus()
-		return nil
-	case redeemcode.FieldIsTrial:
-		m.ResetIsTrial()
 		return nil
 	case redeemcode.FieldUsedBy:
 		m.ResetUsedBy()

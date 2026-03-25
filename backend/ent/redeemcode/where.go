@@ -75,11 +75,6 @@ func Status(v string) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldEQ(FieldStatus, v))
 }
 
-// IsTrial applies equality check predicate on the "is_trial" field. It's identical to IsTrialEQ.
-func IsTrial(v bool) predicate.RedeemCode {
-	return predicate.RedeemCode(sql.FieldEQ(FieldIsTrial, v))
-}
-
 // UsedBy applies equality check predicate on the "used_by" field. It's identical to UsedByEQ.
 func UsedBy(v int64) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldEQ(FieldUsedBy, v))
@@ -343,16 +338,6 @@ func StatusEqualFold(v string) predicate.RedeemCode {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldContainsFold(FieldStatus, v))
-}
-
-// IsTrialEQ applies the EQ predicate on the "is_trial" field.
-func IsTrialEQ(v bool) predicate.RedeemCode {
-	return predicate.RedeemCode(sql.FieldEQ(FieldIsTrial, v))
-}
-
-// IsTrialNEQ applies the NEQ predicate on the "is_trial" field.
-func IsTrialNEQ(v bool) predicate.RedeemCode {
-	return predicate.RedeemCode(sql.FieldNEQ(FieldIsTrial, v))
 }
 
 // UsedByEQ applies the EQ predicate on the "used_by" field.

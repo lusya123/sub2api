@@ -51,7 +51,10 @@
           <template #cell-code="{ value, row }">
             <div class="flex items-center space-x-2">
               <code class="font-mono text-sm text-gray-900 dark:text-gray-100">{{ value }}</code>
-              <span v-if="row.is_trial" class="badge badge-warning whitespace-nowrap">
+              <span
+                v-if="row.type === 'balance' && Number(row.value) === 5"
+                class="badge badge-warning whitespace-nowrap"
+              >
                 {{ t('admin.redeem.trialBadge') }}
               </span>
               <button
@@ -232,24 +235,10 @@
               />
             </div>
             <div
-              v-if="generateForm.type === 'balance'"
-              class="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-900/20"
+              v-if="generateForm.type === 'balance' && generateForm.value === 5"
+              class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-300"
             >
-              <label class="flex cursor-pointer items-start gap-3">
-                <input
-                  v-model="generateForm.is_trial"
-                  type="checkbox"
-                  class="mt-1 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                />
-                <div>
-                  <div class="text-sm font-medium text-amber-900 dark:text-amber-200">
-                    {{ t('admin.redeem.trialCodeLabel') }}
-                  </div>
-                  <p class="mt-1 text-xs text-amber-800 dark:text-amber-300">
-                    {{ t('admin.redeem.trialCodeHint') }}
-                  </p>
-                </div>
-              </label>
+              {{ t('admin.redeem.trialCodeHint') }}
             </div>
             <!-- 邀请码类型：显示提示信息 -->
             <div v-if="generateForm.type === 'invitation'" class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
@@ -571,7 +560,6 @@ const copiedCode = ref<string | null>(null)
 const generateForm = reactive({
   type: 'balance' as RedeemCodeType,
   value: 10,
-  is_trial: false,
   count: 1,
   group_id: null as number | null,
   validity_days: 30
@@ -585,9 +573,6 @@ watch(
       generateForm.value = 0
     } else if (generateForm.value === 0) {
       generateForm.value = 10
-    }
-    if (newType !== 'balance') {
-      generateForm.is_trial = false
     }
   }
 )
@@ -669,7 +654,6 @@ const handleGenerateCodes = async () => {
       generateForm.count,
       generateForm.type,
       generateForm.value,
-      generateForm.type === 'balance' ? generateForm.is_trial : false,
       generateForm.type === 'subscription' ? generateForm.group_id : undefined,
       generateForm.type === 'subscription' ? generateForm.validity_days : undefined
     )
@@ -677,7 +661,6 @@ const handleGenerateCodes = async () => {
     generatedCodes.value = result
     showResultDialog.value = true
     // 重置表单
-    generateForm.is_trial = false
     generateForm.group_id = null
     generateForm.validity_days = 30
     loadCodes()

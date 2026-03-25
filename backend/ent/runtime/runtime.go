@@ -679,16 +679,12 @@ func init() {
 	redeemcode.DefaultStatus = redeemcodeDescStatus.Default.(string)
 	// redeemcode.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	redeemcode.StatusValidator = redeemcodeDescStatus.Validators[0].(func(string) error)
-	// redeemcodeDescIsTrial is the schema descriptor for is_trial field.
-	redeemcodeDescIsTrial := redeemcodeFields[4].Descriptor()
-	// redeemcode.DefaultIsTrial holds the default value on creation for the is_trial field.
-	redeemcode.DefaultIsTrial = redeemcodeDescIsTrial.Default.(bool)
 	// redeemcodeDescCreatedAt is the schema descriptor for created_at field.
-	redeemcodeDescCreatedAt := redeemcodeFields[8].Descriptor()
+	redeemcodeDescCreatedAt := redeemcodeFields[7].Descriptor()
 	// redeemcode.DefaultCreatedAt holds the default value on creation for the created_at field.
 	redeemcode.DefaultCreatedAt = redeemcodeDescCreatedAt.Default.(func() time.Time)
 	// redeemcodeDescValidityDays is the schema descriptor for validity_days field.
-	redeemcodeDescValidityDays := redeemcodeFields[10].Descriptor()
+	redeemcodeDescValidityDays := redeemcodeFields[9].Descriptor()
 	// redeemcode.DefaultValidityDays holds the default value on creation for the validity_days field.
 	redeemcode.DefaultValidityDays = redeemcodeDescValidityDays.Default.(int)
 	securitysecretMixin := schema.SecuritySecret{}.Mixin()

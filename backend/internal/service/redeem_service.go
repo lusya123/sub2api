@@ -6,12 +6,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+
+	"entgo.io/ent/dialect"
 )
 
 var (
@@ -27,6 +31,7 @@ const (
 	redeemMaxErrorsPerHour  = 20
 	redeemRateLimitDuration = time.Hour
 	redeemLockDuration      = 10 * time.Second // 锁超时时间，防止死锁
+	trialRedeemBalanceValue = 5
 )
 
 // RedeemCache defines cache operations for redeem service
@@ -161,11 +166,10 @@ func (s *RedeemService) GenerateCodes(ctx context.Context, req GenerateCodesRequ
 		}
 
 		codes = append(codes, RedeemCode{
-			Code:    code,
-			Type:    codeType,
-			Value:   value,
-			Status:  StatusUnused,
-			IsTrial: false,
+			Code:   code,
+			Type:   codeType,
+			Value:  value,
+			Status: StatusUnused,
 		})
 	}
 
@@ -307,7 +311,17 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	// 将事务放入 context，使 repository 方法能够使用同一事务
 	txCtx := dbent.NewTxContext(ctx, tx)
 
-	if redeemCode.IsTrial {
+	if isTrialRedeemCode(redeemCode) {
+		if supportsTrialRedeemUserLock(s.entClient) {
+			// Lock the user row to serialize concurrent trial redemptions for the same account.
+			_, err := tx.Client().User.Query().
+				Where(dbuser.IDEQ(userID)).
+				ForUpdate().
+				Only(txCtx)
+			if err != nil {
+				return nil, fmt.Errorf("lock user for trial redeem: %w", err)
+			}
+		}
 		alreadyUsed, err := s.redeemRepo.HasUsedTrialCodeByUser(txCtx, userID)
 		if err != nil {
 			return nil, fmt.Errorf("check trial redeem history: %w", err)
@@ -378,6 +392,24 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	}
 
 	return redeemCode, nil
+}
+
+func isTrialRedeemCode(code *RedeemCode) bool {
+	return code != nil &&
+		code.Type == RedeemTypeBalance &&
+		math.Abs(code.Value-trialRedeemBalanceValue) < 1e-9
+}
+
+func supportsTrialRedeemUserLock(client *dbent.Client) bool {
+	if client == nil || client.Driver() == nil {
+		return false
+	}
+	switch client.Driver().Dialect() {
+	case dialect.Postgres, dialect.MySQL:
+		return true
+	default:
+		return false
+	}
 }
 
 // invalidateRedeemCaches 失效兑换相关的缓存

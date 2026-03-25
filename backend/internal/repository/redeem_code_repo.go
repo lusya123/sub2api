@@ -2,8 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -11,14 +9,11 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/lib/pq"
 )
 
 type redeemCodeRepository struct {
 	client *dbent.Client
 }
-
-const redeemTrialUsedByUniqueIndex = "uq_redeem_codes_trial_used_by"
 
 func NewRedeemCodeRepository(client *dbent.Client) service.RedeemCodeRepository {
 	return &redeemCodeRepository{client: client}
@@ -30,7 +25,6 @@ func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemC
 		SetType(code.Type).
 		SetValue(code.Value).
 		SetStatus(code.Status).
-		SetIsTrial(code.IsTrial).
 		SetNotes(code.Notes).
 		SetValidityDays(code.ValidityDays).
 		SetNillableUsedBy(code.UsedBy).
@@ -57,7 +51,6 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 			SetType(c.Type).
 			SetValue(c.Value).
 			SetStatus(c.Status).
-			SetIsTrial(c.IsTrial).
 			SetNotes(c.Notes).
 			SetValidityDays(c.ValidityDays).
 			SetNillableUsedBy(c.UsedBy).
@@ -149,7 +142,6 @@ func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemC
 		SetType(code.Type).
 		SetValue(code.Value).
 		SetStatus(code.Status).
-		SetIsTrial(code.IsTrial).
 		SetNotes(code.Notes).
 		SetValidityDays(code.ValidityDays)
 
@@ -190,9 +182,6 @@ func (r *redeemCodeRepository) Use(ctx context.Context, id, userID int64) error 
 		SetUsedAt(now).
 		Save(ctx)
 	if err != nil {
-		if isTrialRedeemLimitConstraintViolation(err) {
-			return service.ErrTrialRedeemUsed
-		}
 		return err
 	}
 	if affected == 0 {
@@ -206,8 +195,9 @@ func (r *redeemCodeRepository) HasUsedTrialCodeByUser(ctx context.Context, userI
 	return client.RedeemCode.Query().
 		Where(
 			redeemcode.UsedByEQ(userID),
-			redeemcode.IsTrialEQ(true),
 			redeemcode.StatusEQ(service.StatusUsed),
+			redeemcode.TypeEQ(service.RedeemTypeBalance),
+			redeemcode.ValueEQ(5),
 		).
 		Exist(ctx)
 }
@@ -291,7 +281,6 @@ func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
 		Type:         m.Type,
 		Value:        m.Value,
 		Status:       m.Status,
-		IsTrial:      m.IsTrial,
 		UsedBy:       m.UsedBy,
 		UsedAt:       m.UsedAt,
 		Notes:        derefString(m.Notes),
@@ -306,19 +295,6 @@ func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
 		out.Group = groupEntityToService(m.Edges.Group)
 	}
 	return out
-}
-
-func isTrialRedeemLimitConstraintViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	var pgErr *pq.Error
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.Constraint == redeemTrialUsedByUniqueIndex {
-		return true
-	}
-
-	return strings.Contains(strings.ToLower(err.Error()), strings.ToLower(redeemTrialUsedByUniqueIndex))
 }
 
 func redeemCodeEntitiesToService(models []*dbent.RedeemCode) []service.RedeemCode {

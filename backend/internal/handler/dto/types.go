@@ -305,7 +305,6 @@ type RedeemCode struct {
 	Type      string     `json:"type"`
 	Value     float64    `json:"value"`
 	Status    string     `json:"status"`
-	IsTrial   bool       `json:"is_trial"`
 	UsedBy    *int64     `json:"used_by"`
 	UsedAt    *time.Time `json:"used_at"`
 	CreatedAt time.Time  `json:"created_at"`

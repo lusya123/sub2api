@@ -314,7 +314,6 @@ type GenerateRedeemCodesInput struct {
 	Count        int
 	Type         string
 	Value        float64
-	IsTrial      bool
 	GroupID      *int64 // 订阅类型专用：关联的分组ID
 	ValidityDays int    // 订阅类型专用：有效天数
 }
@@ -2075,11 +2074,10 @@ func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *Gener
 			return nil, err
 		}
 		code := RedeemCode{
-			Code:    codeValue,
-			Type:    input.Type,
-			Value:   input.Value,
-			Status:  StatusUnused,
-			IsTrial: input.IsTrial,
+			Code:   codeValue,
+			Type:   input.Type,
+			Value:  input.Value,
+			Status: StatusUnused,
 		}
 		// 订阅类型专用字段
 		if input.Type == RedeemTypeSubscription {

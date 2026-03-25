@@ -72,20 +72,6 @@ func (_c *RedeemCodeCreate) SetNillableStatus(v *string) *RedeemCodeCreate {
 	return _c
 }
 
-// SetIsTrial sets the "is_trial" field.
-func (_c *RedeemCodeCreate) SetIsTrial(v bool) *RedeemCodeCreate {
-	_c.mutation.SetIsTrial(v)
-	return _c
-}
-
-// SetNillableIsTrial sets the "is_trial" field if the given value is not nil.
-func (_c *RedeemCodeCreate) SetNillableIsTrial(v *bool) *RedeemCodeCreate {
-	if v != nil {
-		_c.SetIsTrial(*v)
-	}
-	return _c
-}
-
 // SetUsedBy sets the "used_by" field.
 func (_c *RedeemCodeCreate) SetUsedBy(v int64) *RedeemCodeCreate {
 	_c.mutation.SetUsedBy(v)
@@ -241,10 +227,6 @@ func (_c *RedeemCodeCreate) defaults() {
 		v := redeemcode.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
-	if _, ok := _c.mutation.IsTrial(); !ok {
-		v := redeemcode.DefaultIsTrial
-		_c.mutation.SetIsTrial(v)
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := redeemcode.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -283,9 +265,6 @@ func (_c *RedeemCodeCreate) check() error {
 		if err := redeemcode.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.status": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.IsTrial(); !ok {
-		return &ValidationError{Name: "is_trial", err: errors.New(`ent: missing required field "RedeemCode.is_trial"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RedeemCode.created_at"`)}
@@ -335,10 +314,6 @@ func (_c *RedeemCodeCreate) createSpec() (*RedeemCode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
 		_node.Status = value
-	}
-	if value, ok := _c.mutation.IsTrial(); ok {
-		_spec.SetField(redeemcode.FieldIsTrial, field.TypeBool, value)
-		_node.IsTrial = value
 	}
 	if value, ok := _c.mutation.UsedAt(); ok {
 		_spec.SetField(redeemcode.FieldUsedAt, field.TypeTime, value)
@@ -493,18 +468,6 @@ func (u *RedeemCodeUpsert) SetStatus(v string) *RedeemCodeUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *RedeemCodeUpsert) UpdateStatus() *RedeemCodeUpsert {
 	u.SetExcluded(redeemcode.FieldStatus)
-	return u
-}
-
-// SetIsTrial sets the "is_trial" field.
-func (u *RedeemCodeUpsert) SetIsTrial(v bool) *RedeemCodeUpsert {
-	u.Set(redeemcode.FieldIsTrial, v)
-	return u
-}
-
-// UpdateIsTrial sets the "is_trial" field to the value that was provided on create.
-func (u *RedeemCodeUpsert) UpdateIsTrial() *RedeemCodeUpsert {
-	u.SetExcluded(redeemcode.FieldIsTrial)
 	return u
 }
 
@@ -703,20 +666,6 @@ func (u *RedeemCodeUpsertOne) SetStatus(v string) *RedeemCodeUpsertOne {
 func (u *RedeemCodeUpsertOne) UpdateStatus() *RedeemCodeUpsertOne {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.UpdateStatus()
-	})
-}
-
-// SetIsTrial sets the "is_trial" field.
-func (u *RedeemCodeUpsertOne) SetIsTrial(v bool) *RedeemCodeUpsertOne {
-	return u.Update(func(s *RedeemCodeUpsert) {
-		s.SetIsTrial(v)
-	})
-}
-
-// UpdateIsTrial sets the "is_trial" field to the value that was provided on create.
-func (u *RedeemCodeUpsertOne) UpdateIsTrial() *RedeemCodeUpsertOne {
-	return u.Update(func(s *RedeemCodeUpsert) {
-		s.UpdateIsTrial()
 	})
 }
 
@@ -1096,20 +1045,6 @@ func (u *RedeemCodeUpsertBulk) SetStatus(v string) *RedeemCodeUpsertBulk {
 func (u *RedeemCodeUpsertBulk) UpdateStatus() *RedeemCodeUpsertBulk {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.UpdateStatus()
-	})
-}
-
-// SetIsTrial sets the "is_trial" field.
-func (u *RedeemCodeUpsertBulk) SetIsTrial(v bool) *RedeemCodeUpsertBulk {
-	return u.Update(func(s *RedeemCodeUpsert) {
-		s.SetIsTrial(v)
-	})
-}
-
-// UpdateIsTrial sets the "is_trial" field to the value that was provided on create.
-func (u *RedeemCodeUpsertBulk) UpdateIsTrial() *RedeemCodeUpsertBulk {
-	return u.Update(func(s *RedeemCodeUpsert) {
-		s.UpdateIsTrial()
 	})
 }
 

@@ -27,8 +27,6 @@ type RedeemCode struct {
 	Value float64 `json:"value,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
-	// IsTrial holds the value of the "is_trial" field.
-	IsTrial bool `json:"is_trial,omitempty"`
 	// UsedBy holds the value of the "used_by" field.
 	UsedBy *int64 `json:"used_by,omitempty"`
 	// UsedAt holds the value of the "used_at" field.
@@ -85,8 +83,6 @@ func (*RedeemCode) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case redeemcode.FieldIsTrial:
-			values[i] = new(sql.NullBool)
 		case redeemcode.FieldValue:
 			values[i] = new(sql.NullFloat64)
 		case redeemcode.FieldID, redeemcode.FieldUsedBy, redeemcode.FieldGroupID, redeemcode.FieldValidityDays:
@@ -139,12 +135,6 @@ func (_m *RedeemCode) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
-			}
-		case redeemcode.FieldIsTrial:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field is_trial", values[i])
-			} else if value.Valid {
-				_m.IsTrial = value.Bool
 			}
 		case redeemcode.FieldUsedBy:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -243,9 +233,6 @@ func (_m *RedeemCode) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
-	builder.WriteString(", ")
-	builder.WriteString("is_trial=")
-	builder.WriteString(fmt.Sprintf("%v", _m.IsTrial))
 	builder.WriteString(", ")
 	if v := _m.UsedBy; v != nil {
 		builder.WriteString("used_by=")
