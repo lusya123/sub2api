@@ -208,8 +208,9 @@ func TestAPIContracts(t *testing.T) {
 							"sora_image_price_540": null,
 							"sora_storage_quota_bytes": 0,
 							"sora_video_price_per_request": null,
-							"sora_video_price_per_request_hd": null,
-							"claude_code_only": false,
+						"sora_video_price_per_request_hd": null,
+						"claude_code_only": false,
+						"show_cost_breakdown": false,
 						"allow_messages_dispatch": false,
 						"fallback_group_id": null,
 						"fallback_group_id_on_invalid_request": null,
@@ -416,14 +417,19 @@ func TestAPIContracts(t *testing.T) {
 							"cache_read_tokens": 2,
 							"cache_creation_5m_tokens": 0,
 							"cache_creation_1h_tokens": 0,
-						"actual_cost": 0.5,
-						"billing_type": 0,
+							"input_cost": 0,
+							"output_cost": 0,
+							"cache_creation_cost": 0,
+							"cache_read_cost": 0,
+							"actual_cost": 0.5,
+							"billing_type": 0,
 							"stream": true,
 							"duration_ms": 100,
 							"first_token_ms": 50,
 							"image_count": 0,
 							"image_size": null,
 							"media_type": null,
+							"show_cost_breakdown": true,
 							"cache_ttl_overridden": false,
 							"created_at": "2025-01-02T03:04:05Z",
 							"user_agent": null
@@ -1234,6 +1240,18 @@ func (stubRedeemCodeRepo) ListByUserPaginated(ctx context.Context, userID int64,
 
 func (stubRedeemCodeRepo) SumPositiveBalanceByUser(ctx context.Context, userID int64) (float64, error) {
 	return 0, errors.New("not implemented")
+}
+
+func (r *stubRedeemCodeRepo) HasUsedTrialCodeByUser(ctx context.Context, userID int64) (bool, error) {
+	if r.byUser == nil {
+		return false, nil
+	}
+	for _, code := range r.byUser[userID] {
+		if code.Type == service.RedeemTypeBalance && code.Status == service.StatusUsed && code.Value == 5 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 type stubUserSubscriptionRepo struct {
