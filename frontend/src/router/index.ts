@@ -142,6 +142,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/client-install',
+    name: 'ClientInstall',
+    component: () => import('@/views/user/ClientInstallView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Client Install',
+      titleKey: 'clientInstallPage.title',
+      descriptionKey: 'clientInstallPage.description'
+    }
+  },
+  {
     path: '/usage',
     name: 'Usage',
     component: () => import('@/views/user/UsageView.vue'),

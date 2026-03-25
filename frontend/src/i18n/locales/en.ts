@@ -330,6 +330,7 @@ export default {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
+    clientInstall: 'One-Click Deploy',
     usage: 'Usage',
     redeem: 'Redeem',
     profile: 'Profile',
@@ -353,6 +354,17 @@ export default {
     buySubscription: 'Recharge / Subscription',
     docs: 'Docs',
     sora: 'Sora Studio'
+  },
+
+  clientInstallPage: {
+    title: 'One-Click Deploy',
+    description: 'Generate one-click Claude Code and OpenClaw deployment commands from an API key.',
+    noKeysTitle: 'No deployable API keys',
+    noKeysDescription: 'Create an API key assigned to an Anthropic or Antigravity group first.',
+    selectKeyTitle: 'Select API Key',
+    selectKeyDescription: 'Choose the API key on the left. The deployment command on the right updates immediately.',
+    searchPlaceholder: 'Search by key name, group, or API key',
+    panelDescription: 'Current group: {group}'
   },
 
   // Auth
@@ -578,6 +590,7 @@ export default {
     quota: 'Quota',
     lastUsedAt: 'Last Used',
     useKey: 'Use Key',
+    installClient: 'Install',
     useKeyModal: {
       title: 'Use API Key',
       description:
@@ -617,6 +630,45 @@ export default {
         subtitle: 'opencode.json',
         hint: 'Config path: ~/.config/opencode/opencode.json (or opencode.jsonc), create if not exists. Use default providers (openai/anthropic/google) or custom provider_id. API Key can be configured directly or via /connect command. This is an example, adjust models and options as needed.',
       },
+    },
+    clientInstallModal: {
+      title: 'One-Click Deploy',
+      unsupportedTitle: 'This group is not supported',
+      unsupportedDescription: 'Only Anthropic and Antigravity groups generate Claude Code / OpenClaw one-click install commands.',
+      copy: 'Copy',
+      copied: 'Copied',
+      commandTitle: 'Install Command',
+      modelTitle: 'Default OpenClaw Model',
+      claudeDescription: 'Generate a one-click Claude Code deployment command for this API key. The script installs the official npm package and persists the proxy endpoint in local environment variables.',
+      openclawDescription: 'Generate a one-click OpenClaw deployment command for this API key. The script installs the official openclaw npm package and writes config into ~/.openclaw.',
+      claudeNote: 'The Claude Code script installs the official @anthropic-ai/claude-code package and prefers npmmirror for package downloads. Reopen your terminal after installation, then run claude.',
+      openclawNote: 'The OpenClaw script installs the official openclaw npm package and writes the default model plus auth config into ~/.openclaw. It also prepares Node.js 22.16+ and prefers npmmirror for downloads.',
+      openclawWindowsNote: 'OpenClaw officially still recommends WSL2 on Windows. A native PowerShell deployment command is provided here and requires Node.js 22.16+; prefer WSL if local policy or Node setup causes issues.',
+      clients: {
+        claude: {
+          label: 'Claude Code',
+          description: 'Install the official Claude Code CLI and persist this API key.'
+        },
+        openclaw: {
+          label: 'OpenClaw',
+          description: 'Install the official OpenClaw package and set this API key as default auth.'
+        }
+      },
+      os: {
+        unix: 'macOS / Linux / WSL',
+        windows: 'Windows'
+      },
+      models: {
+        sonnet46: 'Sonnet 4.6',
+        opus46: 'Opus 4.6',
+        haiku45: 'Haiku 4.5'
+      },
+      summary: {
+        claudeUnix: 'Claude Code · macOS / Linux / WSL',
+        claudeWindows: 'Claude Code · Windows PowerShell',
+        openclawUnix: 'OpenClaw · macOS / Linux / WSL · Default model {model}',
+        openclawWindows: 'OpenClaw · Windows PowerShell · Default model {model}'
+      }
     },
     customKeyLabel: 'Custom Key',
     customKeyPlaceholder: 'Enter your custom key (min 16 chars)',
