@@ -76,4 +76,85 @@ describe('ClientInstallPanel', () => {
     expect(wrapper.text()).toContain("$env:OPENCLAW_MODEL='anthropic/claude-opus-4-6'")
     expect(wrapper.text()).toContain('/install-openclaw-win.ps1')
   })
+
+  it('restores the Claude Code command after switching back from OpenClaw', async () => {
+    const wrapper = mount(ClientInstallPanel, {
+      props: {
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com',
+        platform: 'anthropic'
+      },
+      global: {
+        stubs: {
+          Icon: { template: '<span />' }
+        }
+      }
+    })
+
+    const openclawButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.clientInstallModal.clients.openclaw.label')
+    )
+    expect(openclawButton).toBeDefined()
+    await openclawButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('/install-openclaw.sh')
+
+    const claudeButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.clientInstallModal.clients.claude.label')
+    )
+    expect(claudeButton).toBeDefined()
+    await claudeButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('CLAUDE_API_URL="https://example.com"')
+    expect(wrapper.text()).toContain('/install-claude.sh')
+    expect(wrapper.text()).not.toContain('/install-openclaw.sh')
+  })
+
+  it('keeps the selected OS command when switching from OpenClaw back to Claude Code', async () => {
+    const wrapper = mount(ClientInstallPanel, {
+      props: {
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com',
+        platform: 'anthropic'
+      },
+      global: {
+        stubs: {
+          Icon: { template: '<span />' }
+        }
+      }
+    })
+
+    const windowsButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.clientInstallModal.os.windows')
+    )
+    expect(windowsButton).toBeDefined()
+    await windowsButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain("$env:CLAUDE_API_URL='https://example.com'")
+    expect(wrapper.text()).toContain('/install-claude-win.ps1')
+
+    const openclawButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.clientInstallModal.clients.openclaw.label')
+    )
+    expect(openclawButton).toBeDefined()
+    await openclawButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain("$env:OPENCLAW_BASE_URL='https://example.com'")
+    expect(wrapper.text()).toContain('/install-openclaw-win.ps1')
+
+    const claudeButton = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.clientInstallModal.clients.claude.label')
+    )
+    expect(claudeButton).toBeDefined()
+    await claudeButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain("$env:CLAUDE_API_URL='https://example.com'")
+    expect(wrapper.text()).toContain('/install-claude-win.ps1')
+    expect(wrapper.text()).not.toContain('/install-openclaw-win.ps1')
+  })
 })

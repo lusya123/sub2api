@@ -86,7 +86,7 @@
         </div>
       </div>
 
-      <div class="rounded-xl border border-gray-200 dark:border-dark-700">
+      <div :key="commandPanelKey" class="rounded-xl border border-gray-200 dark:border-dark-700">
         <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2 dark:border-dark-700">
           <div>
             <p class="text-sm font-medium text-gray-900 dark:text-white">
@@ -210,6 +210,10 @@ const note = computed(() => {
     : t('keys.clientInstallModal.openclawNote')
 })
 
+const commandPanelKey = computed(() => (
+  `${selectedClient.value}:${selectedOs.value}:${selectedOpenClawModel.value}:${props.apiKey}:${effectiveApiUrl.value}`
+))
+
 const currentSummary = computed(() => {
   if (selectedClient.value === 'claude') {
     return selectedOs.value === 'unix'
@@ -249,4 +253,8 @@ async function copyCommand() {
     copied.value = false
   }, 1500)
 }
+
+watch(selectedClient, () => {
+  copied.value = false
+})
 </script>
