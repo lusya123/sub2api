@@ -311,6 +311,14 @@
                 <Icon name="terminal" size="sm" />
                 <span class="text-xs">{{ t('keys.useKey') }}</span>
               </button>
+              <button
+                v-if="row.group && ['anthropic', 'antigravity'].includes(row.group.platform)"
+                @click="openClientInstallModal(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/20 dark:hover:text-indigo-400"
+              >
+                <Icon name="download" size="sm" />
+                <span class="text-xs">{{ t('keys.installClient') }}</span>
+              </button>
               <!-- Import to CC Switch Button -->
               <button
                 v-if="!publicSettings?.hide_ccs_import_button"
@@ -1039,6 +1047,7 @@
 <script setup lang="ts">
 	import { ref, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 	import { useI18n } from 'vue-i18n'
+	import { useRouter } from 'vue-router'
 	import { useAppStore } from '@/stores/app'
 	import { useOnboardingStore } from '@/stores/onboarding'
 	import { useClipboard } from '@/composables/useClipboard'
@@ -1082,6 +1091,7 @@ interface GroupOption {
   platform: GroupPlatform
 }
 
+const router = useRouter()
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
@@ -1347,6 +1357,10 @@ const openUseKeyModal = (key: ApiKey) => {
 const closeUseKeyModal = () => {
   showUseKeyModal.value = false
   selectedKey.value = null
+}
+
+const openClientInstallModal = (key: ApiKey) => {
+  router.push({ path: '/client-install', query: { keyId: String(key.id) } })
 }
 
 const handlePageChange = (page: number) => {

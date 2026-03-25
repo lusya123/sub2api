@@ -330,6 +330,7 @@ export default {
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',
+    clientInstall: '一键部署',
     usage: '使用记录',
     redeem: '兑换',
     profile: '个人资料',
@@ -353,6 +354,17 @@ export default {
     buySubscription: '充值/订阅',
     docs: '文档',
     sora: 'Sora 创作'
+  },
+
+  clientInstallPage: {
+    title: '一键部署',
+    description: '按 API Key 一键生成 Claude Code 与 OpenClaw 部署命令。',
+    noKeysTitle: '暂无可部署的 API Key',
+    noKeysDescription: '请先创建并分配 Anthropic 或 Antigravity 分组的 API Key。',
+    selectKeyTitle: '选择 API Key',
+    selectKeyDescription: '左侧选择要部署到客户端中的 API Key，右侧会实时生成对应命令。',
+    searchPlaceholder: '搜索密钥名称、分组或 Key',
+    panelDescription: '当前分组：{group}'
   },
 
   // Auth
@@ -586,6 +598,7 @@ export default {
     quota: '额度',
     lastUsedAt: '上次使用时间',
     useKey: '使用密钥',
+    installClient: '装客户端',
     useKeyModal: {
       title: '使用 API 密钥',
       description: '将以下环境变量添加到您的终端配置文件或直接在终端中运行。',
@@ -628,6 +641,45 @@ export default {
         title: 'OpenCode 配置示例',
         subtitle: 'opencode.json',
         hint: '配置文件路径：~/.config/opencode/opencode.json（或 opencode.jsonc），不存在需手动创建。可使用默认 provider（openai/anthropic/google）或自定义 provider_id。API Key 支持直接配置或通过客户端 /connect 命令配置。示例仅供参考，模型与选项可按需调整。'
+      }
+    },
+    clientInstallModal: {
+      title: '一键部署',
+      unsupportedTitle: '当前分组暂不支持此安装方式',
+      unsupportedDescription: '只有 Anthropic 和 Antigravity 分组会生成 Claude Code / OpenClaw 一键安装命令。',
+      copy: '复制',
+      copied: '已复制',
+      commandTitle: '一键命令',
+      modelTitle: 'OpenClaw 默认模型',
+      claudeDescription: '为当前 API Key 生成 Claude Code 一键安装命令。脚本会安装官方 npm 包并把代理地址持久化到本机环境变量中。',
+      openclawDescription: '为当前 API Key 生成 OpenClaw 一键部署命令。脚本会安装官方 openclaw npm 包，并写入 ~/.openclaw 配置。',
+      claudeNote: 'Claude Code 脚本安装的是官方 @anthropic-ai/claude-code 包，包下载优先使用 npmmirror。安装后建议重新打开终端再执行 claude。',
+      openclawNote: 'OpenClaw 脚本安装的是官方 openclaw npm 包，并把默认模型和认证信息写入 ~/.openclaw。脚本会优先准备 Node.js 22.16+，包下载优先使用 npmmirror。',
+      openclawWindowsNote: 'OpenClaw 官方仍更推荐在 Windows 上通过 WSL2 使用。这里提供的是原生 PowerShell 部署命令，并要求 Node.js 22.16+；如果系统策略或 Node 环境受限，优先考虑 WSL。',
+      clients: {
+        claude: {
+          label: 'Claude Code',
+          description: '安装官方 Claude Code CLI，并写入当前密钥配置。'
+        },
+        openclaw: {
+          label: 'OpenClaw',
+          description: '安装官方 OpenClaw，并把当前密钥设为默认认证。'
+        }
+      },
+      os: {
+        unix: 'macOS / Linux / WSL',
+        windows: 'Windows'
+      },
+      models: {
+        sonnet46: 'Sonnet 4.6',
+        opus46: 'Opus 4.6',
+        haiku45: 'Haiku 4.5'
+      },
+      summary: {
+        claudeUnix: 'Claude Code · macOS / Linux / WSL',
+        claudeWindows: 'Claude Code · Windows PowerShell',
+        openclawUnix: 'OpenClaw · macOS / Linux / WSL · 默认模型 {model}',
+        openclawWindows: 'OpenClaw · Windows PowerShell · 默认模型 {model}'
       }
     },
     customKeyLabel: '自定义密钥',
