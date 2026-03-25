@@ -8,9 +8,7 @@ import type {
   UsageLog,
   UsageQueryParams,
   UsageStatsResponse,
-  PaginatedResponse,
-  TrendDataPoint,
-  ModelStat
+  PaginatedResponse
 } from '@/types'
 
 // ==================== Dashboard Types ====================
@@ -24,7 +22,6 @@ export interface UserDashboardStats {
   total_cache_creation_tokens: number
   total_cache_read_tokens: number
   total_tokens: number
-  total_cost: number // 标准计费
   total_actual_cost: number // 实际扣除
   today_requests: number
   today_input_tokens: number
@@ -32,11 +29,32 @@ export interface UserDashboardStats {
   today_cache_creation_tokens: number
   today_cache_read_tokens: number
   today_tokens: number
-  today_cost: number // 今日标准计费
   today_actual_cost: number // 今日实际扣除
   average_duration_ms: number
   rpm: number // 近5分钟平均每分钟请求数
   tpm: number // 近5分钟平均每分钟Token数
+}
+
+export interface UserTrendDataPoint {
+  date: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  total_tokens: number
+  actual_cost: number
+}
+
+export interface UserModelStat {
+  model: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  total_tokens: number
+  actual_cost: number
 }
 
 export interface TrendParams {
@@ -46,14 +64,14 @@ export interface TrendParams {
 }
 
 export interface TrendResponse {
-  trend: TrendDataPoint[]
+  trend: UserTrendDataPoint[]
   start_date: string
   end_date: string
   granularity: string
 }
 
 export interface ModelStatsResponse {
-  models: ModelStat[]
+  models: UserModelStat[]
   start_date: string
   end_date: string
 }

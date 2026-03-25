@@ -36,6 +36,7 @@ type GenerateRedeemCodesRequest struct {
 	Count        int     `json:"count" binding:"required,min=1,max=100"`
 	Type         string  `json:"type" binding:"required,oneof=balance concurrency subscription invitation"`
 	Value        float64 `json:"value" binding:"min=0"`
+	IsTrial      bool    `json:"is_trial"`
 	GroupID      *int64  `json:"group_id"`                                    // 订阅类型必填
 	ValidityDays int     `json:"validity_days" binding:"omitempty,max=36500"` // 订阅类型使用，默认30天，最大100年
 }
@@ -110,6 +111,7 @@ func (h *RedeemHandler) Generate(c *gin.Context) {
 			Count:        req.Count,
 			Type:         req.Type,
 			Value:        req.Value,
+			IsTrial:      req.IsTrial,
 			GroupID:      req.GroupID,
 			ValidityDays: req.ValidityDays,
 		})
@@ -313,7 +315,7 @@ func (h *RedeemHandler) Export(c *gin.Context) {
 	writer := csv.NewWriter(&buf)
 
 	// Write header
-	if err := writer.Write([]string{"id", "code", "type", "value", "status", "used_by", "used_by_email", "used_at", "created_at"}); err != nil {
+	if err := writer.Write([]string{"id", "code", "type", "value", "is_trial", "status", "used_by", "used_by_email", "used_at", "created_at"}); err != nil {
 		response.InternalError(c, "Failed to export redeem codes: "+err.Error())
 		return
 	}
@@ -337,6 +339,7 @@ func (h *RedeemHandler) Export(c *gin.Context) {
 			code.Code,
 			code.Type,
 			fmt.Sprintf("%.2f", code.Value),
+			strconv.FormatBool(code.IsTrial),
 			code.Status,
 			usedBy,
 			usedByEmail,

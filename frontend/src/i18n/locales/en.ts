@@ -809,6 +809,7 @@ export default {
     subscriptionDays: '{days} days',
     days: ' days',
     codeRedeemSuccess: 'Code redeemed successfully!',
+    trialCodeAlreadyUsed: 'Each account can only redeem one trial code. You have already redeemed a trial code.',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
     pleaseEnterCode: 'Please enter a redeem code'
@@ -1529,6 +1530,7 @@ export default {
         name: 'Name',
         platform: 'Platform',
         rateMultiplier: 'Rate Multiplier',
+        actualRateMultiplier: 'Actual Multiplier',
         type: 'Type',
         accounts: 'Accounts',
         capacity: 'Capacity',
@@ -1554,6 +1556,8 @@ export default {
         description: 'Description',
         platform: 'Platform',
         rateMultiplier: 'Rate Multiplier',
+        actualRateMultiplier: 'Actual Billing Multiplier',
+        showCostBreakdown: 'Show Cost Breakdown',
         status: 'Status',
         exclusive: 'Exclusive Group'
       },
@@ -1562,6 +1566,10 @@ export default {
       platformHint: 'Select the platform this group is associated with',
       platformNotEditable: 'Platform cannot be changed after creation',
       rateMultiplierHint: 'Cost multiplier for this group (e.g., 1.5 = 150% of base cost)',
+      displayRateHint: 'User-visible multiplier used in group badges and front-end display.',
+      actualRateHint: 'Hidden billing multiplier used for real charging and quota consumption.',
+      showCostBreakdownHint: 'Controls whether regular users can see the input/output/cache cost breakdown table in usage records.',
+      actualRateShort: 'Bill',
       exclusiveHint: 'Exclusive group, manually assign to specific users',
       exclusiveTooltip: {
         title: 'What is an exclusive group?',
@@ -3022,6 +3030,10 @@ export default {
       subscription: 'Subscription',
       invitation: 'Invitation',
       invitationHint: 'Invitation codes are used to restrict user registration. They are automatically marked as used after use.',
+      trialBadge: 'Trial',
+      trialCodeLabel: 'Mark as trial code',
+      trialCodeHint:
+        'Each account can redeem this kind of code only once. Use it for $5 trial credits without affecting normal top-up redeem codes.',
       unused: 'Unused',
       used: 'Used',
       columns: {

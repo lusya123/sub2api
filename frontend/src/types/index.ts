@@ -376,6 +376,7 @@ export interface Group {
   description: string | null
   platform: GroupPlatform
   rate_multiplier: number
+  show_cost_breakdown?: boolean
   is_exclusive: boolean
   status: 'active' | 'inactive'
   subscription_type: SubscriptionType
@@ -404,6 +405,8 @@ export interface Group {
 }
 
 export interface AdminGroup extends Group {
+  actual_rate_multiplier?: number | null
+
   // 模型路由配置（仅管理员可见，内部信息）
   model_routing: Record<string, number[]> | null
   model_routing_enabled: boolean
@@ -491,6 +494,8 @@ export interface CreateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  actual_rate_multiplier?: number | null
+  show_cost_breakdown?: boolean
   is_exclusive?: boolean
   subscription_type?: SubscriptionType
   daily_limit_usd?: number | null
@@ -519,6 +524,8 @@ export interface UpdateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  actual_rate_multiplier?: number | null
+  show_cost_breakdown?: boolean
   is_exclusive?: boolean
   status?: 'active' | 'inactive'
   subscription_type?: SubscriptionType
@@ -1000,13 +1007,12 @@ export interface UsageLog {
   cache_creation_5m_tokens: number
   cache_creation_1h_tokens: number
 
-  input_cost: number
-  output_cost: number
-  cache_creation_cost: number
-  cache_read_cost: number
-  total_cost: number
+  show_cost_breakdown: boolean
+  input_cost?: number | null
+  output_cost?: number | null
+  cache_creation_cost?: number | null
+  cache_read_cost?: number | null
   actual_cost: number
-  rate_multiplier: number
   billing_type: number
 
   request_type?: UsageRequestType
@@ -1039,10 +1045,17 @@ export interface UsageLogAccountSummary {
 }
 
 export interface AdminUsageLog extends UsageLog {
+  input_cost: number
+  output_cost: number
+  cache_creation_cost: number
+  cache_read_cost: number
+  total_cost: number
+  rate_multiplier: number
   upstream_model?: string | null
 
   // 账号计费倍率（仅管理员可见）
   account_rate_multiplier?: number | null
+  actual_rate_multiplier?: number | null
 
   // 用户请求 IP（仅管理员可见）
   ip_address?: string | null
@@ -1085,6 +1098,7 @@ export interface RedeemCode {
   type: RedeemCodeType
   value: number
   status: 'active' | 'used' | 'expired' | 'unused'
+  is_trial: boolean
   used_by: number | null
   used_at: string | null
   created_at: string
@@ -1099,6 +1113,7 @@ export interface GenerateRedeemCodesRequest {
   count: number
   type: RedeemCodeType
   value: number
+  is_trial?: boolean
   group_id?: number | null // 订阅类型专用
   validity_days?: number // 订阅类型专用
 }
@@ -1165,7 +1180,6 @@ export interface UsageStatsResponse {
   total_output_tokens: number
   total_cache_tokens: number
   total_tokens: number
-  total_cost: number // 标准计费
   total_actual_cost: number // 实际扣除
   average_duration_ms: number
   models?: Record<string, number>

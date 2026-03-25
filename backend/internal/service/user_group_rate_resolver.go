@@ -10,6 +10,10 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+type userGroupRateConfigReader interface {
+	GetRateConfigByUserAndGroup(ctx context.Context, userID, groupID int64) (*UserGroupRateConfig, error)
+}
+
 type userGroupRateResolver struct {
 	repo         UserGroupRateRepository
 	cache        *gocache.Cache
@@ -42,48 +46,84 @@ func newUserGroupRateResolver(repo UserGroupRateRepository, cache *gocache.Cache
 }
 
 func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int64, groupDefaultMultiplier float64) float64 {
-	if r == nil || userID <= 0 || groupID <= 0 {
+	cfg := r.resolveConfig(ctx, userID, groupID)
+	if cfg == nil {
 		return groupDefaultMultiplier
+	}
+	return cfg.RateMultiplier
+}
+
+func (r *userGroupRateResolver) ResolveActual(ctx context.Context, userID, groupID int64, groupActualMultiplier float64) float64 {
+	cfg := r.resolveConfig(ctx, userID, groupID)
+	if cfg == nil {
+		return groupActualMultiplier
+	}
+	if cfg.ActualRateMultiplier != nil {
+		return *cfg.ActualRateMultiplier
+	}
+	if cfg.RateMultiplier >= 0 {
+		return cfg.RateMultiplier
+	}
+	return groupActualMultiplier
+}
+
+func (r *userGroupRateResolver) resolveConfig(ctx context.Context, userID, groupID int64) *UserGroupRateConfig {
+	if r == nil || userID <= 0 || groupID <= 0 {
+		return nil
 	}
 
 	key := fmt.Sprintf("%d:%d", userID, groupID)
 	if r.cache != nil {
 		if cached, ok := r.cache.Get(key); ok {
-			if multiplier, castOK := cached.(float64); castOK {
+			if cfg, castOK := cached.(*UserGroupRateConfig); castOK {
 				userGroupRateCacheHitTotal.Add(1)
-				return multiplier
+				return cfg
 			}
 		}
 	}
 	if r.repo == nil {
-		return groupDefaultMultiplier
+		return nil
 	}
 	userGroupRateCacheMissTotal.Add(1)
 
 	value, err, shared := r.sf.Do(key, func() (any, error) {
 		if r.cache != nil {
 			if cached, ok := r.cache.Get(key); ok {
-				if multiplier, castOK := cached.(float64); castOK {
+				if cfg, castOK := cached.(*UserGroupRateConfig); castOK {
 					userGroupRateCacheHitTotal.Add(1)
-					return multiplier, nil
+					return cfg, nil
 				}
 			}
 		}
 
 		userGroupRateCacheLoadTotal.Add(1)
-		userRate, repoErr := r.repo.GetByUserAndGroup(ctx, userID, groupID)
+		cfgReader, ok := r.repo.(userGroupRateConfigReader)
+		if !ok {
+			userRate, repoErr := r.repo.GetByUserAndGroup(ctx, userID, groupID)
+			if repoErr != nil {
+				return nil, repoErr
+			}
+			if userRate == nil {
+				if r.cache != nil {
+					r.cache.Set(key, (*UserGroupRateConfig)(nil), r.cacheTTL)
+				}
+				return (*UserGroupRateConfig)(nil), nil
+			}
+			cfg := &UserGroupRateConfig{RateMultiplier: *userRate}
+			if r.cache != nil {
+				r.cache.Set(key, cfg, r.cacheTTL)
+			}
+			return cfg, nil
+		}
+
+		cfg, repoErr := cfgReader.GetRateConfigByUserAndGroup(ctx, userID, groupID)
 		if repoErr != nil {
 			return nil, repoErr
 		}
-
-		multiplier := groupDefaultMultiplier
-		if userRate != nil {
-			multiplier = *userRate
-		}
 		if r.cache != nil {
-			r.cache.Set(key, multiplier, r.cacheTTL)
+			r.cache.Set(key, cfg, r.cacheTTL)
 		}
-		return multiplier, nil
+		return cfg, nil
 	})
 	if shared {
 		userGroupRateCacheSFSharedTotal.Add(1)
@@ -91,13 +131,13 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 	if err != nil {
 		userGroupRateCacheFallbackTotal.Add(1)
 		logger.LegacyPrintf(r.logComponent, "get user group rate failed, fallback to group default: user=%d group=%d err=%v", userID, groupID, err)
-		return groupDefaultMultiplier
+		return nil
 	}
 
-	multiplier, ok := value.(float64)
+	cfg, ok := value.(*UserGroupRateConfig)
 	if !ok {
 		userGroupRateCacheFallbackTotal.Add(1)
-		return groupDefaultMultiplier
+		return nil
 	}
-	return multiplier
+	return cfg
 }

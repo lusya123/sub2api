@@ -148,8 +148,13 @@
             </div>
           </template>
 
-          <template #cell-rate_multiplier="{ value }">
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ value }}x</span>
+          <template #cell-rate_multiplier="{ value, row }">
+            <div class="space-y-0.5 text-sm">
+              <div class="text-gray-700 dark:text-gray-300">{{ value }}x</div>
+              <div v-if="row.actual_rate_multiplier != null" class="text-xs text-gray-400 dark:text-gray-500">
+                {{ t('admin.groups.actualRateShort') }} {{ row.actual_rate_multiplier }}x
+              </div>
+            </div>
           </template>
 
           <template #cell-is_exclusive="{ value }">
@@ -367,12 +372,52 @@
             v-model.number="createForm.rate_multiplier"
             type="number"
             step="0.001"
-            min="0.001"
+            min="0"
             required
             class="input"
             data-tour="group-form-multiplier"
           />
-          <p class="input-hint">{{ t('admin.groups.rateMultiplierHint') }}</p>
+          <p class="input-hint">{{ t('admin.groups.displayRateHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.groups.form.actualRateMultiplier') }}</label>
+          <input
+            v-model.number="createForm.actual_rate_multiplier"
+            type="number"
+            step="0.001"
+            min="0"
+            required
+            class="input"
+          />
+          <p class="input-hint">{{ t('admin.groups.actualRateHint') }}</p>
+        </div>
+        <div>
+          <div class="mb-1.5 flex items-center gap-1">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t('admin.groups.form.showCostBreakdown') }}
+            </label>
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              @click="createForm.show_cost_breakdown = !createForm.show_cost_breakdown"
+              :class="[
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                createForm.show_cost_breakdown ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  createForm.show_cost_breakdown ? 'translate-x-6' : 'translate-x-1'
+                ]"
+              />
+            </button>
+            <span class="text-sm text-gray-500 dark:text-gray-400">
+              {{ createForm.show_cost_breakdown ? t('common.enabled') : t('common.disabled') }}
+            </span>
+          </div>
+          <p class="input-hint">{{ t('admin.groups.showCostBreakdownHint') }}</p>
         </div>
         <div v-if="createForm.subscription_type !== 'subscription'" data-tour="group-form-exclusive">
           <div class="mb-1.5 flex items-center gap-1">
@@ -1095,11 +1140,52 @@
             v-model.number="editForm.rate_multiplier"
             type="number"
             step="0.001"
-            min="0.001"
+            min="0"
             required
             class="input"
             data-tour="group-form-multiplier"
           />
+          <p class="input-hint">{{ t('admin.groups.displayRateHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.groups.form.actualRateMultiplier') }}</label>
+          <input
+            v-model.number="editForm.actual_rate_multiplier"
+            type="number"
+            step="0.001"
+            min="0"
+            required
+            class="input"
+          />
+          <p class="input-hint">{{ t('admin.groups.actualRateHint') }}</p>
+        </div>
+        <div>
+          <div class="mb-1.5 flex items-center gap-1">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t('admin.groups.form.showCostBreakdown') }}
+            </label>
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              @click="editForm.show_cost_breakdown = !editForm.show_cost_breakdown"
+              :class="[
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                editForm.show_cost_breakdown ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  editForm.show_cost_breakdown ? 'translate-x-6' : 'translate-x-1'
+                ]"
+              />
+            </button>
+            <span class="text-sm text-gray-500 dark:text-gray-400">
+              {{ editForm.show_cost_breakdown ? t('common.enabled') : t('common.disabled') }}
+            </span>
+          </div>
+          <p class="input-hint">{{ t('admin.groups.showCostBreakdownHint') }}</p>
         </div>
         <div v-if="editForm.subscription_type !== 'subscription'">
           <div class="mb-1.5 flex items-center gap-1">
@@ -2041,6 +2127,8 @@ const createForm = reactive({
   description: '',
   platform: 'anthropic' as GroupPlatform,
   rate_multiplier: 1.0,
+  actual_rate_multiplier: 1.0,
+  show_cost_breakdown: true,
   is_exclusive: false,
   subscription_type: 'standard' as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -2284,6 +2372,8 @@ const editForm = reactive({
   description: '',
   platform: 'anthropic' as GroupPlatform,
   rate_multiplier: 1.0,
+  actual_rate_multiplier: 1.0,
+  show_cost_breakdown: true,
   is_exclusive: false,
   status: 'active' as 'active' | 'inactive',
   subscription_type: 'standard' as SubscriptionType,
@@ -2435,6 +2525,8 @@ const closeCreateModal = () => {
   createForm.description = ''
   createForm.platform = 'anthropic'
   createForm.rate_multiplier = 1.0
+  createForm.actual_rate_multiplier = 1.0
+  createForm.show_cost_breakdown = true
   createForm.is_exclusive = false
   createForm.subscription_type = 'standard'
   createForm.daily_limit_usd = null
@@ -2521,6 +2613,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.description = group.description || ''
   editForm.platform = group.platform
   editForm.rate_multiplier = group.rate_multiplier
+  editForm.actual_rate_multiplier = group.actual_rate_multiplier ?? group.rate_multiplier
+  editForm.show_cost_breakdown = group.show_cost_breakdown ?? true
   editForm.is_exclusive = group.is_exclusive
   editForm.status = group.status
   editForm.subscription_type = group.subscription_type || 'standard'

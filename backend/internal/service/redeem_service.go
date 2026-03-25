@@ -17,6 +17,7 @@ import (
 var (
 	ErrRedeemCodeNotFound  = infraerrors.NotFound("REDEEM_CODE_NOT_FOUND", "redeem code not found")
 	ErrRedeemCodeUsed      = infraerrors.Conflict("REDEEM_CODE_USED", "redeem code already used")
+	ErrTrialRedeemUsed     = infraerrors.Conflict("TRIAL_REDEEM_ALREADY_USED", "trial redeem code can only be used once per account")
 	ErrInsufficientBalance = infraerrors.BadRequest("INSUFFICIENT_BALANCE", "insufficient balance")
 	ErrRedeemRateLimited   = infraerrors.TooManyRequests("REDEEM_RATE_LIMITED", "too many failed attempts, please try again later")
 	ErrRedeemCodeLocked    = infraerrors.Conflict("REDEEM_CODE_LOCKED", "redeem code is being processed, please try again")
@@ -54,6 +55,7 @@ type RedeemCodeRepository interface {
 	ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]RedeemCode, *pagination.PaginationResult, error)
 	// SumPositiveBalanceByUser returns the total recharged amount (sum of positive balance values) for a user.
 	SumPositiveBalanceByUser(ctx context.Context, userID int64) (float64, error)
+	HasUsedTrialCodeByUser(ctx context.Context, userID int64) (bool, error)
 }
 
 // GenerateCodesRequest 生成兑换码请求
@@ -159,10 +161,11 @@ func (s *RedeemService) GenerateCodes(ctx context.Context, req GenerateCodesRequ
 		}
 
 		codes = append(codes, RedeemCode{
-			Code:   code,
-			Type:   codeType,
-			Value:  value,
-			Status: StatusUnused,
+			Code:    code,
+			Type:    codeType,
+			Value:   value,
+			Status:  StatusUnused,
+			IsTrial: false,
 		})
 	}
 
@@ -304,11 +307,24 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	// 将事务放入 context，使 repository 方法能够使用同一事务
 	txCtx := dbent.NewTxContext(ctx, tx)
 
+	if redeemCode.IsTrial {
+		alreadyUsed, err := s.redeemRepo.HasUsedTrialCodeByUser(txCtx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("check trial redeem history: %w", err)
+		}
+		if alreadyUsed {
+			return nil, ErrTrialRedeemUsed
+		}
+	}
+
 	// 【关键】先标记兑换码为已使用，确保并发安全
 	// 利用数据库乐观锁（WHERE status = 'unused'）保证原子性
 	if err := s.redeemRepo.Use(txCtx, redeemCode.ID, userID); err != nil {
 		if errors.Is(err, ErrRedeemCodeNotFound) || errors.Is(err, ErrRedeemCodeUsed) {
 			return nil, ErrRedeemCodeUsed
+		}
+		if errors.Is(err, ErrTrialRedeemUsed) {
+			return nil, ErrTrialRedeemUsed
 		}
 		return nil, fmt.Errorf("mark code as used: %w", err)
 	}

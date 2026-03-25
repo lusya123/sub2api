@@ -306,6 +306,10 @@ func (s *redeemRepoStub) SumPositiveBalanceByUser(ctx context.Context, userID in
 	panic("unexpected SumPositiveBalanceByUser call")
 }
 
+func (s *redeemRepoStub) HasUsedTrialCodeByUser(ctx context.Context, userID int64) (bool, error) {
+	panic("unexpected HasUsedTrialCodeByUser call")
+}
+
 type subscriptionInvalidateCall struct {
 	userID  int64
 	groupID int64

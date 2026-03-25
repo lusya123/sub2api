@@ -22,6 +22,8 @@ const (
 	FieldValue = "value"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldIsTrial holds the string denoting the is_trial field in the database.
+	FieldIsTrial = "is_trial"
 	// FieldUsedBy holds the string denoting the used_by field in the database.
 	FieldUsedBy = "used_by"
 	// FieldUsedAt holds the string denoting the used_at field in the database.
@@ -63,6 +65,7 @@ var Columns = []string{
 	FieldType,
 	FieldValue,
 	FieldStatus,
+	FieldIsTrial,
 	FieldUsedBy,
 	FieldUsedAt,
 	FieldNotes,
@@ -94,6 +97,8 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultIsTrial holds the default value on creation for the "is_trial" field.
+	DefaultIsTrial bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultValidityDays holds the default value on creation for the "validity_days" field.
@@ -126,6 +131,11 @@ func ByValue(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByIsTrial orders the results by the is_trial field.
+func ByIsTrial(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIsTrial, opts...).ToFunc()
 }
 
 // ByUsedBy orders the results by the used_by field.

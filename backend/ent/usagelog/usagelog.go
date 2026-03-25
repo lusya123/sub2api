@@ -58,6 +58,10 @@ const (
 	FieldActualCost = "actual_cost"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldActualRateMultiplier holds the string denoting the actual_rate_multiplier field in the database.
+	FieldActualRateMultiplier = "actual_rate_multiplier"
+	// FieldShowCostBreakdown holds the string denoting the show_cost_breakdown field in the database.
+	FieldShowCostBreakdown = "show_cost_breakdown"
 	// FieldAccountRateMultiplier holds the string denoting the account_rate_multiplier field in the database.
 	FieldAccountRateMultiplier = "account_rate_multiplier"
 	// FieldBillingType holds the string denoting the billing_type field in the database.
@@ -156,6 +160,8 @@ var Columns = []string{
 	FieldTotalCost,
 	FieldActualCost,
 	FieldRateMultiplier,
+	FieldActualRateMultiplier,
+	FieldShowCostBreakdown,
 	FieldAccountRateMultiplier,
 	FieldBillingType,
 	FieldStream,
@@ -351,6 +357,16 @@ func ByActualCost(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByActualRateMultiplier orders the results by the actual_rate_multiplier field.
+func ByActualRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldActualRateMultiplier, opts...).ToFunc()
+}
+
+// ByShowCostBreakdown orders the results by the show_cost_breakdown field.
+func ByShowCostBreakdown(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldShowCostBreakdown, opts...).ToFunc()
 }
 
 // ByAccountRateMultiplier orders the results by the account_rate_multiplier field.

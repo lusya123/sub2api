@@ -85,6 +85,16 @@ func RateMultiplier(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldRateMultiplier, v))
 }
 
+// ActualRateMultiplier applies equality check predicate on the "actual_rate_multiplier" field. It's identical to ActualRateMultiplierEQ.
+func ActualRateMultiplier(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldActualRateMultiplier, v))
+}
+
+// ShowCostBreakdown applies equality check predicate on the "show_cost_breakdown" field. It's identical to ShowCostBreakdownEQ.
+func ShowCostBreakdown(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldShowCostBreakdown, v))
+}
+
 // IsExclusive applies equality check predicate on the "is_exclusive" field. It's identical to IsExclusiveEQ.
 func IsExclusive(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldIsExclusive, v))
@@ -513,6 +523,66 @@ func RateMultiplierLT(v float64) predicate.Group {
 // RateMultiplierLTE applies the LTE predicate on the "rate_multiplier" field.
 func RateMultiplierLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldRateMultiplier, v))
+}
+
+// ActualRateMultiplierEQ applies the EQ predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierNEQ applies the NEQ predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierIn applies the In predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldActualRateMultiplier, vs...))
+}
+
+// ActualRateMultiplierNotIn applies the NotIn predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldActualRateMultiplier, vs...))
+}
+
+// ActualRateMultiplierGT applies the GT predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierGTE applies the GTE predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierLT applies the LT predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierLTE applies the LTE predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierIsNil applies the IsNil predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldActualRateMultiplier))
+}
+
+// ActualRateMultiplierNotNil applies the NotNil predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldActualRateMultiplier))
+}
+
+// ShowCostBreakdownEQ applies the EQ predicate on the "show_cost_breakdown" field.
+func ShowCostBreakdownEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldShowCostBreakdown, v))
+}
+
+// ShowCostBreakdownNEQ applies the NEQ predicate on the "show_cost_breakdown" field.
+func ShowCostBreakdownNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldShowCostBreakdown, v))
 }
 
 // IsExclusiveEQ applies the EQ predicate on the "is_exclusive" field.

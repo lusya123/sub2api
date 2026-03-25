@@ -66,13 +66,14 @@ type APIKey struct {
 }
 
 type Group struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	Platform       string  `json:"platform"`
-	RateMultiplier float64 `json:"rate_multiplier"`
-	IsExclusive    bool    `json:"is_exclusive"`
-	Status         string  `json:"status"`
+	ID                int64   `json:"id"`
+	Name              string  `json:"name"`
+	Description       string  `json:"description"`
+	Platform          string  `json:"platform"`
+	RateMultiplier    float64 `json:"rate_multiplier"`
+	ShowCostBreakdown bool    `json:"show_cost_breakdown"`
+	IsExclusive       bool    `json:"is_exclusive"`
+	Status            string  `json:"status"`
 
 	SubscriptionType string   `json:"subscription_type"`
 	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
@@ -110,6 +111,7 @@ type Group struct {
 // 注意：普通用户接口不得返回 model_routing/account_count/account_groups 等内部信息。
 type AdminGroup struct {
 	Group
+	ActualRateMultiplier *float64 `json:"actual_rate_multiplier,omitempty"`
 
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`
@@ -303,6 +305,7 @@ type RedeemCode struct {
 	Type      string     `json:"type"`
 	Value     float64    `json:"value"`
 	Status    string     `json:"status"`
+	IsTrial   bool       `json:"is_trial"`
 	UsedBy    *int64     `json:"used_by"`
 	UsedAt    *time.Time `json:"used_at"`
 	CreatedAt time.Time  `json:"created_at"`
@@ -355,13 +358,12 @@ type UsageLog struct {
 	CacheCreation5mTokens int `json:"cache_creation_5m_tokens"`
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens"`
 
-	InputCost         float64 `json:"input_cost"`
-	OutputCost        float64 `json:"output_cost"`
-	CacheCreationCost float64 `json:"cache_creation_cost"`
-	CacheReadCost     float64 `json:"cache_read_cost"`
-	TotalCost         float64 `json:"total_cost"`
-	ActualCost        float64 `json:"actual_cost"`
-	RateMultiplier    float64 `json:"rate_multiplier"`
+	ShowCostBreakdown bool     `json:"show_cost_breakdown"`
+	InputCost         *float64 `json:"input_cost,omitempty"`
+	OutputCost        *float64 `json:"output_cost,omitempty"`
+	CacheCreationCost *float64 `json:"cache_creation_cost,omitempty"`
+	CacheReadCost     *float64 `json:"cache_read_cost,omitempty"`
+	ActualCost        float64  `json:"actual_cost"`
 
 	BillingType  int8   `json:"billing_type"`
 	RequestType  string `json:"request_type"`
@@ -393,18 +395,88 @@ type UsageLog struct {
 type AdminUsageLog struct {
 	UsageLog
 
+	InputCost         float64 `json:"input_cost"`
+	OutputCost        float64 `json:"output_cost"`
+	CacheCreationCost float64 `json:"cache_creation_cost"`
+	CacheReadCost     float64 `json:"cache_read_cost"`
+	TotalCost         float64 `json:"total_cost"`
+	RateMultiplier    float64 `json:"rate_multiplier"`
+
 	// UpstreamModel is the actual model sent to the upstream provider after mapping.
 	// Omitted when no mapping was applied (requested model was used as-is).
 	UpstreamModel *string `json:"upstream_model,omitempty"`
 
 	// AccountRateMultiplier 账号计费倍率快照（nil 表示按 1.0 处理）
 	AccountRateMultiplier *float64 `json:"account_rate_multiplier"`
+	// ActualRateMultiplier 实际扣费倍率快照（nil 表示历史数据，回退到 rate_multiplier）
+	ActualRateMultiplier *float64 `json:"actual_rate_multiplier,omitempty"`
 
 	// IPAddress 用户请求 IP（仅管理员可见）
 	IPAddress *string `json:"ip_address,omitempty"`
 
 	// Account 最小账号信息（避免泄露敏感字段）
 	Account *AccountSummary `json:"account,omitempty"`
+}
+
+// UsageStats 是普通用户接口使用的 usage stats DTO（只包含最终扣费口径）。
+type UsageStats struct {
+	TotalRequests     int64   `json:"total_requests"`
+	TotalInputTokens  int64   `json:"total_input_tokens"`
+	TotalOutputTokens int64   `json:"total_output_tokens"`
+	TotalCacheTokens  int64   `json:"total_cache_tokens"`
+	TotalTokens       int64   `json:"total_tokens"`
+	TotalActualCost   float64 `json:"total_actual_cost"`
+	AverageDurationMs float64 `json:"average_duration_ms"`
+}
+
+// UserDashboardStats 是普通用户接口使用的 dashboard stats DTO（只包含最终扣费口径）。
+type UserDashboardStats struct {
+	TotalAPIKeys  int64 `json:"total_api_keys"`
+	ActiveAPIKeys int64 `json:"active_api_keys"`
+
+	TotalRequests            int64   `json:"total_requests"`
+	TotalInputTokens         int64   `json:"total_input_tokens"`
+	TotalOutputTokens        int64   `json:"total_output_tokens"`
+	TotalCacheCreationTokens int64   `json:"total_cache_creation_tokens"`
+	TotalCacheReadTokens     int64   `json:"total_cache_read_tokens"`
+	TotalTokens              int64   `json:"total_tokens"`
+	TotalActualCost          float64 `json:"total_actual_cost"`
+
+	TodayRequests            int64   `json:"today_requests"`
+	TodayInputTokens         int64   `json:"today_input_tokens"`
+	TodayOutputTokens        int64   `json:"today_output_tokens"`
+	TodayCacheCreationTokens int64   `json:"today_cache_creation_tokens"`
+	TodayCacheReadTokens     int64   `json:"today_cache_read_tokens"`
+	TodayTokens              int64   `json:"today_tokens"`
+	TodayActualCost          float64 `json:"today_actual_cost"`
+
+	AverageDurationMs float64 `json:"average_duration_ms"`
+	Rpm               int64   `json:"rpm"`
+	Tpm               int64   `json:"tpm"`
+}
+
+// UserTrendDataPoint 是普通用户接口使用的趋势数据 DTO（只包含最终扣费口径）。
+type UserTrendDataPoint struct {
+	Date                string  `json:"date"`
+	Requests            int64   `json:"requests"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	CacheReadTokens     int64   `json:"cache_read_tokens"`
+	TotalTokens         int64   `json:"total_tokens"`
+	ActualCost          float64 `json:"actual_cost"`
+}
+
+// UserModelStat 是普通用户接口使用的模型统计 DTO（只包含最终扣费口径）。
+type UserModelStat struct {
+	Model               string  `json:"model"`
+	Requests            int64   `json:"requests"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	CacheReadTokens     int64   `json:"cache_read_tokens"`
+	TotalTokens         int64   `json:"total_tokens"`
+	ActualCost          float64 `json:"actual_cost"`
 }
 
 type UsageCleanupFilters struct {

@@ -93,6 +93,20 @@ func (_u *RedeemCodeUpdate) SetNillableStatus(v *string) *RedeemCodeUpdate {
 	return _u
 }
 
+// SetIsTrial sets the "is_trial" field.
+func (_u *RedeemCodeUpdate) SetIsTrial(v bool) *RedeemCodeUpdate {
+	_u.mutation.SetIsTrial(v)
+	return _u
+}
+
+// SetNillableIsTrial sets the "is_trial" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableIsTrial(v *bool) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetIsTrial(*v)
+	}
+	return _u
+}
+
 // SetUsedBy sets the "used_by" field.
 func (_u *RedeemCodeUpdate) SetUsedBy(v int64) *RedeemCodeUpdate {
 	_u.mutation.SetUsedBy(v)
@@ -309,6 +323,9 @@ func (_u *RedeemCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.IsTrial(); ok {
+		_spec.SetField(redeemcode.FieldIsTrial, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.UsedAt(); ok {
 		_spec.SetField(redeemcode.FieldUsedAt, field.TypeTime, value)
 	}
@@ -464,6 +481,20 @@ func (_u *RedeemCodeUpdateOne) SetStatus(v string) *RedeemCodeUpdateOne {
 func (_u *RedeemCodeUpdateOne) SetNillableStatus(v *string) *RedeemCodeUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetIsTrial sets the "is_trial" field.
+func (_u *RedeemCodeUpdateOne) SetIsTrial(v bool) *RedeemCodeUpdateOne {
+	_u.mutation.SetIsTrial(v)
+	return _u
+}
+
+// SetNillableIsTrial sets the "is_trial" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableIsTrial(v *bool) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetIsTrial(*v)
 	}
 	return _u
 }
@@ -713,6 +744,9 @@ func (_u *RedeemCodeUpdateOne) sqlSave(ctx context.Context) (_node *RedeemCode, 
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IsTrial(); ok {
+		_spec.SetField(redeemcode.FieldIsTrial, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.UsedAt(); ok {
 		_spec.SetField(redeemcode.FieldUsedAt, field.TypeTime, value)

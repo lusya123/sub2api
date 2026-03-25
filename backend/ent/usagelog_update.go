@@ -455,6 +455,53 @@ func (_u *UsageLogUpdate) AddRateMultiplier(v float64) *UsageLogUpdate {
 	return _u
 }
 
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (_u *UsageLogUpdate) SetActualRateMultiplier(v float64) *UsageLogUpdate {
+	_u.mutation.ResetActualRateMultiplier()
+	_u.mutation.SetActualRateMultiplier(v)
+	return _u
+}
+
+// SetNillableActualRateMultiplier sets the "actual_rate_multiplier" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableActualRateMultiplier(v *float64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetActualRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddActualRateMultiplier adds value to the "actual_rate_multiplier" field.
+func (_u *UsageLogUpdate) AddActualRateMultiplier(v float64) *UsageLogUpdate {
+	_u.mutation.AddActualRateMultiplier(v)
+	return _u
+}
+
+// ClearActualRateMultiplier clears the value of the "actual_rate_multiplier" field.
+func (_u *UsageLogUpdate) ClearActualRateMultiplier() *UsageLogUpdate {
+	_u.mutation.ClearActualRateMultiplier()
+	return _u
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (_u *UsageLogUpdate) SetShowCostBreakdown(v bool) *UsageLogUpdate {
+	_u.mutation.SetShowCostBreakdown(v)
+	return _u
+}
+
+// SetNillableShowCostBreakdown sets the "show_cost_breakdown" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableShowCostBreakdown(v *bool) *UsageLogUpdate {
+	if v != nil {
+		_u.SetShowCostBreakdown(*v)
+	}
+	return _u
+}
+
+// ClearShowCostBreakdown clears the value of the "show_cost_breakdown" field.
+func (_u *UsageLogUpdate) ClearShowCostBreakdown() *UsageLogUpdate {
+	_u.mutation.ClearShowCostBreakdown()
+	return _u
+}
+
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
 func (_u *UsageLogUpdate) SetAccountRateMultiplier(v float64) *UsageLogUpdate {
 	_u.mutation.ResetAccountRateMultiplier()
@@ -934,6 +981,21 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ActualRateMultiplier(); ok {
+		_spec.SetField(usagelog.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedActualRateMultiplier(); ok {
+		_spec.AddField(usagelog.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.ActualRateMultiplierCleared() {
+		_spec.ClearField(usagelog.FieldActualRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.ShowCostBreakdown(); ok {
+		_spec.SetField(usagelog.FieldShowCostBreakdown, field.TypeBool, value)
+	}
+	if _u.mutation.ShowCostBreakdownCleared() {
+		_spec.ClearField(usagelog.FieldShowCostBreakdown, field.TypeBool)
 	}
 	if value, ok := _u.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)
@@ -1592,6 +1654,53 @@ func (_u *UsageLogUpdateOne) AddRateMultiplier(v float64) *UsageLogUpdateOne {
 	return _u
 }
 
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (_u *UsageLogUpdateOne) SetActualRateMultiplier(v float64) *UsageLogUpdateOne {
+	_u.mutation.ResetActualRateMultiplier()
+	_u.mutation.SetActualRateMultiplier(v)
+	return _u
+}
+
+// SetNillableActualRateMultiplier sets the "actual_rate_multiplier" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableActualRateMultiplier(v *float64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetActualRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddActualRateMultiplier adds value to the "actual_rate_multiplier" field.
+func (_u *UsageLogUpdateOne) AddActualRateMultiplier(v float64) *UsageLogUpdateOne {
+	_u.mutation.AddActualRateMultiplier(v)
+	return _u
+}
+
+// ClearActualRateMultiplier clears the value of the "actual_rate_multiplier" field.
+func (_u *UsageLogUpdateOne) ClearActualRateMultiplier() *UsageLogUpdateOne {
+	_u.mutation.ClearActualRateMultiplier()
+	return _u
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (_u *UsageLogUpdateOne) SetShowCostBreakdown(v bool) *UsageLogUpdateOne {
+	_u.mutation.SetShowCostBreakdown(v)
+	return _u
+}
+
+// SetNillableShowCostBreakdown sets the "show_cost_breakdown" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableShowCostBreakdown(v *bool) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetShowCostBreakdown(*v)
+	}
+	return _u
+}
+
+// ClearShowCostBreakdown clears the value of the "show_cost_breakdown" field.
+func (_u *UsageLogUpdateOne) ClearShowCostBreakdown() *UsageLogUpdateOne {
+	_u.mutation.ClearShowCostBreakdown()
+	return _u
+}
+
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
 func (_u *UsageLogUpdateOne) SetAccountRateMultiplier(v float64) *UsageLogUpdateOne {
 	_u.mutation.ResetAccountRateMultiplier()
@@ -2101,6 +2210,21 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ActualRateMultiplier(); ok {
+		_spec.SetField(usagelog.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedActualRateMultiplier(); ok {
+		_spec.AddField(usagelog.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.ActualRateMultiplierCleared() {
+		_spec.ClearField(usagelog.FieldActualRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.ShowCostBreakdown(); ok {
+		_spec.SetField(usagelog.FieldShowCostBreakdown, field.TypeBool, value)
+	}
+	if _u.mutation.ShowCostBreakdownCleared() {
+		_spec.ClearField(usagelog.FieldShowCostBreakdown, field.TypeBool)
 	}
 	if value, ok := _u.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)

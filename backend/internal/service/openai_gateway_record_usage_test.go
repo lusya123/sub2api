@@ -108,9 +108,10 @@ func (s *openAIRecordUsageAPIKeyQuotaStub) UpdateRateLimitUsage(ctx context.Cont
 type openAIUserGroupRateRepoStub struct {
 	UserGroupRateRepository
 
-	rate  *float64
-	err   error
-	calls int
+	rate       *float64
+	rateConfig *UserGroupRateConfig
+	err        error
+	calls      int
 }
 
 func (s *openAIUserGroupRateRepoStub) GetByUserAndGroup(ctx context.Context, userID, groupID int64) (*float64, error) {
@@ -119,6 +120,20 @@ func (s *openAIUserGroupRateRepoStub) GetByUserAndGroup(ctx context.Context, use
 		return nil, s.err
 	}
 	return s.rate, nil
+}
+
+func (s *openAIUserGroupRateRepoStub) GetRateConfigByUserAndGroup(ctx context.Context, userID, groupID int64) (*UserGroupRateConfig, error) {
+	s.calls++
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.rateConfig != nil {
+		return s.rateConfig, nil
+	}
+	if s.rate != nil {
+		return &UserGroupRateConfig{RateMultiplier: *s.rate}, nil
+	}
+	return nil, nil
 }
 
 func i64p(v int64) *int64 {
@@ -224,6 +239,53 @@ func TestOpenAIGatewayServiceRecordUsage_UsesUserSpecificGroupRate(t *testing.T)
 	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
 	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
 	require.Equal(t, 1, userRepo.deductCalls)
+}
+
+func TestOpenAIGatewayServiceRecordUsage_UsesHiddenActualUserGroupRate(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	subRepo := &openAIRecordUsageSubRepoStub{}
+	actualRate := 0.5
+	rateRepo := &openAIUserGroupRateRepoStub{
+		rateConfig: &UserGroupRateConfig{
+			RateMultiplier:       0.3,
+			ActualRateMultiplier: &actualRate,
+		},
+	}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, rateRepo)
+
+	groupRate := 0.8
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID: "resp_hidden_user_group_rate",
+			Usage: OpenAIUsage{
+				InputTokens:  1000,
+				OutputTokens: 500,
+			},
+			Model:    "gpt-5.4",
+			Duration: time.Second,
+		},
+		APIKey: &APIKey{
+			ID:      10,
+			GroupID: i64p(11),
+			Group: &Group{
+				ID:             11,
+				RateMultiplier: groupRate,
+			},
+		},
+		User:    &User{ID: 99},
+		Account: &Account{ID: 77},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, 0.3, usageRepo.lastLog.RateMultiplier)
+	require.NotNil(t, usageRepo.lastLog.ActualRateMultiplier)
+	require.InDelta(t, 0.5, *usageRepo.lastLog.ActualRateMultiplier, 1e-12)
+
+	expected, err := svc.billingService.CalculateCost("gpt-5.4", UsageTokens{InputTokens: 1000, OutputTokens: 500}, 0.5)
+	require.NoError(t, err)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
 }
 
 func TestOpenAIGatewayServiceRecordUsage_IncludesEndpointMetadata(t *testing.T) {

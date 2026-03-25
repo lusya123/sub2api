@@ -34,7 +34,16 @@ import {
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import type { TrendDataPoint } from '@/types'
+
+type TokenUsageTrendPoint = {
+  date: string
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  actual_cost: number
+  cost?: number
+}
 
 ChartJS.register(
   CategoryScale,
@@ -50,8 +59,9 @@ ChartJS.register(
 const { t } = useI18n()
 
 const props = defineProps<{
-  trendData: TrendDataPoint[]
+  trendData: TokenUsageTrendPoint[]
   loading?: boolean
+  showStandardCost?: boolean
 }>()
 
 const isDarkMode = computed(() => {
@@ -138,6 +148,9 @@ const lineOptions = computed(() => ({
           const dataIndex = tooltipItems[0]?.dataIndex
           if (dataIndex !== undefined && props.trendData[dataIndex]) {
             const data = props.trendData[dataIndex]
+            if (props.showStandardCost === false || data.cost == null) {
+              return `Billed: $${formatCost(data.actual_cost)}`
+            }
             return `Actual: $${formatCost(data.actual_cost)} | Standard: $${formatCost(data.cost)}`
           }
           return ''

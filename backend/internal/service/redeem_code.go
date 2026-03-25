@@ -12,6 +12,7 @@ type RedeemCode struct {
 	Type      string
 	Value     float64
 	Status    string
+	IsTrial   bool
 	UsedBy    *int64
 	UsedAt    *time.Time
 	Notes     string

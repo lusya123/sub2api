@@ -133,6 +133,12 @@ type UsageLog struct {
 	TotalCost         float64
 	ActualCost        float64
 	RateMultiplier    float64
+	// ActualRateMultiplier is the hidden billing multiplier snapshot used to compute ActualCost.
+	// Nil means historical data or fallback-to-display-rate records.
+	ActualRateMultiplier *float64
+	// ShowCostBreakdown snapshots whether this usage record should expose the
+	// user-facing cost breakdown table. Nil means historical rows before snapshotting.
+	ShowCostBreakdown *bool
 	// AccountRateMultiplier 账号计费倍率快照（nil 表示历史数据，按 1.0 处理）
 	AccountRateMultiplier *float64
 
@@ -183,4 +189,12 @@ func (u *UsageLog) SyncRequestTypeAndLegacyFields() {
 	requestType := u.EffectiveRequestType()
 	u.RequestType = requestType
 	u.Stream, u.OpenAIWSMode = ApplyLegacyRequestFields(requestType, u.Stream, u.OpenAIWSMode)
+}
+
+func SnapshotShowCostBreakdown(group *Group) *bool {
+	enabled := true
+	if group != nil {
+		enabled = group.ShowCostBreakdown
+	}
+	return &enabled
 }

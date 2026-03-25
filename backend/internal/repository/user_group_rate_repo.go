@@ -98,7 +98,7 @@ func (r *userGroupRateRepository) GetByUserIDs(ctx context.Context, userIDs []in
 // GetByGroupID 获取指定分组下所有用户的专属倍率
 func (r *userGroupRateRepository) GetByGroupID(ctx context.Context, groupID int64) ([]service.UserGroupRateEntry, error) {
 	query := `
-		SELECT ugr.user_id, u.username, u.email, COALESCE(u.notes, ''), u.status, ugr.rate_multiplier
+		SELECT ugr.user_id, u.username, u.email, COALESCE(u.notes, ''), u.status, ugr.rate_multiplier, ugr.actual_rate_multiplier
 		FROM user_group_rate_multipliers ugr
 		JOIN users u ON u.id = ugr.user_id
 		WHERE ugr.group_id = $1
@@ -113,9 +113,11 @@ func (r *userGroupRateRepository) GetByGroupID(ctx context.Context, groupID int6
 	var result []service.UserGroupRateEntry
 	for rows.Next() {
 		var entry service.UserGroupRateEntry
-		if err := rows.Scan(&entry.UserID, &entry.UserName, &entry.UserEmail, &entry.UserNotes, &entry.UserStatus, &entry.RateMultiplier); err != nil {
+		var actualRate sql.NullFloat64
+		if err := rows.Scan(&entry.UserID, &entry.UserName, &entry.UserEmail, &entry.UserNotes, &entry.UserStatus, &entry.RateMultiplier, &actualRate); err != nil {
 			return nil, err
 		}
+		entry.ActualRateMultiplier = nullFloat64Ptr(actualRate)
 		result = append(result, entry)
 	}
 	if err := rows.Err(); err != nil {
@@ -136,6 +138,22 @@ func (r *userGroupRateRepository) GetByUserAndGroup(ctx context.Context, userID,
 		return nil, err
 	}
 	return &rate, nil
+}
+
+// GetRateConfigByUserAndGroup 获取用户在特定分组的专属展示/实际倍率配置
+func (r *userGroupRateRepository) GetRateConfigByUserAndGroup(ctx context.Context, userID, groupID int64) (*service.UserGroupRateConfig, error) {
+	query := `SELECT rate_multiplier, actual_rate_multiplier FROM user_group_rate_multipliers WHERE user_id = $1 AND group_id = $2`
+	var cfg service.UserGroupRateConfig
+	var actual sql.NullFloat64
+	err := scanSingleRow(ctx, r.sql, query, []any{userID, groupID}, &cfg.RateMultiplier, &actual)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	cfg.ActualRateMultiplier = nullFloat64Ptr(actual)
+	return &cfg, nil
 }
 
 // SyncUserGroupRates 同步用户的分组专属倍率
@@ -172,10 +190,11 @@ func (r *userGroupRateRepository) SyncUserGroupRates(ctx context.Context, userID
 	now := time.Now()
 	if len(upsertGroupIDs) > 0 {
 		_, err := r.sql.ExecContext(ctx, `
-			INSERT INTO user_group_rate_multipliers (user_id, group_id, rate_multiplier, created_at, updated_at)
+			INSERT INTO user_group_rate_multipliers (user_id, group_id, rate_multiplier, actual_rate_multiplier, created_at, updated_at)
 			SELECT
 				$1::bigint,
 				data.group_id,
+				data.rate_multiplier,
 				data.rate_multiplier,
 				$2::timestamptz,
 				$2::timestamptz
@@ -183,6 +202,7 @@ func (r *userGroupRateRepository) SyncUserGroupRates(ctx context.Context, userID
 			ON CONFLICT (user_id, group_id)
 			DO UPDATE SET
 				rate_multiplier = EXCLUDED.rate_multiplier,
+				actual_rate_multiplier = EXCLUDED.actual_rate_multiplier,
 				updated_at = EXCLUDED.updated_at
 		`, userID, now, pq.Array(upsertGroupIDs), pq.Array(upsertRates))
 		if err != nil {
@@ -203,18 +223,24 @@ func (r *userGroupRateRepository) SyncGroupRateMultipliers(ctx context.Context, 
 	}
 	userIDs := make([]int64, len(entries))
 	rates := make([]float64, len(entries))
+	actualRates := make([]float64, len(entries))
 	for i, e := range entries {
 		userIDs[i] = e.UserID
 		rates[i] = e.RateMultiplier
+		if e.ActualRateMultiplier != nil {
+			actualRates[i] = *e.ActualRateMultiplier
+		} else {
+			actualRates[i] = e.RateMultiplier
+		}
 	}
 	now := time.Now()
 	_, err := r.sql.ExecContext(ctx, `
-		INSERT INTO user_group_rate_multipliers (user_id, group_id, rate_multiplier, created_at, updated_at)
-		SELECT data.user_id, $1::bigint, data.rate_multiplier, $2::timestamptz, $2::timestamptz
-		FROM unnest($3::bigint[], $4::double precision[]) AS data(user_id, rate_multiplier)
+		INSERT INTO user_group_rate_multipliers (user_id, group_id, rate_multiplier, actual_rate_multiplier, created_at, updated_at)
+		SELECT data.user_id, $1::bigint, data.rate_multiplier, data.actual_rate_multiplier, $2::timestamptz, $2::timestamptz
+		FROM unnest($3::bigint[], $4::double precision[], $5::double precision[]) AS data(user_id, rate_multiplier, actual_rate_multiplier)
 		ON CONFLICT (user_id, group_id)
-		DO UPDATE SET rate_multiplier = EXCLUDED.rate_multiplier, updated_at = EXCLUDED.updated_at
-	`, groupID, now, pq.Array(userIDs), pq.Array(rates))
+		DO UPDATE SET rate_multiplier = EXCLUDED.rate_multiplier, actual_rate_multiplier = EXCLUDED.actual_rate_multiplier, updated_at = EXCLUDED.updated_at
+	`, groupID, now, pq.Array(userIDs), pq.Array(rates), pq.Array(actualRates))
 	return err
 }
 

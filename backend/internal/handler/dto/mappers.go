@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
@@ -135,6 +136,7 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		return nil
 	}
 	out := &AdminGroup{
+		ActualRateMultiplier:    g.ActualRateMultiplier,
 		Group:                   groupFromServiceBase(g),
 		ModelRouting:            g.ModelRouting,
 		ModelRoutingEnabled:     g.ModelRoutingEnabled,
@@ -163,6 +165,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		Description:                     g.Description,
 		Platform:                        g.Platform,
 		RateMultiplier:                  g.RateMultiplier,
+		ShowCostBreakdown:               g.ShowCostBreakdown,
 		IsExclusive:                     g.IsExclusive,
 		Status:                          g.Status,
 		SubscriptionType:                g.SubscriptionType,
@@ -488,6 +491,7 @@ func redeemCodeFromServiceBase(rc *service.RedeemCode) RedeemCode {
 		Type:         rc.Type,
 		Value:        rc.Value,
 		Status:       rc.Status,
+		IsTrial:      rc.IsTrial,
 		UsedBy:       rc.UsedBy,
 		UsedAt:       rc.UsedAt,
 		CreatedAt:    rc.CreatedAt,
@@ -526,6 +530,8 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 	if requestedModel == "" {
 		requestedModel = l.Model
 	}
+	showCostBreakdown := resolveUsageLogShowCostBreakdown(l)
+
 	return UsageLog{
 		ID:                    l.ID,
 		UserID:                l.UserID,
@@ -545,13 +551,12 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		CacheReadTokens:       l.CacheReadTokens,
 		CacheCreation5mTokens: l.CacheCreation5mTokens,
 		CacheCreation1hTokens: l.CacheCreation1hTokens,
-		InputCost:             l.InputCost,
-		OutputCost:            l.OutputCost,
-		CacheCreationCost:     l.CacheCreationCost,
-		CacheReadCost:         l.CacheReadCost,
-		TotalCost:             l.TotalCost,
+		ShowCostBreakdown:     showCostBreakdown,
+		InputCost:             optionalUserUsageCost(showCostBreakdown, l.InputCost),
+		OutputCost:            optionalUserUsageCost(showCostBreakdown, l.OutputCost),
+		CacheCreationCost:     optionalUserUsageCost(showCostBreakdown, l.CacheCreationCost),
+		CacheReadCost:         optionalUserUsageCost(showCostBreakdown, l.CacheReadCost),
 		ActualCost:            l.ActualCost,
-		RateMultiplier:        l.RateMultiplier,
 		BillingType:           l.BillingType,
 		RequestType:           requestType.String(),
 		Stream:                stream,
@@ -571,6 +576,29 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 	}
 }
 
+func optionalUserUsageCost(enabled bool, value float64) *float64 {
+	if !enabled {
+		return nil
+	}
+	return &value
+}
+
+func resolveUsageLogShowCostBreakdown(l *service.UsageLog) bool {
+	if l == nil {
+		return false
+	}
+	if l.ShowCostBreakdown != nil {
+		return *l.ShowCostBreakdown
+	}
+	if l.Group != nil {
+		return l.Group.ShowCostBreakdown
+	}
+	if l.APIKey != nil && l.APIKey.Group != nil {
+		return l.APIKey.Group.ShowCostBreakdown
+	}
+	return true
+}
+
 // UsageLogFromService converts a service UsageLog to DTO for regular users.
 // It excludes Account details and IP address - users should not see these.
 func UsageLogFromService(l *service.UsageLog) *UsageLog {
@@ -588,12 +616,103 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 		return nil
 	}
 	return &AdminUsageLog{
+		InputCost:             l.InputCost,
+		OutputCost:            l.OutputCost,
+		CacheCreationCost:     l.CacheCreationCost,
+		CacheReadCost:         l.CacheReadCost,
+		TotalCost:             l.TotalCost,
+		RateMultiplier:        l.RateMultiplier,
 		UsageLog:              usageLogFromServiceUser(l),
 		UpstreamModel:         l.UpstreamModel,
 		AccountRateMultiplier: l.AccountRateMultiplier,
+		ActualRateMultiplier:  l.ActualRateMultiplier,
 		IPAddress:             l.IPAddress,
 		Account:               AccountSummaryFromService(l.Account),
 	}
+}
+
+func UsageStatsFromService(stats *service.UsageStats) *UsageStats {
+	if stats == nil {
+		return nil
+	}
+	return &UsageStats{
+		TotalRequests:     stats.TotalRequests,
+		TotalInputTokens:  stats.TotalInputTokens,
+		TotalOutputTokens: stats.TotalOutputTokens,
+		TotalCacheTokens:  stats.TotalCacheTokens,
+		TotalTokens:       stats.TotalTokens,
+		TotalActualCost:   stats.TotalActualCost,
+		AverageDurationMs: stats.AverageDurationMs,
+	}
+}
+
+func UserDashboardStatsFromService(stats *usagestats.UserDashboardStats) *UserDashboardStats {
+	if stats == nil {
+		return nil
+	}
+	return &UserDashboardStats{
+		TotalAPIKeys:             stats.TotalAPIKeys,
+		ActiveAPIKeys:            stats.ActiveAPIKeys,
+		TotalRequests:            stats.TotalRequests,
+		TotalInputTokens:         stats.TotalInputTokens,
+		TotalOutputTokens:        stats.TotalOutputTokens,
+		TotalCacheCreationTokens: stats.TotalCacheCreationTokens,
+		TotalCacheReadTokens:     stats.TotalCacheReadTokens,
+		TotalTokens:              stats.TotalTokens,
+		TotalActualCost:          stats.TotalActualCost,
+		TodayRequests:            stats.TodayRequests,
+		TodayInputTokens:         stats.TodayInputTokens,
+		TodayOutputTokens:        stats.TodayOutputTokens,
+		TodayCacheCreationTokens: stats.TodayCacheCreationTokens,
+		TodayCacheReadTokens:     stats.TodayCacheReadTokens,
+		TodayTokens:              stats.TodayTokens,
+		TodayActualCost:          stats.TodayActualCost,
+		AverageDurationMs:        stats.AverageDurationMs,
+		Rpm:                      stats.Rpm,
+		Tpm:                      stats.Tpm,
+	}
+}
+
+func UserTrendDataPointsFromService(points []usagestats.TrendDataPoint) []UserTrendDataPoint {
+	if len(points) == 0 {
+		return []UserTrendDataPoint{}
+	}
+	out := make([]UserTrendDataPoint, 0, len(points))
+	for i := range points {
+		p := points[i]
+		out = append(out, UserTrendDataPoint{
+			Date:                p.Date,
+			Requests:            p.Requests,
+			InputTokens:         p.InputTokens,
+			OutputTokens:        p.OutputTokens,
+			CacheCreationTokens: p.CacheCreationTokens,
+			CacheReadTokens:     p.CacheReadTokens,
+			TotalTokens:         p.TotalTokens,
+			ActualCost:          p.ActualCost,
+		})
+	}
+	return out
+}
+
+func UserModelStatsFromService(stats []usagestats.ModelStat) []UserModelStat {
+	if len(stats) == 0 {
+		return []UserModelStat{}
+	}
+	out := make([]UserModelStat, 0, len(stats))
+	for i := range stats {
+		s := stats[i]
+		out = append(out, UserModelStat{
+			Model:               s.Model,
+			Requests:            s.Requests,
+			InputTokens:         s.InputTokens,
+			OutputTokens:        s.OutputTokens,
+			CacheCreationTokens: s.CacheCreationTokens,
+			CacheReadTokens:     s.CacheReadTokens,
+			TotalTokens:         s.TotalTokens,
+			ActualCost:          s.ActualCost,
+		})
+	}
+	return out
 }
 
 func UsageCleanupTaskFromService(task *service.UsageCleanupTask) *UsageCleanupTask {

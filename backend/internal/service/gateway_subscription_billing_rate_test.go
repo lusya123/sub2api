@@ -201,6 +201,54 @@ func TestGatewayServiceRecordUsage_SubscriptionAndBalanceUseSameCostLogic(t *tes
 		"Subscription billing and balance billing should use the same cost (ActualCost)")
 }
 
+func TestGatewayServiceRecordUsage_UsesHiddenActualRateMultiplier(t *testing.T) {
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+
+	cfg := &config.Config{}
+	cfg.Default.RateMultiplier = 1.0
+
+	svc := NewGatewayService(
+		nil, nil, usageRepo, nil, userRepo, &gatewayRecordUsageSubRepoStub{}, nil, nil,
+		cfg, nil, nil, NewBillingService(cfg, nil), nil,
+		&BillingCacheService{}, nil, nil, &DeferredService{},
+		nil, nil, nil, nil, nil,
+	)
+
+	groupID := int64(100)
+	actualRate := 0.5
+	group := &Group{
+		ID:                   groupID,
+		RateMultiplier:       0.3,
+		ActualRateMultiplier: &actualRate,
+	}
+
+	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
+		Result: &ForwardResult{
+			RequestID: "test_hidden_actual_rate",
+			Usage: ClaudeUsage{
+				InputTokens:  1000,
+				OutputTokens: 500,
+			},
+			Model:    "claude-sonnet-4",
+			Duration: time.Second,
+		},
+		APIKey:  &APIKey{ID: 1, GroupID: &groupID, Group: group},
+		User:    &User{ID: 1},
+		Account: &Account{ID: 1},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, 0.3, usageRepo.lastLog.RateMultiplier, "user-visible rate should stay on display multiplier")
+	require.NotNil(t, usageRepo.lastLog.ActualRateMultiplier)
+	require.InDelta(t, 0.5, *usageRepo.lastLog.ActualRateMultiplier, 1e-12)
+
+	expectedActualCost := 0.0105 * 0.5
+	require.InDelta(t, expectedActualCost, usageRepo.lastLog.ActualCost, 1e-6)
+	require.InDelta(t, expectedActualCost, userRepo.lastAmount, 1e-6)
+}
+
 // gatewayRecordUsageSubRepoStub 记录订阅计费的费用
 type gatewayRecordUsageSubRepoStub struct {
 	UserSubscriptionRepository

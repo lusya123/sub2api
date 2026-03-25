@@ -165,6 +165,16 @@ func RateMultiplier(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldRateMultiplier, v))
 }
 
+// ActualRateMultiplier applies equality check predicate on the "actual_rate_multiplier" field. It's identical to ActualRateMultiplierEQ.
+func ActualRateMultiplier(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldActualRateMultiplier, v))
+}
+
+// ShowCostBreakdown applies equality check predicate on the "show_cost_breakdown" field. It's identical to ShowCostBreakdownEQ.
+func ShowCostBreakdown(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldShowCostBreakdown, v))
+}
+
 // AccountRateMultiplier applies equality check predicate on the "account_rate_multiplier" field. It's identical to AccountRateMultiplierEQ.
 func AccountRateMultiplier(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldAccountRateMultiplier, v))
@@ -1143,6 +1153,76 @@ func RateMultiplierLT(v float64) predicate.UsageLog {
 // RateMultiplierLTE applies the LTE predicate on the "rate_multiplier" field.
 func RateMultiplierLTE(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldLTE(FieldRateMultiplier, v))
+}
+
+// ActualRateMultiplierEQ applies the EQ predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierEQ(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierNEQ applies the NEQ predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierNEQ(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierIn applies the In predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierIn(vs ...float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldActualRateMultiplier, vs...))
+}
+
+// ActualRateMultiplierNotIn applies the NotIn predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierNotIn(vs ...float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldActualRateMultiplier, vs...))
+}
+
+// ActualRateMultiplierGT applies the GT predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierGT(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierGTE applies the GTE predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierGTE(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierLT applies the LT predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierLT(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierLTE applies the LTE predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierLTE(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldActualRateMultiplier, v))
+}
+
+// ActualRateMultiplierIsNil applies the IsNil predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldActualRateMultiplier))
+}
+
+// ActualRateMultiplierNotNil applies the NotNil predicate on the "actual_rate_multiplier" field.
+func ActualRateMultiplierNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldActualRateMultiplier))
+}
+
+// ShowCostBreakdownEQ applies the EQ predicate on the "show_cost_breakdown" field.
+func ShowCostBreakdownEQ(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldShowCostBreakdown, v))
+}
+
+// ShowCostBreakdownNEQ applies the NEQ predicate on the "show_cost_breakdown" field.
+func ShowCostBreakdownNEQ(v bool) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldShowCostBreakdown, v))
+}
+
+// ShowCostBreakdownIsNil applies the IsNil predicate on the "show_cost_breakdown" field.
+func ShowCostBreakdownIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldShowCostBreakdown))
+}
+
+// ShowCostBreakdownNotNil applies the NotNil predicate on the "show_cost_breakdown" field.
+func ShowCostBreakdownNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldShowCostBreakdown))
 }
 
 // AccountRateMultiplierEQ applies the EQ predicate on the "account_rate_multiplier" field.

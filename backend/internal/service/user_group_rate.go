@@ -4,18 +4,26 @@ import "context"
 
 // UserGroupRateEntry 分组下用户专属倍率条目
 type UserGroupRateEntry struct {
-	UserID         int64   `json:"user_id"`
-	UserName       string  `json:"user_name"`
-	UserEmail      string  `json:"user_email"`
-	UserNotes      string  `json:"user_notes"`
-	UserStatus     string  `json:"user_status"`
-	RateMultiplier float64 `json:"rate_multiplier"`
+	UserID               int64    `json:"user_id"`
+	UserName             string   `json:"user_name"`
+	UserEmail            string   `json:"user_email"`
+	UserNotes            string   `json:"user_notes"`
+	UserStatus           string   `json:"user_status"`
+	RateMultiplier       float64  `json:"rate_multiplier"`
+	ActualRateMultiplier *float64 `json:"actual_rate_multiplier,omitempty"`
 }
 
 // GroupRateMultiplierInput 批量设置分组倍率的输入条目
 type GroupRateMultiplierInput struct {
-	UserID         int64   `json:"user_id"`
-	RateMultiplier float64 `json:"rate_multiplier"`
+	UserID               int64    `json:"user_id"`
+	RateMultiplier       float64  `json:"rate_multiplier"`
+	ActualRateMultiplier *float64 `json:"actual_rate_multiplier,omitempty"`
+}
+
+// UserGroupRateConfig is the resolved custom rate config for one user/group pair.
+type UserGroupRateConfig struct {
+	RateMultiplier       float64  `json:"rate_multiplier"`
+	ActualRateMultiplier *float64 `json:"actual_rate_multiplier,omitempty"`
 }
 
 // UserGroupRateRepository 用户专属分组倍率仓储接口

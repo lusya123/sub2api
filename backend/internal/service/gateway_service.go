@@ -7234,6 +7234,23 @@ func (s *GatewayService) getUserGroupRateMultiplier(ctx context.Context, userID,
 	return resolver.Resolve(ctx, userID, groupID, groupDefaultMultiplier)
 }
 
+func (s *GatewayService) getUserGroupActualRateMultiplier(ctx context.Context, userID, groupID int64, groupActualMultiplier float64) float64 {
+	if s == nil {
+		return groupActualMultiplier
+	}
+	resolver := s.userGroupRateResolver
+	if resolver == nil {
+		resolver = newUserGroupRateResolver(
+			s.userGroupRateRepo,
+			s.userGroupRateCache,
+			resolveUserGroupRateCacheTTL(s.cfg),
+			&s.userGroupRateSF,
+			"service.gateway",
+		)
+	}
+	return resolver.ResolveActual(ctx, userID, groupID, groupActualMultiplier)
+}
+
 // RecordUsageInput 记录使用量的输入参数
 type RecordUsageInput struct {
 	Result             *ForwardResult
@@ -7568,14 +7585,18 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		cacheTTLOverridden = (result.Usage.CacheCreation5mTokens + result.Usage.CacheCreation1hTokens) > 0
 	}
 
-	// 获取费率倍数（优先级：用户专属 > 分组默认 > 系统默认）
-	multiplier := 1.0
+	// 获取展示/实际费率倍数（优先级：用户专属 > 分组默认 > 系统默认）
+	displayMultiplier := 1.0
+	actualMultiplier := 1.0
 	if s.cfg != nil {
-		multiplier = s.cfg.Default.RateMultiplier
+		displayMultiplier = s.cfg.Default.RateMultiplier
+		actualMultiplier = s.cfg.Default.RateMultiplier
 	}
 	if apiKey.GroupID != nil && apiKey.Group != nil {
 		groupDefault := apiKey.Group.RateMultiplier
-		multiplier = s.getUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
+		groupActual := apiKey.Group.BillingRateMultiplier()
+		displayMultiplier = s.getUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
+		actualMultiplier = s.getUserGroupActualRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupActual)
 	}
 
 	var cost *CostBreakdown
@@ -7593,9 +7614,9 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 			}
 		}
 		if result.MediaType == "image" {
-			cost = s.billingService.CalculateSoraImageCost(result.ImageSize, result.ImageCount, soraConfig, multiplier)
+			cost = s.billingService.CalculateSoraImageCost(result.ImageSize, result.ImageCount, soraConfig, actualMultiplier)
 		} else {
-			cost = s.billingService.CalculateSoraVideoCost(billingModel, soraConfig, multiplier)
+			cost = s.billingService.CalculateSoraVideoCost(billingModel, soraConfig, actualMultiplier)
 		}
 	} else if result.MediaType == "prompt" {
 		cost = &CostBreakdown{}
@@ -7609,7 +7630,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 				Price4K: apiKey.Group.ImagePrice4K,
 			}
 		}
-		cost = s.billingService.CalculateImageCost(billingModel, result.ImageSize, result.ImageCount, groupConfig, multiplier)
+		cost = s.billingService.CalculateImageCost(billingModel, result.ImageSize, result.ImageCount, groupConfig, actualMultiplier)
 	} else {
 		// Token 计费
 		tokens := UsageTokens{
@@ -7621,7 +7642,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 			CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
 		}
 		var err error
-		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
+		cost, err = s.billingService.CalculateCost(billingModel, tokens, actualMultiplier)
 		if err != nil {
 			logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
 			cost = &CostBreakdown{ActualCost: 0}
@@ -7670,7 +7691,9 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		CacheReadCost:         cost.CacheReadCost,
 		TotalCost:             cost.TotalCost,
 		ActualCost:            cost.ActualCost,
-		RateMultiplier:        multiplier,
+		RateMultiplier:        displayMultiplier,
+		ActualRateMultiplier:  &actualMultiplier,
+		ShowCostBreakdown:     SnapshotShowCostBreakdown(apiKey.Group),
 		AccountRateMultiplier: &accountRateMultiplier,
 		BillingType:           billingType,
 		Stream:                result.Stream,
@@ -7785,14 +7808,18 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 		cacheTTLOverridden = (result.Usage.CacheCreation5mTokens + result.Usage.CacheCreation1hTokens) > 0
 	}
 
-	// 获取费率倍数（优先级：用户专属 > 分组默认 > 系统默认）
-	multiplier := 1.0
+	// 获取展示/实际费率倍数（优先级：用户专属 > 分组默认 > 系统默认）
+	displayMultiplier := 1.0
+	actualMultiplier := 1.0
 	if s.cfg != nil {
-		multiplier = s.cfg.Default.RateMultiplier
+		displayMultiplier = s.cfg.Default.RateMultiplier
+		actualMultiplier = s.cfg.Default.RateMultiplier
 	}
 	if apiKey.GroupID != nil && apiKey.Group != nil {
 		groupDefault := apiKey.Group.RateMultiplier
-		multiplier = s.getUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
+		groupActual := apiKey.Group.BillingRateMultiplier()
+		displayMultiplier = s.getUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
+		actualMultiplier = s.getUserGroupActualRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupActual)
 	}
 
 	var cost *CostBreakdown
@@ -7809,7 +7836,7 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 				Price4K: apiKey.Group.ImagePrice4K,
 			}
 		}
-		cost = s.billingService.CalculateImageCost(billingModel, result.ImageSize, result.ImageCount, groupConfig, multiplier)
+		cost = s.billingService.CalculateImageCost(billingModel, result.ImageSize, result.ImageCount, groupConfig, actualMultiplier)
 	} else {
 		// Token 计费（使用长上下文计费方法）
 		tokens := UsageTokens{
@@ -7821,7 +7848,7 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 			CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
 		}
 		var err error
-		cost, err = s.billingService.CalculateCostWithLongContext(billingModel, tokens, multiplier, input.LongContextThreshold, input.LongContextMultiplier)
+		cost, err = s.billingService.CalculateCostWithLongContext(billingModel, tokens, actualMultiplier, input.LongContextThreshold, input.LongContextMultiplier)
 		if err != nil {
 			logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
 			cost = &CostBreakdown{ActualCost: 0}
@@ -7866,7 +7893,9 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 		CacheReadCost:         cost.CacheReadCost,
 		TotalCost:             cost.TotalCost,
 		ActualCost:            cost.ActualCost,
-		RateMultiplier:        multiplier,
+		RateMultiplier:        displayMultiplier,
+		ActualRateMultiplier:  &actualMultiplier,
+		ShowCostBreakdown:     SnapshotShowCostBreakdown(apiKey.Group),
 		AccountRateMultiplier: &accountRateMultiplier,
 		BillingType:           billingType,
 		Stream:                result.Stream,

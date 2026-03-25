@@ -45,6 +45,13 @@ func (Group) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
+		field.Float("actual_rate_multiplier").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
+		field.Bool("show_cost_breakdown").
+			Default(true).
+			Comment("是否向普通用户展示 usage 费用明细表"),
 		field.Bool("is_exclusive").
 			Default(false),
 		field.String("status").

@@ -116,6 +116,47 @@ func (_u *GroupUpdate) AddRateMultiplier(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (_u *GroupUpdate) SetActualRateMultiplier(v float64) *GroupUpdate {
+	_u.mutation.ResetActualRateMultiplier()
+	_u.mutation.SetActualRateMultiplier(v)
+	return _u
+}
+
+// SetNillableActualRateMultiplier sets the "actual_rate_multiplier" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableActualRateMultiplier(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetActualRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddActualRateMultiplier adds value to the "actual_rate_multiplier" field.
+func (_u *GroupUpdate) AddActualRateMultiplier(v float64) *GroupUpdate {
+	_u.mutation.AddActualRateMultiplier(v)
+	return _u
+}
+
+// ClearActualRateMultiplier clears the value of the "actual_rate_multiplier" field.
+func (_u *GroupUpdate) ClearActualRateMultiplier() *GroupUpdate {
+	_u.mutation.ClearActualRateMultiplier()
+	return _u
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (_u *GroupUpdate) SetShowCostBreakdown(v bool) *GroupUpdate {
+	_u.mutation.SetShowCostBreakdown(v)
+	return _u
+}
+
+// SetNillableShowCostBreakdown sets the "show_cost_breakdown" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableShowCostBreakdown(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetShowCostBreakdown(*v)
+	}
+	return _u
+}
+
 // SetIsExclusive sets the "is_exclusive" field.
 func (_u *GroupUpdate) SetIsExclusive(v bool) *GroupUpdate {
 	_u.mutation.SetIsExclusive(v)
@@ -982,6 +1023,18 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.ActualRateMultiplier(); ok {
+		_spec.SetField(group.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedActualRateMultiplier(); ok {
+		_spec.AddField(group.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.ActualRateMultiplierCleared() {
+		_spec.ClearField(group.FieldActualRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.ShowCostBreakdown(); ok {
+		_spec.SetField(group.FieldShowCostBreakdown, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.IsExclusive(); ok {
 		_spec.SetField(group.FieldIsExclusive, field.TypeBool, value)
 	}
@@ -1541,6 +1594,47 @@ func (_u *GroupUpdateOne) SetNillableRateMultiplier(v *float64) *GroupUpdateOne 
 // AddRateMultiplier adds value to the "rate_multiplier" field.
 func (_u *GroupUpdateOne) AddRateMultiplier(v float64) *GroupUpdateOne {
 	_u.mutation.AddRateMultiplier(v)
+	return _u
+}
+
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (_u *GroupUpdateOne) SetActualRateMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.ResetActualRateMultiplier()
+	_u.mutation.SetActualRateMultiplier(v)
+	return _u
+}
+
+// SetNillableActualRateMultiplier sets the "actual_rate_multiplier" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableActualRateMultiplier(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetActualRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddActualRateMultiplier adds value to the "actual_rate_multiplier" field.
+func (_u *GroupUpdateOne) AddActualRateMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.AddActualRateMultiplier(v)
+	return _u
+}
+
+// ClearActualRateMultiplier clears the value of the "actual_rate_multiplier" field.
+func (_u *GroupUpdateOne) ClearActualRateMultiplier() *GroupUpdateOne {
+	_u.mutation.ClearActualRateMultiplier()
+	return _u
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (_u *GroupUpdateOne) SetShowCostBreakdown(v bool) *GroupUpdateOne {
+	_u.mutation.SetShowCostBreakdown(v)
+	return _u
+}
+
+// SetNillableShowCostBreakdown sets the "show_cost_breakdown" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableShowCostBreakdown(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetShowCostBreakdown(*v)
+	}
 	return _u
 }
 
@@ -2439,6 +2533,18 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ActualRateMultiplier(); ok {
+		_spec.SetField(group.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedActualRateMultiplier(); ok {
+		_spec.AddField(group.FieldActualRateMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.ActualRateMultiplierCleared() {
+		_spec.ClearField(group.FieldActualRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.ShowCostBreakdown(); ok {
+		_spec.SetField(group.FieldShowCostBreakdown, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.IsExclusive(); ok {
 		_spec.SetField(group.FieldIsExclusive, field.TypeBool, value)

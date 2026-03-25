@@ -4148,14 +4148,16 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		CacheReadTokens:     result.Usage.CacheReadInputTokens,
 	}
 
-	// Get rate multiplier
-	multiplier := s.cfg.Default.RateMultiplier
+	// Get display/actual rate multipliers
+	displayMultiplier := s.cfg.Default.RateMultiplier
+	actualMultiplier := s.cfg.Default.RateMultiplier
 	if apiKey.GroupID != nil && apiKey.Group != nil {
 		resolver := s.userGroupRateResolver
 		if resolver == nil {
 			resolver = newUserGroupRateResolver(nil, nil, resolveUserGroupRateCacheTTL(s.cfg), nil, "service.openai_gateway")
 		}
-		multiplier = resolver.Resolve(ctx, user.ID, *apiKey.GroupID, apiKey.Group.RateMultiplier)
+		displayMultiplier = resolver.Resolve(ctx, user.ID, *apiKey.GroupID, apiKey.Group.RateMultiplier)
+		actualMultiplier = resolver.ResolveActual(ctx, user.ID, *apiKey.GroupID, apiKey.Group.BillingRateMultiplier())
 	}
 
 	billingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
@@ -4166,7 +4168,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if result.ServiceTier != nil {
 		serviceTier = strings.TrimSpace(*result.ServiceTier)
 	}
-	cost, err := s.billingService.CalculateCostWithServiceTier(billingModel, tokens, multiplier, serviceTier)
+	cost, err := s.billingService.CalculateCostWithServiceTier(billingModel, tokens, actualMultiplier, serviceTier)
 	if err != nil {
 		cost = &CostBreakdown{ActualCost: 0}
 	}
@@ -4204,7 +4206,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		CacheReadCost:         cost.CacheReadCost,
 		TotalCost:             cost.TotalCost,
 		ActualCost:            cost.ActualCost,
-		RateMultiplier:        multiplier,
+		RateMultiplier:        displayMultiplier,
+		ActualRateMultiplier:  &actualMultiplier,
+		ShowCostBreakdown:     SnapshotShowCostBreakdown(apiKey.Group),
 		AccountRateMultiplier: &accountRateMultiplier,
 		BillingType:           billingType,
 		Stream:                result.Stream,

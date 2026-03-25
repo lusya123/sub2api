@@ -133,6 +133,90 @@ func TestUsageLogFromService_UsesRequestedModelAndKeepsUpstreamAdminOnly(t *test
 	require.Contains(t, string(adminJSON), `"upstream_model":"claude-sonnet-4-20250514"`)
 }
 
+func TestUsageLogFromService_HidesBillingInternalsFromUserJSON(t *testing.T) {
+	t.Parallel()
+
+	log := &service.UsageLog{
+		RequestID:         "req_hidden",
+		Model:             "gpt-5.4",
+		InputCost:         0.1,
+		OutputCost:        0.2,
+		CacheCreationCost: 0.3,
+		CacheReadCost:     0.4,
+		TotalCost:         0.5,
+		ActualCost:        0.8,
+		RateMultiplier:    1.6,
+		ShowCostBreakdown: boolPtr(false),
+	}
+
+	userJSON, err := json.Marshal(UsageLogFromService(log))
+	require.NoError(t, err)
+	require.Contains(t, string(userJSON), `"actual_cost":0.8`)
+	require.NotContains(t, string(userJSON), "input_cost")
+	require.NotContains(t, string(userJSON), "output_cost")
+	require.NotContains(t, string(userJSON), "cache_creation_cost")
+	require.NotContains(t, string(userJSON), "cache_read_cost")
+	require.NotContains(t, string(userJSON), "total_cost")
+	require.NotContains(t, string(userJSON), "rate_multiplier")
+
+	adminJSON, err := json.Marshal(UsageLogFromServiceAdmin(log))
+	require.NoError(t, err)
+	require.Contains(t, string(adminJSON), `"input_cost":0.1`)
+	require.Contains(t, string(adminJSON), `"output_cost":0.2`)
+	require.Contains(t, string(adminJSON), `"cache_creation_cost":0.3`)
+	require.Contains(t, string(adminJSON), `"cache_read_cost":0.4`)
+	require.Contains(t, string(adminJSON), `"total_cost":0.5`)
+	require.Contains(t, string(adminJSON), `"rate_multiplier":1.6`)
+}
+
+func TestUsageLogFromService_ExposesCostBreakdownWhenGroupAllows(t *testing.T) {
+	t.Parallel()
+
+	log := &service.UsageLog{
+		RequestID:         "req_cost_breakdown",
+		Model:             "gpt-5.4",
+		InputTokens:       1000,
+		OutputTokens:      500,
+		InputCost:         0.01,
+		OutputCost:        0.02,
+		CacheCreationCost: 0.03,
+		CacheReadCost:     0.04,
+		ActualCost:        0.2,
+		ShowCostBreakdown: boolPtr(true),
+	}
+
+	userJSON, err := json.Marshal(UsageLogFromService(log))
+	require.NoError(t, err)
+	require.Contains(t, string(userJSON), `"input_cost":0.01`)
+	require.Contains(t, string(userJSON), `"output_cost":0.02`)
+	require.Contains(t, string(userJSON), `"cache_creation_cost":0.03`)
+	require.Contains(t, string(userJSON), `"cache_read_cost":0.04`)
+	require.NotContains(t, string(userJSON), "total_cost")
+	require.NotContains(t, string(userJSON), `"actual_rate_multiplier"`)
+	require.Contains(t, string(userJSON), `"show_cost_breakdown":true`)
+}
+
+func TestUsageLogFromService_UsesSnapshotOverCurrentGroupSetting(t *testing.T) {
+	t.Parallel()
+
+	log := &service.UsageLog{
+		RequestID:         "req_snapshot_breakdown",
+		Model:             "gpt-5.4",
+		InputCost:         0.01,
+		OutputCost:        0.02,
+		ShowCostBreakdown: boolPtr(false),
+		Group: &service.Group{
+			ShowCostBreakdown: true,
+		},
+	}
+
+	userJSON, err := json.Marshal(UsageLogFromService(log))
+	require.NoError(t, err)
+	require.Contains(t, string(userJSON), `"show_cost_breakdown":false`)
+	require.NotContains(t, string(userJSON), "input_cost")
+	require.NotContains(t, string(userJSON), "output_cost")
+}
+
 func TestUsageLogFromService_FallsBackToLegacyModelWhenRequestedModelMissing(t *testing.T) {
 	t.Parallel()
 
@@ -149,5 +233,9 @@ func TestUsageLogFromService_FallsBackToLegacyModelWhenRequestedModelMissing(t *
 }
 
 func f64Ptr(value float64) *float64 {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
 	return &value
 }

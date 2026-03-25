@@ -27,6 +27,10 @@ const (
 	FieldDescription = "description"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldActualRateMultiplier holds the string denoting the actual_rate_multiplier field in the database.
+	FieldActualRateMultiplier = "actual_rate_multiplier"
+	// FieldShowCostBreakdown holds the string denoting the show_cost_breakdown field in the database.
+	FieldShowCostBreakdown = "show_cost_breakdown"
 	// FieldIsExclusive holds the string denoting the is_exclusive field in the database.
 	FieldIsExclusive = "is_exclusive"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -160,6 +164,8 @@ var Columns = []string{
 	FieldName,
 	FieldDescription,
 	FieldRateMultiplier,
+	FieldActualRateMultiplier,
+	FieldShowCostBreakdown,
 	FieldIsExclusive,
 	FieldStatus,
 	FieldPlatform,
@@ -225,6 +231,8 @@ var (
 	NameValidator func(string) error
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// DefaultShowCostBreakdown holds the default value on creation for the "show_cost_breakdown" field.
+	DefaultShowCostBreakdown bool
 	// DefaultIsExclusive holds the default value on creation for the "is_exclusive" field.
 	DefaultIsExclusive bool
 	// DefaultStatus holds the default value on creation for the "status" field.
@@ -297,6 +305,16 @@ func ByDescription(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByActualRateMultiplier orders the results by the actual_rate_multiplier field.
+func ByActualRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldActualRateMultiplier, opts...).ToFunc()
+}
+
+// ByShowCostBreakdown orders the results by the show_cost_breakdown field.
+func ByShowCostBreakdown(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldShowCostBreakdown, opts...).ToFunc()
 }
 
 // ByIsExclusive orders the results by the is_exclusive field.

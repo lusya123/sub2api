@@ -11,9 +11,14 @@ type Group struct {
 	Description    string
 	Platform       string
 	RateMultiplier float64
-	IsExclusive    bool
-	Status         string
-	Hydrated       bool // indicates the group was loaded from a trusted repository source
+	// ActualRateMultiplier is the hidden billing multiplier used for real charging.
+	// Nil means fallback to RateMultiplier.
+	ActualRateMultiplier *float64
+	// ShowCostBreakdown controls whether users can see cost breakdown details in usage records.
+	ShowCostBreakdown bool
+	IsExclusive       bool
+	Status            string
+	Hydrated          bool // indicates the group was loaded from a trusted repository source
 
 	SubscriptionType    string
 	DailyLimitUSD       *float64
@@ -80,6 +85,24 @@ func (g *Group) IsSubscriptionType() bool {
 
 func (g *Group) IsFreeSubscription() bool {
 	return g.IsSubscriptionType() && g.RateMultiplier == 0
+}
+
+// BillingRateMultiplier returns the effective multiplier used for wallet/subscription billing.
+// If no dedicated billing multiplier is configured, it falls back to the user-visible rate.
+func (g *Group) BillingRateMultiplier() float64 {
+	if g == nil {
+		return 1.0
+	}
+	if g.ActualRateMultiplier != nil {
+		if *g.ActualRateMultiplier >= 0 {
+			return *g.ActualRateMultiplier
+		}
+		return 1.0
+	}
+	if g.RateMultiplier >= 0 {
+		return g.RateMultiplier
+	}
+	return 1.0
 }
 
 func (g *Group) HasDailyLimit() bool {

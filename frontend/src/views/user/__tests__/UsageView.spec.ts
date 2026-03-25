@@ -106,19 +106,21 @@ describe('user UsageView tooltip', () => {
         {
           request_id: 'req-user-1',
           actual_cost: 0.092883,
-          total_cost: 0.092883,
-          rate_multiplier: 1,
-          service_tier: 'priority',
           input_cost: 0.020285,
           output_cost: 0.00303,
           cache_creation_cost: 0,
           cache_read_cost: 0.069568,
+          service_tier: 'priority',
           input_tokens: 4057,
           output_tokens: 101,
           cache_creation_tokens: 0,
           cache_read_tokens: 278272,
           cache_creation_5m_tokens: 0,
           cache_creation_1h_tokens: 0,
+          show_cost_breakdown: true,
+          group: {
+            show_cost_breakdown: true,
+          },
           image_count: 0,
           image_size: null,
           first_token_ms: null,
@@ -132,7 +134,7 @@ describe('user UsageView tooltip', () => {
     getStatsByDateRange.mockResolvedValue({
       total_requests: 1,
       total_tokens: 100,
-      total_cost: 0.1,
+      total_actual_cost: 0.1,
       avg_duration_ms: 1,
     })
     list.mockResolvedValue({ items: [] })
@@ -159,15 +161,17 @@ describe('user UsageView tooltip', () => {
     setupState.tooltipData = {
       request_id: 'req-user-1',
       actual_cost: 0.092883,
-      total_cost: 0.092883,
-      rate_multiplier: 1,
-      service_tier: 'priority',
       input_cost: 0.020285,
       output_cost: 0.00303,
       cache_creation_cost: 0,
       cache_read_cost: 0.069568,
+      service_tier: 'priority',
       input_tokens: 4057,
       output_tokens: 101,
+      show_cost_breakdown: true,
+      group: {
+        show_cost_breakdown: true,
+      },
     }
     setupState.tooltipVisible = true
     await nextTick()
@@ -185,19 +189,14 @@ describe('user UsageView tooltip', () => {
       {
         request_id: 'req-user-export',
         actual_cost: 0.092883,
-        total_cost: 0.092883,
-        rate_multiplier: 1,
         service_tier: 'priority',
-        input_cost: 0.020285,
-        output_cost: 0.00303,
-        cache_creation_cost: 0.000001,
-        cache_read_cost: 0.069568,
         input_tokens: 4057,
         output_tokens: 101,
         cache_creation_tokens: 4,
         cache_read_tokens: 278272,
         cache_creation_5m_tokens: 0,
         cache_creation_1h_tokens: 0,
+        show_cost_breakdown: false,
         image_count: 0,
         image_size: null,
         first_token_ms: 12,
@@ -217,7 +216,7 @@ describe('user UsageView tooltip', () => {
     getStatsByDateRange.mockResolvedValue({
       total_requests: 1,
       total_tokens: 100,
-      total_cost: 0.1,
+      total_actual_cost: 0.1,
       avg_duration_ms: 1,
     })
     list.mockResolvedValue({ items: [] })

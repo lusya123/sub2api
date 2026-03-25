@@ -64,13 +64,15 @@ export async function generate(
   count: number,
   type: RedeemCodeType,
   value: number,
+  isTrial?: boolean,
   groupId?: number | null,
   validityDays?: number
 ): Promise<RedeemCode[]> {
   const payload: GenerateRedeemCodesRequest = {
     count,
     type,
-    value
+    value,
+    is_trial: isTrial
   }
 
   // 订阅类型专用字段

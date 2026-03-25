@@ -295,6 +295,34 @@ func (_c *UsageLogCreate) SetNillableRateMultiplier(v *float64) *UsageLogCreate 
 	return _c
 }
 
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (_c *UsageLogCreate) SetActualRateMultiplier(v float64) *UsageLogCreate {
+	_c.mutation.SetActualRateMultiplier(v)
+	return _c
+}
+
+// SetNillableActualRateMultiplier sets the "actual_rate_multiplier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableActualRateMultiplier(v *float64) *UsageLogCreate {
+	if v != nil {
+		_c.SetActualRateMultiplier(*v)
+	}
+	return _c
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (_c *UsageLogCreate) SetShowCostBreakdown(v bool) *UsageLogCreate {
+	_c.mutation.SetShowCostBreakdown(v)
+	return _c
+}
+
+// SetNillableShowCostBreakdown sets the "show_cost_breakdown" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableShowCostBreakdown(v *bool) *UsageLogCreate {
+	if v != nil {
+		_c.SetShowCostBreakdown(*v)
+	}
+	return _c
+}
+
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
 func (_c *UsageLogCreate) SetAccountRateMultiplier(v float64) *UsageLogCreate {
 	_c.mutation.SetAccountRateMultiplier(v)
@@ -811,6 +839,14 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.ActualRateMultiplier(); ok {
+		_spec.SetField(usagelog.FieldActualRateMultiplier, field.TypeFloat64, value)
+		_node.ActualRateMultiplier = &value
+	}
+	if value, ok := _c.mutation.ShowCostBreakdown(); ok {
+		_spec.SetField(usagelog.FieldShowCostBreakdown, field.TypeBool, value)
+		_node.ShowCostBreakdown = &value
 	}
 	if value, ok := _c.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)
@@ -1360,6 +1396,48 @@ func (u *UsageLogUpsert) UpdateRateMultiplier() *UsageLogUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *UsageLogUpsert) AddRateMultiplier(v float64) *UsageLogUpsert {
 	u.Add(usagelog.FieldRateMultiplier, v)
+	return u
+}
+
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (u *UsageLogUpsert) SetActualRateMultiplier(v float64) *UsageLogUpsert {
+	u.Set(usagelog.FieldActualRateMultiplier, v)
+	return u
+}
+
+// UpdateActualRateMultiplier sets the "actual_rate_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateActualRateMultiplier() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldActualRateMultiplier)
+	return u
+}
+
+// AddActualRateMultiplier adds v to the "actual_rate_multiplier" field.
+func (u *UsageLogUpsert) AddActualRateMultiplier(v float64) *UsageLogUpsert {
+	u.Add(usagelog.FieldActualRateMultiplier, v)
+	return u
+}
+
+// ClearActualRateMultiplier clears the value of the "actual_rate_multiplier" field.
+func (u *UsageLogUpsert) ClearActualRateMultiplier() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldActualRateMultiplier)
+	return u
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (u *UsageLogUpsert) SetShowCostBreakdown(v bool) *UsageLogUpsert {
+	u.Set(usagelog.FieldShowCostBreakdown, v)
+	return u
+}
+
+// UpdateShowCostBreakdown sets the "show_cost_breakdown" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateShowCostBreakdown() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldShowCostBreakdown)
+	return u
+}
+
+// ClearShowCostBreakdown clears the value of the "show_cost_breakdown" field.
+func (u *UsageLogUpsert) ClearShowCostBreakdown() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldShowCostBreakdown)
 	return u
 }
 
@@ -2036,6 +2114,55 @@ func (u *UsageLogUpsertOne) AddRateMultiplier(v float64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateRateMultiplier() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (u *UsageLogUpsertOne) SetActualRateMultiplier(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetActualRateMultiplier(v)
+	})
+}
+
+// AddActualRateMultiplier adds v to the "actual_rate_multiplier" field.
+func (u *UsageLogUpsertOne) AddActualRateMultiplier(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddActualRateMultiplier(v)
+	})
+}
+
+// UpdateActualRateMultiplier sets the "actual_rate_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateActualRateMultiplier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateActualRateMultiplier()
+	})
+}
+
+// ClearActualRateMultiplier clears the value of the "actual_rate_multiplier" field.
+func (u *UsageLogUpsertOne) ClearActualRateMultiplier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearActualRateMultiplier()
+	})
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (u *UsageLogUpsertOne) SetShowCostBreakdown(v bool) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetShowCostBreakdown(v)
+	})
+}
+
+// UpdateShowCostBreakdown sets the "show_cost_breakdown" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateShowCostBreakdown() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateShowCostBreakdown()
+	})
+}
+
+// ClearShowCostBreakdown clears the value of the "show_cost_breakdown" field.
+func (u *UsageLogUpsertOne) ClearShowCostBreakdown() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearShowCostBreakdown()
 	})
 }
 
@@ -2912,6 +3039,55 @@ func (u *UsageLogUpsertBulk) AddRateMultiplier(v float64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateRateMultiplier() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetActualRateMultiplier sets the "actual_rate_multiplier" field.
+func (u *UsageLogUpsertBulk) SetActualRateMultiplier(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetActualRateMultiplier(v)
+	})
+}
+
+// AddActualRateMultiplier adds v to the "actual_rate_multiplier" field.
+func (u *UsageLogUpsertBulk) AddActualRateMultiplier(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddActualRateMultiplier(v)
+	})
+}
+
+// UpdateActualRateMultiplier sets the "actual_rate_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateActualRateMultiplier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateActualRateMultiplier()
+	})
+}
+
+// ClearActualRateMultiplier clears the value of the "actual_rate_multiplier" field.
+func (u *UsageLogUpsertBulk) ClearActualRateMultiplier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearActualRateMultiplier()
+	})
+}
+
+// SetShowCostBreakdown sets the "show_cost_breakdown" field.
+func (u *UsageLogUpsertBulk) SetShowCostBreakdown(v bool) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetShowCostBreakdown(v)
+	})
+}
+
+// UpdateShowCostBreakdown sets the "show_cost_breakdown" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateShowCostBreakdown() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateShowCostBreakdown()
+	})
+}
+
+// ClearShowCostBreakdown clears the value of the "show_cost_breakdown" field.
+func (u *UsageLogUpsertBulk) ClearShowCostBreakdown() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearShowCostBreakdown()
 	})
 }
 
