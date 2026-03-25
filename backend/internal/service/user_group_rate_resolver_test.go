@@ -59,7 +59,9 @@ func TestUserGroupRateResolverResolve_InvalidCacheEntryLoadsRepoAndCaches(t *tes
 
 	cached, ok := cache.Get("101:202")
 	require.True(t, ok)
-	require.Equal(t, rate, cached)
+	cfg, ok := cached.(*UserGroupRateConfig)
+	require.True(t, ok)
+	require.Equal(t, rate, cfg.RateMultiplier)
 
 	hit, miss, load, _, fallback := GatewayUserGroupRateCacheStats()
 	require.Equal(t, int64(0), hit)
