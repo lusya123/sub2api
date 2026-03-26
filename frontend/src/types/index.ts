@@ -75,6 +75,8 @@ export interface SendVerifyCodeResponse {
   countdown: number
 }
 
+export type PurchaseSubscriptionMode = 'embedded' | 'redirect'
+
 export interface CustomMenuItem {
   id: string
   label: string
@@ -108,6 +110,9 @@ export interface PublicSettings {
   home_content: string
   hide_ccs_import_button: boolean
   purchase_subscription_enabled: boolean
+  purchase_subscription_mode: PurchaseSubscriptionMode
+  purchase_subscription_embedded_url: string
+  purchase_subscription_redirect_url: string
   purchase_subscription_url: string
   custom_menu_items: CustomMenuItem[]
   custom_endpoints: CustomEndpoint[]

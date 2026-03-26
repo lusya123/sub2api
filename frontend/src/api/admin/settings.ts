@@ -4,7 +4,11 @@
  */
 
 import { apiClient } from '../client'
-import type { CustomMenuItem, CustomEndpoint } from '@/types'
+import type {
+  CustomMenuItem,
+  CustomEndpoint,
+  PurchaseSubscriptionMode,
+} from '@/types'
 
 export interface DefaultSubscriptionSetting {
   group_id: number
@@ -39,6 +43,9 @@ export interface SystemSettings {
   home_content: string
   hide_ccs_import_button: boolean
   purchase_subscription_enabled: boolean
+  purchase_subscription_mode: PurchaseSubscriptionMode
+  purchase_subscription_embedded_url: string
+  purchase_subscription_redirect_url: string
   purchase_subscription_url: string
   sora_client_enabled: boolean
   backend_mode_enabled: boolean
@@ -109,6 +116,9 @@ export interface UpdateSettingsRequest {
   home_content?: string
   hide_ccs_import_button?: boolean
   purchase_subscription_enabled?: boolean
+  purchase_subscription_mode?: PurchaseSubscriptionMode
+  purchase_subscription_embedded_url?: string
+  purchase_subscription_redirect_url?: string
   purchase_subscription_url?: string
   sora_client_enabled?: boolean
   backend_mode_enabled?: boolean

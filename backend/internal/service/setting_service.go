@@ -147,7 +147,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyHomeContent,
 		SettingKeyHideCcsImportButton,
 		SettingKeyPurchaseSubscriptionEnabled,
+		SettingKeyPurchaseSubscriptionMode,
 		SettingKeyPurchaseSubscriptionURL,
+		SettingKeyPurchaseSubscriptionEmbeddedURL,
+		SettingKeyPurchaseSubscriptionRedirectURL,
 		SettingKeySoraClientEnabled,
 		SettingKeyCustomMenuItems,
 		SettingKeyCustomEndpoints,
@@ -173,6 +176,12 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	registrationEmailSuffixWhitelist := ParseRegistrationEmailSuffixWhitelist(
 		settings[SettingKeyRegistrationEmailSuffixWhitelist],
 	)
+	purchaseEmbeddedURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionEmbeddedURL])
+	if purchaseEmbeddedURL == "" {
+		purchaseEmbeddedURL = strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL])
+	}
+	purchaseRedirectURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionRedirectURL])
+	purchaseMode := NormalizePurchaseSubscriptionMode(settings[SettingKeyPurchaseSubscriptionMode])
 
 	return &PublicSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
@@ -193,7 +202,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		HomeContent:                      settings[SettingKeyHomeContent],
 		HideCcsImportButton:              settings[SettingKeyHideCcsImportButton] == "true",
 		PurchaseSubscriptionEnabled:      settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
-		PurchaseSubscriptionURL:          strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
+		PurchaseSubscriptionMode:         purchaseMode,
+		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
+		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		SoraClientEnabled:                settings[SettingKeySoraClientEnabled] == "true",
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
@@ -246,6 +258,9 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		HomeContent                      string          `json:"home_content,omitempty"`
 		HideCcsImportButton              bool            `json:"hide_ccs_import_button"`
 		PurchaseSubscriptionEnabled      bool            `json:"purchase_subscription_enabled"`
+		PurchaseSubscriptionMode         string          `json:"purchase_subscription_mode"`
+		PurchaseSubscriptionEmbeddedURL  string          `json:"purchase_subscription_embedded_url,omitempty"`
+		PurchaseSubscriptionRedirectURL  string          `json:"purchase_subscription_redirect_url,omitempty"`
 		PurchaseSubscriptionURL          string          `json:"purchase_subscription_url,omitempty"`
 		SoraClientEnabled                bool            `json:"sora_client_enabled"`
 		CustomMenuItems                  json.RawMessage `json:"custom_menu_items"`
@@ -272,6 +287,9 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		HomeContent:                      settings.HomeContent,
 		HideCcsImportButton:              settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:      settings.PurchaseSubscriptionEnabled,
+		PurchaseSubscriptionMode:         settings.PurchaseSubscriptionMode,
+		PurchaseSubscriptionEmbeddedURL:  settings.PurchaseSubscriptionEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:  settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:          settings.PurchaseSubscriptionURL,
 		SoraClientEnabled:                settings.SoraClientEnabled,
 		CustomMenuItems:                  filterUserVisibleMenuItems(settings.CustomMenuItems),
@@ -330,8 +348,8 @@ func safeRawJSONArray(raw string) json.RawMessage {
 	return json.RawMessage("[]")
 }
 
-// GetFrameSrcOrigins returns deduplicated http(s) origins from purchase_subscription_url
-// and all custom_menu_items URLs. Used by the router layer for CSP frame-src injection.
+// GetFrameSrcOrigins returns deduplicated http(s) origins from purchase subscription embed
+// URLs and all custom_menu_items URLs. Used by the router layer for CSP frame-src injection.
 func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, error) {
 	settings, err := s.GetPublicSettings(ctx)
 	if err != nil {
@@ -350,9 +368,10 @@ func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, erro
 		}
 	}
 
-	// purchase subscription URL
+	// Purchase subscription embed URL. Keep this permissive even when current mode is
+	// redirect so admins can switch modes without requiring a CSP refresh boundary.
 	if settings.PurchaseSubscriptionEnabled {
-		addOrigin(settings.PurchaseSubscriptionURL)
+		addOrigin(settings.PurchaseSubscriptionEmbeddedURL)
 	}
 
 	// all custom menu items (including admin-only, since CSP must allow all iframes)
@@ -467,7 +486,10 @@ func (s *SettingService) UpdateSettings(ctx context.Context, settings *SystemSet
 	updates[SettingKeyHomeContent] = settings.HomeContent
 	updates[SettingKeyHideCcsImportButton] = strconv.FormatBool(settings.HideCcsImportButton)
 	updates[SettingKeyPurchaseSubscriptionEnabled] = strconv.FormatBool(settings.PurchaseSubscriptionEnabled)
-	updates[SettingKeyPurchaseSubscriptionURL] = strings.TrimSpace(settings.PurchaseSubscriptionURL)
+	updates[SettingKeyPurchaseSubscriptionMode] = NormalizePurchaseSubscriptionMode(settings.PurchaseSubscriptionMode)
+	updates[SettingKeyPurchaseSubscriptionEmbeddedURL] = strings.TrimSpace(settings.PurchaseSubscriptionEmbeddedURL)
+	updates[SettingKeyPurchaseSubscriptionRedirectURL] = strings.TrimSpace(settings.PurchaseSubscriptionRedirectURL)
+	updates[SettingKeyPurchaseSubscriptionURL] = strings.TrimSpace(settings.PurchaseSubscriptionEmbeddedURL)
 	updates[SettingKeySoraClientEnabled] = strconv.FormatBool(settings.SoraClientEnabled)
 	updates[SettingKeyCustomMenuItems] = settings.CustomMenuItems
 	updates[SettingKeyCustomEndpoints] = settings.CustomEndpoints
@@ -754,7 +776,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeySiteName:                         "Sub2API",
 		SettingKeySiteLogo:                         "",
 		SettingKeyPurchaseSubscriptionEnabled:      "false",
+		SettingKeyPurchaseSubscriptionMode:         PurchaseSubscriptionModeEmbedded,
 		SettingKeyPurchaseSubscriptionURL:          "",
+		SettingKeyPurchaseSubscriptionEmbeddedURL:  "",
+		SettingKeyPurchaseSubscriptionRedirectURL:  "",
 		SettingKeySoraClientEnabled:                "false",
 		SettingKeyCustomMenuItems:                  "[]",
 		SettingKeyCustomEndpoints:                  "[]",
@@ -793,6 +818,12 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 // parseSettings 解析设置到结构体
 func (s *SettingService) parseSettings(settings map[string]string) *SystemSettings {
 	emailVerifyEnabled := settings[SettingKeyEmailVerifyEnabled] == "true"
+	purchaseEmbeddedURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionEmbeddedURL])
+	if purchaseEmbeddedURL == "" {
+		purchaseEmbeddedURL = strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL])
+	}
+	purchaseRedirectURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionRedirectURL])
+	purchaseMode := NormalizePurchaseSubscriptionMode(settings[SettingKeyPurchaseSubscriptionMode])
 	result := &SystemSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
 		EmailVerifyEnabled:               emailVerifyEnabled,
@@ -820,7 +851,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		HomeContent:                      settings[SettingKeyHomeContent],
 		HideCcsImportButton:              settings[SettingKeyHideCcsImportButton] == "true",
 		PurchaseSubscriptionEnabled:      settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
-		PurchaseSubscriptionURL:          strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
+		PurchaseSubscriptionMode:         purchaseMode,
+		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
+		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		SoraClientEnabled:                settings[SettingKeySoraClientEnabled] == "true",
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],

@@ -107,6 +107,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		HomeContent:                          settings.HomeContent,
 		HideCcsImportButton:                  settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:          settings.PurchaseSubscriptionEnabled,
+		PurchaseSubscriptionMode:             settings.PurchaseSubscriptionMode,
+		PurchaseSubscriptionEmbeddedURL:      settings.PurchaseSubscriptionEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:      settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:              settings.PurchaseSubscriptionURL,
 		SoraClientEnabled:                    settings.SoraClientEnabled,
 		CustomMenuItems:                      dto.ParseCustomMenuItems(settings.CustomMenuItems),
@@ -165,19 +168,22 @@ type UpdateSettingsRequest struct {
 	LinuxDoConnectRedirectURL  string `json:"linuxdo_connect_redirect_url"`
 
 	// OEM设置
-	SiteName                    string                `json:"site_name"`
-	SiteLogo                    string                `json:"site_logo"`
-	SiteSubtitle                string                `json:"site_subtitle"`
-	APIBaseURL                  string                `json:"api_base_url"`
-	ContactInfo                 string                `json:"contact_info"`
-	DocURL                      string                `json:"doc_url"`
-	HomeContent                 string                `json:"home_content"`
-	HideCcsImportButton         bool                  `json:"hide_ccs_import_button"`
-	PurchaseSubscriptionEnabled *bool                 `json:"purchase_subscription_enabled"`
-	PurchaseSubscriptionURL     *string               `json:"purchase_subscription_url"`
-	SoraClientEnabled           bool                  `json:"sora_client_enabled"`
-	CustomMenuItems             *[]dto.CustomMenuItem `json:"custom_menu_items"`
-	CustomEndpoints             *[]dto.CustomEndpoint `json:"custom_endpoints"`
+	SiteName                        string                `json:"site_name"`
+	SiteLogo                        string                `json:"site_logo"`
+	SiteSubtitle                    string                `json:"site_subtitle"`
+	APIBaseURL                      string                `json:"api_base_url"`
+	ContactInfo                     string                `json:"contact_info"`
+	DocURL                          string                `json:"doc_url"`
+	HomeContent                     string                `json:"home_content"`
+	HideCcsImportButton             bool                  `json:"hide_ccs_import_button"`
+	PurchaseSubscriptionEnabled     *bool                 `json:"purchase_subscription_enabled"`
+	PurchaseSubscriptionMode        *string               `json:"purchase_subscription_mode"`
+	PurchaseSubscriptionEmbeddedURL *string               `json:"purchase_subscription_embedded_url"`
+	PurchaseSubscriptionRedirectURL *string               `json:"purchase_subscription_redirect_url"`
+	PurchaseSubscriptionURL         *string               `json:"purchase_subscription_url"`
+	SoraClientEnabled               bool                  `json:"sora_client_enabled"`
+	CustomMenuItems                 *[]dto.CustomMenuItem `json:"custom_menu_items"`
+	CustomEndpoints                 *[]dto.CustomEndpoint `json:"custom_endpoints"`
 
 	// 默认配置
 	DefaultConcurrency   int                              `json:"default_concurrency"`
@@ -325,26 +331,56 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if req.PurchaseSubscriptionEnabled != nil {
 		purchaseEnabled = *req.PurchaseSubscriptionEnabled
 	}
-	purchaseURL := previousSettings.PurchaseSubscriptionURL
+	purchaseMode := service.NormalizePurchaseSubscriptionMode(previousSettings.PurchaseSubscriptionMode)
+	if req.PurchaseSubscriptionMode != nil {
+		purchaseMode = service.NormalizePurchaseSubscriptionMode(strings.TrimSpace(*req.PurchaseSubscriptionMode))
+	}
+	purchaseEmbeddedURL := previousSettings.PurchaseSubscriptionEmbeddedURL
+	if purchaseEmbeddedURL == "" {
+		purchaseEmbeddedURL = previousSettings.PurchaseSubscriptionURL
+	}
+	if req.PurchaseSubscriptionEmbeddedURL != nil {
+		purchaseEmbeddedURL = strings.TrimSpace(*req.PurchaseSubscriptionEmbeddedURL)
+	}
+	// Backward compatibility: legacy field maps to embedded URL.
 	if req.PurchaseSubscriptionURL != nil {
-		purchaseURL = strings.TrimSpace(*req.PurchaseSubscriptionURL)
+		purchaseEmbeddedURL = strings.TrimSpace(*req.PurchaseSubscriptionURL)
+	}
+	purchaseRedirectURL := previousSettings.PurchaseSubscriptionRedirectURL
+	if req.PurchaseSubscriptionRedirectURL != nil {
+		purchaseRedirectURL = strings.TrimSpace(*req.PurchaseSubscriptionRedirectURL)
 	}
 
-	// - 启用时要求 URL 合法且非空
-	// - 禁用时允许为空；若提供了 URL 也做基本校验，避免误配置
+	validateOptionalURL := func(rawURL string, fieldName string) bool {
+		if rawURL == "" {
+			return true
+		}
+		if err := config.ValidateAbsoluteHTTPURL(rawURL); err != nil {
+			response.BadRequest(c, fieldName+" must be an absolute http(s) URL")
+			return false
+		}
+		return true
+	}
+
+	if !validateOptionalURL(purchaseEmbeddedURL, "Purchase Subscription Embedded URL") {
+		return
+	}
+	if !validateOptionalURL(purchaseRedirectURL, "Purchase Subscription Redirect URL") {
+		return
+	}
+
 	if purchaseEnabled {
-		if purchaseURL == "" {
-			response.BadRequest(c, "Purchase Subscription URL is required when enabled")
-			return
-		}
-		if err := config.ValidateAbsoluteHTTPURL(purchaseURL); err != nil {
-			response.BadRequest(c, "Purchase Subscription URL must be an absolute http(s) URL")
-			return
-		}
-	} else if purchaseURL != "" {
-		if err := config.ValidateAbsoluteHTTPURL(purchaseURL); err != nil {
-			response.BadRequest(c, "Purchase Subscription URL must be an absolute http(s) URL")
-			return
+		switch purchaseMode {
+		case service.PurchaseSubscriptionModeRedirect:
+			if purchaseRedirectURL == "" {
+				response.BadRequest(c, "Purchase Subscription Redirect URL is required when redirect mode is enabled")
+				return
+			}
+		default:
+			if purchaseEmbeddedURL == "" {
+				response.BadRequest(c, "Purchase Subscription Embedded URL is required when embedded mode is enabled")
+				return
+			}
 		}
 	}
 
@@ -559,7 +595,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		HomeContent:                      req.HomeContent,
 		HideCcsImportButton:              req.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:      purchaseEnabled,
-		PurchaseSubscriptionURL:          purchaseURL,
+		PurchaseSubscriptionMode:         purchaseMode,
+		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
+		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		SoraClientEnabled:                req.SoraClientEnabled,
 		CustomMenuItems:                  customMenuJSON,
 		CustomEndpoints:                  customEndpointsJSON,
@@ -657,6 +696,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		HomeContent:                          updatedSettings.HomeContent,
 		HideCcsImportButton:                  updatedSettings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:          updatedSettings.PurchaseSubscriptionEnabled,
+		PurchaseSubscriptionMode:             updatedSettings.PurchaseSubscriptionMode,
+		PurchaseSubscriptionEmbeddedURL:      updatedSettings.PurchaseSubscriptionEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:      updatedSettings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:              updatedSettings.PurchaseSubscriptionURL,
 		SoraClientEnabled:                    updatedSettings.SoraClientEnabled,
 		CustomMenuItems:                      dto.ParseCustomMenuItems(updatedSettings.CustomMenuItems),
@@ -844,6 +886,15 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.PurchaseSubscriptionEnabled != after.PurchaseSubscriptionEnabled {
 		changed = append(changed, "purchase_subscription_enabled")
+	}
+	if before.PurchaseSubscriptionMode != after.PurchaseSubscriptionMode {
+		changed = append(changed, "purchase_subscription_mode")
+	}
+	if before.PurchaseSubscriptionEmbeddedURL != after.PurchaseSubscriptionEmbeddedURL {
+		changed = append(changed, "purchase_subscription_embedded_url")
+	}
+	if before.PurchaseSubscriptionRedirectURL != after.PurchaseSubscriptionRedirectURL {
+		changed = append(changed, "purchase_subscription_redirect_url")
 	}
 	if before.PurchaseSubscriptionURL != after.PurchaseSubscriptionURL {
 		changed = append(changed, "purchase_subscription_url")

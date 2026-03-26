@@ -62,3 +62,21 @@ func TestSettingService_GetPublicSettings_ExposesRegistrationEmailSuffixWhitelis
 	require.NoError(t, err)
 	require.Equal(t, []string{"@example.com", "@foo.bar"}, settings.RegistrationEmailSuffixWhitelist)
 }
+
+func TestSettingService_GetPublicSettings_PurchaseSubscriptionLegacyFallback(t *testing.T) {
+	repo := &settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyPurchaseSubscriptionEnabled: "true",
+			SettingKeyPurchaseSubscriptionURL:     "https://pay.example.com/legacy",
+		},
+	}
+	svc := NewSettingService(repo, &config.Config{})
+
+	settings, err := svc.GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.True(t, settings.PurchaseSubscriptionEnabled)
+	require.Equal(t, PurchaseSubscriptionModeEmbedded, settings.PurchaseSubscriptionMode)
+	require.Equal(t, "https://pay.example.com/legacy", settings.PurchaseSubscriptionEmbeddedURL)
+	require.Equal(t, "https://pay.example.com/legacy", settings.PurchaseSubscriptionURL)
+	require.Empty(t, settings.PurchaseSubscriptionRedirectURL)
+}

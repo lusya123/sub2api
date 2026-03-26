@@ -107,19 +107,22 @@ const (
 	SettingKeyLinuxDoConnectRedirectURL  = "linuxdo_connect_redirect_url"
 
 	// OEM设置
-	SettingKeySoraClientEnabled           = "sora_client_enabled"           // 是否启用 Sora 客户端（管理员手动控制）
-	SettingKeySiteName                    = "site_name"                     // 网站名称
-	SettingKeySiteLogo                    = "site_logo"                     // 网站Logo (base64)
-	SettingKeySiteSubtitle                = "site_subtitle"                 // 网站副标题
-	SettingKeyAPIBaseURL                  = "api_base_url"                  // API端点地址（用于客户端配置和导入）
-	SettingKeyContactInfo                 = "contact_info"                  // 客服联系方式
-	SettingKeyDocURL                      = "doc_url"                       // 文档链接
-	SettingKeyHomeContent                 = "home_content"                  // 首页内容（支持 Markdown/HTML，或 URL 作为 iframe src）
-	SettingKeyHideCcsImportButton         = "hide_ccs_import_button"        // 是否隐藏 API Keys 页面的导入 CCS 按钮
-	SettingKeyPurchaseSubscriptionEnabled = "purchase_subscription_enabled" // 是否展示"购买订阅"页面入口
-	SettingKeyPurchaseSubscriptionURL     = "purchase_subscription_url"     // "购买订阅"页面 URL（作为 iframe src）
-	SettingKeyCustomMenuItems             = "custom_menu_items"             // 自定义菜单项（JSON 数组）
-	SettingKeyCustomEndpoints             = "custom_endpoints"              // 自定义端点列表（JSON 数组）
+	SettingKeySoraClientEnabled               = "sora_client_enabled"                // 是否启用 Sora 客户端（管理员手动控制）
+	SettingKeySiteName                        = "site_name"                          // 网站名称
+	SettingKeySiteLogo                        = "site_logo"                          // 网站Logo (base64)
+	SettingKeySiteSubtitle                    = "site_subtitle"                      // 网站副标题
+	SettingKeyAPIBaseURL                      = "api_base_url"                       // API端点地址（用于客户端配置和导入）
+	SettingKeyContactInfo                     = "contact_info"                       // 客服联系方式
+	SettingKeyDocURL                          = "doc_url"                            // 文档链接
+	SettingKeyHomeContent                     = "home_content"                       // 首页内容（支持 Markdown/HTML，或 URL 作为 iframe src）
+	SettingKeyHideCcsImportButton             = "hide_ccs_import_button"             // 是否隐藏 API Keys 页面的导入 CCS 按钮
+	SettingKeyPurchaseSubscriptionEnabled     = "purchase_subscription_enabled"      // 是否展示"购买订阅"页面入口
+	SettingKeyPurchaseSubscriptionMode        = "purchase_subscription_mode"         // "购买订阅"页面打开方式：embedded | redirect
+	SettingKeyPurchaseSubscriptionURL         = "purchase_subscription_url"          // 兼容旧版本：等同于 embedded URL
+	SettingKeyPurchaseSubscriptionEmbeddedURL = "purchase_subscription_embedded_url" // "购买订阅"页面内嵌 URL（iframe src）
+	SettingKeyPurchaseSubscriptionRedirectURL = "purchase_subscription_redirect_url" // "购买订阅"页面跳转 URL（新窗口打开）
+	SettingKeyCustomMenuItems                 = "custom_menu_items"                  // 自定义菜单项（JSON 数组）
+	SettingKeyCustomEndpoints                 = "custom_endpoints"                   // 自定义端点列表（JSON 数组）
 
 	// 默认配置
 	SettingKeyDefaultConcurrency   = "default_concurrency"   // 新用户默认并发量

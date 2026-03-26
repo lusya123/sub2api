@@ -31,19 +31,22 @@ type SystemSettings struct {
 	LinuxDoConnectClientSecretConfigured bool
 	LinuxDoConnectRedirectURL            string
 
-	SiteName                    string
-	SiteLogo                    string
-	SiteSubtitle                string
-	APIBaseURL                  string
-	ContactInfo                 string
-	DocURL                      string
-	HomeContent                 string
-	HideCcsImportButton         bool
-	PurchaseSubscriptionEnabled bool
-	PurchaseSubscriptionURL     string
-	SoraClientEnabled           bool
-	CustomMenuItems             string // JSON array of custom menu items
-	CustomEndpoints             string // JSON array of custom endpoints
+	SiteName                        string
+	SiteLogo                        string
+	SiteSubtitle                    string
+	APIBaseURL                      string
+	ContactInfo                     string
+	DocURL                          string
+	HomeContent                     string
+	HideCcsImportButton             bool
+	PurchaseSubscriptionEnabled     bool
+	PurchaseSubscriptionMode        string
+	PurchaseSubscriptionEmbeddedURL string
+	PurchaseSubscriptionRedirectURL string
+	PurchaseSubscriptionURL         string
+	SoraClientEnabled               bool
+	CustomMenuItems                 string // JSON array of custom menu items
+	CustomEndpoints                 string // JSON array of custom endpoints
 
 	DefaultConcurrency   int
 	DefaultBalance       float64
@@ -101,15 +104,32 @@ type PublicSettings struct {
 	HomeContent                      string
 	HideCcsImportButton              bool
 
-	PurchaseSubscriptionEnabled bool
-	PurchaseSubscriptionURL     string
-	SoraClientEnabled           bool
-	CustomMenuItems             string // JSON array of custom menu items
-	CustomEndpoints             string // JSON array of custom endpoints
+	PurchaseSubscriptionEnabled     bool
+	PurchaseSubscriptionMode        string
+	PurchaseSubscriptionEmbeddedURL string
+	PurchaseSubscriptionRedirectURL string
+	PurchaseSubscriptionURL         string
+	SoraClientEnabled               bool
+	CustomMenuItems                 string // JSON array of custom menu items
+	CustomEndpoints                 string // JSON array of custom endpoints
 
 	LinuxDoOAuthEnabled bool
 	BackendModeEnabled  bool
 	Version             string
+}
+
+const (
+	PurchaseSubscriptionModeEmbedded = "embedded"
+	PurchaseSubscriptionModeRedirect = "redirect"
+)
+
+func NormalizePurchaseSubscriptionMode(raw string) string {
+	switch raw {
+	case PurchaseSubscriptionModeRedirect:
+		return PurchaseSubscriptionModeRedirect
+	default:
+		return PurchaseSubscriptionModeEmbedded
+	}
 }
 
 // SoraS3Settings Sora S3 存储配置

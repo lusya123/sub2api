@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
+    <div class="space-y-4 sm:space-y-6">
       <div v-if="loading" class="flex justify-center py-12">
         <div class="h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
       </div>
@@ -11,8 +11,8 @@
         :description="t('clientInstallPage.noKeysDescription')"
       />
 
-      <div v-else class="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <section class="card p-4">
+      <div v-else class="grid gap-4 lg:gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <section class="card p-4 sm:p-5">
           <div class="space-y-3">
             <div>
               <h2 class="text-base font-semibold text-gray-900 dark:text-white">
@@ -28,20 +28,21 @@
               :placeholder="t('clientInstallPage.searchPlaceholder')"
             />
 
-            <div class="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+            <div class="max-h-64 space-y-2 overflow-y-auto pr-1 sm:max-h-[70vh]">
               <button
                 v-for="keyItem in filteredKeys"
                 :key="keyItem.id"
                 type="button"
+                :aria-pressed="selectedKey?.id === keyItem.id"
                 :class="[
-                  'w-full rounded-xl border p-4 text-left transition-colors',
+                  'w-full rounded-xl border p-3 text-left transition-colors sm:p-4',
                   selectedKey?.id === keyItem.id
                     ? 'border-primary-500 bg-primary-50 dark:border-primary-500 dark:bg-primary-900/20'
                     : 'border-gray-200 hover:border-primary-300 dark:border-dark-600 dark:hover:border-primary-600'
                 ]"
                 @click="selectedKey = keyItem"
               >
-                <div class="flex items-start justify-between gap-3">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div class="min-w-0">
                     <p class="truncate text-sm font-medium text-gray-900 dark:text-white">
                       {{ keyItem.name }}
@@ -61,7 +62,7 @@
           </div>
         </section>
 
-        <section class="card p-5">
+        <section class="card min-w-0 p-4 sm:p-5">
           <div v-if="selectedKey" class="space-y-4">
             <div>
               <h2 class="text-base font-semibold text-gray-900 dark:text-white">
@@ -78,6 +79,11 @@
               :platform="selectedKey.group?.platform || null"
             />
           </div>
+          <EmptyState
+            v-else
+            :title="t('clientInstallPage.selectKeyTitle')"
+            :description="t('clientInstallPage.selectKeyDescription')"
+          />
         </section>
       </div>
     </div>
@@ -126,19 +132,26 @@ function maskKey(value: string): string {
 }
 
 function syncSelectedKey() {
+  const currentKeys = supportedKeys.value
   const raw = route.query.keyId
   const id = typeof raw === 'string' ? Number(raw) : Number(Array.isArray(raw) ? raw[0] : 0)
   if (Number.isFinite(id) && id > 0) {
-    const matched = supportedKeys.value.find((item) => item.id === id)
+    const matched = currentKeys.find((item) => item.id === id)
     if (matched) {
       selectedKey.value = matched
       return
     }
   }
 
-  if (!selectedKey.value && supportedKeys.value.length > 0) {
-    selectedKey.value = supportedKeys.value[0]
+  if (selectedKey.value) {
+    const matched = currentKeys.find((item) => item.id === selectedKey.value?.id)
+    if (matched) {
+      selectedKey.value = matched
+      return
+    }
   }
+
+  selectedKey.value = currentKeys[0] ?? null
 }
 
 async function loadData() {
@@ -156,7 +169,7 @@ async function loadData() {
   }
 }
 
-watch(() => route.query.keyId, () => {
+watch([() => route.query.keyId, supportedKeys], () => {
   syncSelectedKey()
 })
 

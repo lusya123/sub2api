@@ -1431,22 +1431,52 @@
               <Toggle v-model="form.purchase_subscription_enabled" />
             </div>
 
-            <!-- URL -->
+            <!-- Open Mode -->
             <div>
               <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {{ t('admin.settings.purchase.url') }}
+                {{ t('admin.settings.purchase.mode') }}
+              </label>
+              <select v-model="form.purchase_subscription_mode" class="input">
+                <option value="embedded">{{ t('admin.settings.purchase.modeEmbedded') }}</option>
+                <option value="redirect">{{ t('admin.settings.purchase.modeRedirect') }}</option>
+              </select>
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.purchase.modeHint') }}
+              </p>
+            </div>
+
+            <!-- Embedded URL -->
+            <div>
+              <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.purchase.embeddedUrl') }}
               </label>
               <input
-                v-model="form.purchase_subscription_url"
+                v-model="form.purchase_subscription_embedded_url"
                 type="url"
                 class="input font-mono text-sm"
-                :placeholder="t('admin.settings.purchase.urlPlaceholder')"
+                :placeholder="t('admin.settings.purchase.embeddedUrlPlaceholder')"
               />
               <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.settings.purchase.urlHint') }}
+                {{ t('admin.settings.purchase.embeddedUrlHint') }}
               </p>
               <p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
                 {{ t('admin.settings.purchase.iframeWarning') }}
+              </p>
+            </div>
+
+            <!-- Redirect URL -->
+            <div>
+              <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.purchase.redirectUrl') }}
+              </label>
+              <input
+                v-model="form.purchase_subscription_redirect_url"
+                type="url"
+                class="input font-mono text-sm"
+                :placeholder="t('admin.settings.purchase.redirectUrlPlaceholder')"
+              />
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.purchase.redirectUrlHint') }}
               </p>
             </div>
 
@@ -1891,7 +1921,7 @@ import type {
   UpdateSettingsRequest,
   DefaultSubscriptionSetting
 } from '@/api/admin/settings'
-import type { AdminGroup } from '@/types'
+import type { AdminGroup, PurchaseSubscriptionMode } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
@@ -2024,6 +2054,9 @@ const form = reactive<SettingsForm>({
   backend_mode_enabled: false,
   hide_ccs_import_button: false,
   purchase_subscription_enabled: false,
+  purchase_subscription_mode: 'embedded' as PurchaseSubscriptionMode,
+  purchase_subscription_embedded_url: '',
+  purchase_subscription_redirect_url: '',
   purchase_subscription_url: '',
   sora_client_enabled: false,
   custom_menu_items: [] as Array<{id: string; label: string; icon_svg: string; url: string; visibility: 'user' | 'admin'; sort_order: number}>,
@@ -2212,6 +2245,10 @@ async function loadSettings() {
   try {
     const settings = await adminAPI.settings.getSettings()
     Object.assign(form, settings)
+    form.purchase_subscription_mode = settings.purchase_subscription_mode || 'embedded'
+    form.purchase_subscription_embedded_url =
+      settings.purchase_subscription_embedded_url || settings.purchase_subscription_url || ''
+    form.purchase_subscription_redirect_url = settings.purchase_subscription_redirect_url || ''
     form.backend_mode_enabled = settings.backend_mode_enabled
     form.default_subscriptions = Array.isArray(settings.default_subscriptions)
       ? settings.default_subscriptions
@@ -2306,20 +2343,34 @@ async function saveSettings() {
     // Optional URL fields: auto-clear invalid values so they don't cause backend 400 errors
     if (!isValidHttpUrl(form.frontend_url)) form.frontend_url = ''
     if (!isValidHttpUrl(form.doc_url)) form.doc_url = ''
-    // Purchase URL: required when enabled; auto-clear when disabled to avoid backend rejection
+    // Purchase URLs: validate both fields; require the active mode's URL when enabled
+    if (!isValidHttpUrl(form.purchase_subscription_embedded_url)) {
+      form.purchase_subscription_embedded_url = ''
+    }
+    if (!isValidHttpUrl(form.purchase_subscription_redirect_url)) {
+      form.purchase_subscription_redirect_url = ''
+    }
     if (form.purchase_subscription_enabled) {
-      if (!form.purchase_subscription_url) {
-        appStore.showError(t('admin.settings.purchase.url') + ': URL is required when purchase is enabled')
+      if (
+        form.purchase_subscription_mode === 'embedded' &&
+        !form.purchase_subscription_embedded_url
+      ) {
+        appStore.showError(
+          `${t('admin.settings.purchase.embeddedUrl')}: ${t('admin.settings.purchase.modeRequiredHint')}`,
+        )
         saving.value = false
         return
       }
-      if (!isValidHttpUrl(form.purchase_subscription_url)) {
-        appStore.showError(t('admin.settings.purchase.url') + ': must be an absolute http(s) URL (e.g. https://example.com)')
+      if (
+        form.purchase_subscription_mode === 'redirect' &&
+        !form.purchase_subscription_redirect_url
+      ) {
+        appStore.showError(
+          `${t('admin.settings.purchase.redirectUrl')}: ${t('admin.settings.purchase.modeRequiredHint')}`,
+        )
         saving.value = false
         return
       }
-    } else if (!isValidHttpUrl(form.purchase_subscription_url)) {
-      form.purchase_subscription_url = ''
     }
 
     const payload: UpdateSettingsRequest = {
@@ -2345,7 +2396,10 @@ async function saveSettings() {
       backend_mode_enabled: form.backend_mode_enabled,
       hide_ccs_import_button: form.hide_ccs_import_button,
       purchase_subscription_enabled: form.purchase_subscription_enabled,
-      purchase_subscription_url: form.purchase_subscription_url,
+      purchase_subscription_mode: form.purchase_subscription_mode,
+      purchase_subscription_embedded_url: form.purchase_subscription_embedded_url,
+      purchase_subscription_redirect_url: form.purchase_subscription_redirect_url,
+      purchase_subscription_url: form.purchase_subscription_embedded_url,
       sora_client_enabled: form.sora_client_enabled,
       custom_menu_items: form.custom_menu_items,
       custom_endpoints: form.custom_endpoints,
@@ -2377,6 +2431,10 @@ async function saveSettings() {
     }
     const updated = await adminAPI.settings.updateSettings(payload)
     Object.assign(form, updated)
+    form.purchase_subscription_mode = updated.purchase_subscription_mode || 'embedded'
+    form.purchase_subscription_embedded_url =
+      updated.purchase_subscription_embedded_url || updated.purchase_subscription_url || ''
+    form.purchase_subscription_redirect_url = updated.purchase_subscription_redirect_url || ''
     registrationEmailSuffixWhitelistTags.value = normalizeRegistrationEmailSuffixDomains(
       updated.registration_email_suffix_whitelist
     )

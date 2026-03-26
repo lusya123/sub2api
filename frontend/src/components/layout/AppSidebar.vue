@@ -45,7 +45,7 @@
                     ? 'sidebar-wallet'
                     : undefined
             "
-            @click="handleMenuItemClick(item.path)"
+            @click="handleMenuItemClick($event, item.path)"
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
@@ -70,7 +70,7 @@
             :class="{ 'sidebar-link-active': isActive(item.path) }"
             :title="sidebarCollapsed ? item.label : undefined"
             :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
-            @click="handleMenuItemClick(item.path)"
+            @click="handleMenuItemClick($event, item.path)"
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
@@ -92,7 +92,7 @@
             :class="{ 'sidebar-link-active': isActive(item.path) }"
             :title="sidebarCollapsed ? item.label : undefined"
             :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
-            @click="handleMenuItemClick(item.path)"
+            @click="handleMenuItemClick($event, item.path)"
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
@@ -153,6 +153,11 @@ import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
+import {
+  getPurchaseRedirectUrl,
+  isAbsoluteHttpUrl,
+  normalizePurchaseSubscriptionMode,
+} from '@/utils/purchase'
 
 interface NavItem {
   path: string
@@ -174,6 +179,12 @@ const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
 const isAdmin = computed(() => authStore.isAdmin)
 const isDark = ref(document.documentElement.classList.contains('dark'))
+const purchaseMode = computed(() =>
+  normalizePurchaseSubscriptionMode(appStore.cachedPublicSettings?.purchase_subscription_mode),
+)
+const purchaseRedirectUrl = computed(() =>
+  getPurchaseRedirectUrl(appStore.cachedPublicSettings),
+)
 
 // Site settings from appStore (cached, no flicker)
 const siteName = computed(() => appStore.siteName)
@@ -613,7 +624,23 @@ function closeMobile() {
   appStore.setMobileOpen(false)
 }
 
-function handleMenuItemClick(itemPath: string) {
+function handleMenuItemClick(event: MouseEvent, itemPath: string) {
+  if (
+    itemPath === '/purchase' &&
+    purchaseMode.value === 'redirect' &&
+    isAbsoluteHttpUrl(purchaseRedirectUrl.value)
+  ) {
+    event.preventDefault()
+    const popup = window.open(purchaseRedirectUrl.value, '_blank', 'noopener,noreferrer')
+    if (!popup) {
+      window.location.href = purchaseRedirectUrl.value
+    }
+    if (mobileOpen.value) {
+      appStore.setMobileOpen(false)
+    }
+    return
+  }
+
   if (mobileOpen.value) {
     setTimeout(() => {
       appStore.setMobileOpen(false)
