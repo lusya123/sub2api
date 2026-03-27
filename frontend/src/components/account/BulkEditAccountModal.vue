@@ -687,7 +687,7 @@
                 v-model.number="bulkBaseRpm"
                 type="number"
                 min="1"
-                max="1000"
+                max="10000"
                 step="1"
                 class="input"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.baseRpmPlaceholder')"
