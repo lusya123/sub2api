@@ -62,13 +62,14 @@
             <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
               {{ t('purchase.redirectDesc') }}
             </p>
-            <button
-              type="button"
+            <a
+              :href="redirectUrl"
+              target="_blank"
+              rel="noopener noreferrer"
               class="btn btn-primary mt-5"
-              @click="openRedirectPage"
             >
               {{ t('purchase.openNow') }}
-            </button>
+            </a>
           </div>
         </div>
 
@@ -94,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
@@ -114,7 +115,6 @@ const authStore = useAuthStore()
 
 const loading = ref(false)
 const purchaseTheme = ref<'light' | 'dark'>('light')
-const hasAutoOpenedRedirect = ref(false)
 let themeObserver: MutationObserver | null = null
 
 const purchaseEnabled = computed(() => {
@@ -142,14 +142,6 @@ const isConfigured = computed(() => {
   return isAbsoluteHttpUrl(targetUrl)
 })
 
-function openRedirectPage() {
-  if (!isAbsoluteHttpUrl(redirectUrl.value)) return
-  const popup = window.open(redirectUrl.value, '_blank', 'noopener,noreferrer')
-  if (!popup) {
-    window.location.href = redirectUrl.value
-  }
-}
-
 onMounted(async () => {
   purchaseTheme.value = detectTheme()
 
@@ -171,18 +163,6 @@ onMounted(async () => {
     loading.value = false
   }
 })
-
-watch(
-  [purchaseMode, redirectUrl, purchaseEnabled],
-  ([mode, url, enabled]) => {
-    if (!enabled || mode !== 'redirect' || !isAbsoluteHttpUrl(url) || hasAutoOpenedRedirect.value) {
-      return
-    }
-    hasAutoOpenedRedirect.value = true
-    openRedirectPage()
-  },
-  { immediate: true },
-)
 
 onUnmounted(() => {
   if (themeObserver) {

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { ref } from 'vue'
-import PurchaseSubscriptionView from '../PurchaseSubscriptionView.vue'
+import AppSidebar from '../AppSidebar.vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import type { PublicSettings, User } from '@/types'
@@ -67,70 +68,74 @@ function createUser(overrides: Partial<User> = {}): User {
   }
 }
 
-describe('PurchaseSubscriptionView', () => {
+function createTestRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/dashboard', component: { template: '<div />' } },
+      { path: '/keys', component: { template: '<div />' } },
+      { path: '/client-install', component: { template: '<div />' } },
+      { path: '/usage', component: { template: '<div />' } },
+      { path: '/subscriptions', component: { template: '<div />' } },
+      { path: '/purchase', component: { template: '<div />' } },
+      { path: '/redeem', component: { template: '<div />' } },
+      { path: '/profile', component: { template: '<div />' } },
+    ],
+  })
+}
+
+describe('AppSidebar', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: false,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    )
   })
 
-  it('renders embedded purchase iframe in embedded mode', async () => {
+  it('renders purchase entry as an external link in redirect mode', async () => {
     const appStore = useAppStore()
     const authStore = useAuthStore()
-    appStore.publicSettingsLoaded = true
-    appStore.cachedPublicSettings = createPublicSettings({
-      purchase_subscription_mode: 'embedded',
-      purchase_subscription_embedded_url: 'https://pay.example.com/embed?plan=pro',
-    })
-    authStore.user = createUser()
-    authStore.token = 'token-123'
+    const router = createTestRouter()
 
-    const wrapper = mount(PurchaseSubscriptionView, {
-      global: {
-        stubs: {
-          AppLayout: { template: '<div><slot /></div>' },
-          Icon: true,
-        },
-      },
-    })
-
-    await flushPromises()
-
-    const iframe = wrapper.find('iframe')
-    expect(iframe.exists()).toBe(true)
-    const url = new URL(iframe.attributes('src'))
-    expect(url.searchParams.get('plan')).toBe('pro')
-    expect(url.searchParams.get('user_id')).toBe('7')
-    expect(url.searchParams.get('token')).toBe('token-123')
-    expect(url.searchParams.get('ui_mode')).toBe('embedded')
-  })
-
-  it('renders a manual new-tab link in redirect mode', async () => {
-    const appStore = useAppStore()
-    const authStore = useAuthStore()
     appStore.publicSettingsLoaded = true
     appStore.cachedPublicSettings = createPublicSettings({
       purchase_subscription_mode: 'redirect',
       purchase_subscription_redirect_url: 'https://pay.example.com/topup',
     })
     authStore.user = createUser()
-    authStore.token = 'token-123'
 
-    const wrapper = mount(PurchaseSubscriptionView, {
+    await router.push('/dashboard')
+    await router.isReady()
+
+    const wrapper = mount(AppSidebar, {
       global: {
+        plugins: [router],
         stubs: {
-          AppLayout: { template: '<div><slot /></div>' },
-          Icon: true,
+          VersionBadge: true,
         },
       },
     })
 
     await flushPromises()
 
-    expect(wrapper.find('iframe').exists()).toBe(false)
-    expect(wrapper.text()).toContain('purchase.redirectTitle')
-    const link = wrapper.get('a.btn.btn-primary')
-    expect(link.attributes('href')).toBe('https://pay.example.com/topup')
-    expect(link.attributes('target')).toBe('_blank')
-    expect(link.attributes('rel')).toBe('noopener noreferrer')
+    const purchaseLink = wrapper
+      .findAll('a')
+      .find((link) => link.attributes('href') === 'https://pay.example.com/topup')
+
+    expect(purchaseLink).toBeDefined()
+    expect(purchaseLink?.attributes('target')).toBe('_blank')
+    expect(purchaseLink?.attributes('rel')).toBe('noopener noreferrer')
+    expect(wrapper.findAll('a').some((link) => link.attributes('href') === '/purchase')).toBe(false)
   })
 })
