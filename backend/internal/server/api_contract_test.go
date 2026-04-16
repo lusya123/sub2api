@@ -215,6 +215,8 @@ func TestAPIContracts(t *testing.T) {
 						"fallback_group_id": null,
 						"fallback_group_id_on_invalid_request": null,
 						"allow_messages_dispatch": false,
+						"require_oauth_only": false,
+						"require_privacy_set": false,
 						"created_at": "2025-01-02T03:04:05Z",
 						"updated_at": "2025-01-02T03:04:05Z"
 					}
@@ -542,6 +544,8 @@ func TestAPIContracts(t *testing.T) {
 					"max_claude_code_version": "",
 					"allow_ungrouped_key_scheduling": false,
 					"backend_mode_enabled": false,
+					"enable_fingerprint_unification": true,
+					"enable_metadata_passthrough": false,
 					"custom_menu_items": [],
 					"custom_endpoints": []
 				}
