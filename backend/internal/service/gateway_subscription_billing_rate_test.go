@@ -24,7 +24,7 @@ func TestGatewayServiceRecordUsage_SubscriptionBillingUsesActualCost(t *testing.
 		nil, nil, usageRepo, nil, userRepo, subRepo, nil, nil,
 		cfg, nil, nil, NewBillingService(cfg, nil), nil,
 		&BillingCacheService{}, nil, nil, &DeferredService{},
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 
 	groupID := int64(100)
@@ -90,7 +90,7 @@ func TestGatewayServiceRecordUsage_BalanceBillingUsesActualCost(t *testing.T) {
 		nil, nil, usageRepo, nil, userRepo, subRepo, nil, nil,
 		cfg, nil, nil, NewBillingService(cfg, nil), nil,
 		&BillingCacheService{}, nil, nil, &DeferredService{},
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 
 	groupID := int64(100)
@@ -155,7 +155,7 @@ func TestGatewayServiceRecordUsage_SubscriptionAndBalanceUseSameCostLogic(t *tes
 		&openAIRecordUsageUserRepoStub{}, subRepo1, nil, nil,
 		cfg, nil, nil, NewBillingService(cfg, nil), nil,
 		&BillingCacheService{}, nil, nil, &DeferredService{},
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 
 	err := svc1.RecordUsage(context.Background(), &RecordUsageInput{
@@ -179,7 +179,7 @@ func TestGatewayServiceRecordUsage_SubscriptionAndBalanceUseSameCostLogic(t *tes
 		userRepo2, &gatewayRecordUsageSubRepoStub{}, nil, nil,
 		cfg, nil, nil, NewBillingService(cfg, nil), nil,
 		&BillingCacheService{}, nil, nil, &DeferredService{},
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 
 	err = svc2.RecordUsage(context.Background(), &RecordUsageInput{
@@ -212,7 +212,7 @@ func TestGatewayServiceRecordUsage_UsesHiddenActualRateMultiplier(t *testing.T) 
 		nil, nil, usageRepo, nil, userRepo, &gatewayRecordUsageSubRepoStub{}, nil, nil,
 		cfg, nil, nil, NewBillingService(cfg, nil), nil,
 		&BillingCacheService{}, nil, nil, &DeferredService{},
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 	)
 
 	groupID := int64(100)
