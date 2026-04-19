@@ -1,5 +1,8 @@
 docs/claude-relay-service/
 
+# Git worktrees (isolated feature workspaces)
+.worktrees/
+
 # ===================
 # Go 后端
 # ===================
@@ -133,3 +136,4 @@ frontend/coverage/
 aicodex
 output/
 
+.gstack/
