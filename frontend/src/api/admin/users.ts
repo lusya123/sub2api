@@ -19,7 +19,7 @@ export async function list(
   pageSize: number = 20,
   filters?: {
     status?: 'active' | 'disabled'
-    role?: 'admin' | 'user'
+    role?: 'admin' | 'operator' | 'user'
     search?: string
     group_name?: string         // fuzzy filter by allowed group name
     attributes?: Record<number, string>  // attributeId -> value
@@ -89,6 +89,14 @@ export async function create(userData: {
  */
 export async function update(id: number, updates: UpdateUserRequest): Promise<AdminUser> {
   const { data } = await apiClient.put<AdminUser>(`/admin/users/${id}`, updates)
+  return data
+}
+
+/**
+ * Delegate or revoke operator role. Super administrator only.
+ */
+export async function updateRole(id: number, role: 'operator' | 'user'): Promise<AdminUser> {
+  const { data } = await apiClient.put<AdminUser>(`/admin/users/${id}/role`, { role })
   return data
 }
 
@@ -249,6 +257,7 @@ export const usersAPI = {
   getById,
   create,
   update,
+  updateRole,
   delete: deleteUser,
   updateBalance,
   updateConcurrency,

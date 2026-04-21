@@ -4,6 +4,7 @@ package routes
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,9 +14,12 @@ func RegisterAdminRoutes(
 	v1 *gin.RouterGroup,
 	h *handler.Handlers,
 	adminAuth middleware.AdminAuthMiddleware,
+	auditService *service.AdminAuditService,
 ) {
 	admin := v1.Group("/admin")
+	admin.Use(middleware.AdminAuditMiddleware(auditService))
 	admin.Use(gin.HandlerFunc(adminAuth))
+	admin.Use(middleware.AdminPermissionGuard())
 	{
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
@@ -87,6 +91,30 @@ func RegisterAdminRoutes(
 
 		// 定时测试计划
 		registerScheduledTestRoutes(admin, h)
+
+		// 管理员操作审计
+		registerAuditRoutes(admin, h)
+
+		// 外部退款核算只读接口
+		registerRefundInspectionRoutes(admin, h)
+	}
+}
+
+func registerRefundInspectionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	inspection := admin.Group("/refund-inspection")
+	{
+		inspection.GET("/redeem-codes/:code", h.Admin.RefundInspection.GetRedeemCode)
+		inspection.GET("/users/:id", h.Admin.RefundInspection.GetUser)
+		inspection.POST("/quote", h.Admin.RefundInspection.Quote)
+	}
+}
+
+func registerAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	audits := admin.Group("/audit-logs")
+	audits.Use(middleware.SuperAdminOnly())
+	{
+		audits.GET("", h.Admin.Audit.List)
+		audits.GET("/:id", h.Admin.Audit.GetByID)
 	}
 }
 
@@ -213,6 +241,7 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		users.GET("/:id", h.Admin.User.GetByID)
 		users.POST("", h.Admin.User.Create)
 		users.PUT("/:id", h.Admin.User.Update)
+		users.PUT("/:id/role", middleware.SuperAdminOnly(), h.Admin.User.UpdateRole)
 		users.DELETE("/:id", h.Admin.User.Delete)
 		users.POST("/:id/balance", h.Admin.User.UpdateBalance)
 		users.GET("/:id/api-keys", h.Admin.User.GetUserAPIKeys)

@@ -26,3 +26,12 @@ func GetUserRoleFromContext(c *gin.Context) (string, bool) {
 	role, ok := value.(string)
 	return role, ok
 }
+
+func GetUserEmailFromContext(c *gin.Context) (string, bool) {
+	value, exists := c.Get(string(ContextKeyUserEmail))
+	if !exists {
+		return "", false
+	}
+	email, ok := value.(string)
+	return email, ok
+}

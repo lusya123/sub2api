@@ -461,5 +461,9 @@ func (s *stubAdminService) ReplaceUserGroup(ctx context.Context, userID, oldGrou
 	return &service.ReplaceUserGroupResult{MigratedKeys: 0}, nil
 }
 
+func (s *stubAdminService) UpdateUserRole(ctx context.Context, id int64, role string) (*service.User, error) {
+	return &service.User{ID: id, Role: role}, nil
+}
+
 // Ensure stub implements interface.
 var _ service.AdminService = (*stubAdminService)(nil)

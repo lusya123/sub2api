@@ -43,6 +43,14 @@ const fakeAdminUser = {
   role: 'admin' as const,
 }
 
+const fakeOperatorUser = {
+  ...fakeUser,
+  id: 3,
+  username: 'operator',
+  email: 'operator@example.com',
+  role: 'operator' as const,
+}
+
 const fakeAuthResponse = {
   access_token: 'test-token-123',
   refresh_token: 'refresh-token-456',
@@ -238,6 +246,29 @@ describe('useAuthStore', () => {
     it('未登录时返回 false', () => {
       const store = useAuthStore()
       expect(store.isAdmin).toBe(false)
+    })
+  })
+
+  describe('operator role helpers', () => {
+    it('普通管理员可进入后台但不是超级管理员', async () => {
+      mockLogin.mockResolvedValue({ ...fakeAuthResponse, user: { ...fakeOperatorUser } })
+      const store = useAuthStore()
+
+      await store.login({ email: 'operator@example.com', password: '123456' })
+
+      expect(store.isAdmin).toBe(false)
+      expect(store.isOperator).toBe(true)
+      expect(store.canAccessAdmin).toBe(true)
+    })
+
+    it('普通用户不能进入后台', async () => {
+      mockLogin.mockResolvedValue(fakeAuthResponse)
+      const store = useAuthStore()
+
+      await store.login({ email: 'test@example.com', password: '123456' })
+
+      expect(store.isOperator).toBe(false)
+      expect(store.canAccessAdmin).toBe(false)
     })
   })
 

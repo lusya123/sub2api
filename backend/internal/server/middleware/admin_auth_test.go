@@ -82,6 +82,26 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 	})
 
+	t.Run("operator_token_version_match_allows", func(t *testing.T) {
+		admin.Role = service.RoleOperator
+		defer func() { admin.Role = service.RoleAdmin }()
+
+		token, err := authService.GenerateToken(&service.User{
+			ID:           admin.ID,
+			Email:        admin.Email,
+			Role:         service.RoleOperator,
+			TokenVersion: admin.TokenVersion,
+		})
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/t", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
 	t.Run("websocket_token_version_mismatch_rejected", func(t *testing.T) {
 		token, err := authService.GenerateToken(&service.User{
 			ID:           admin.ID,

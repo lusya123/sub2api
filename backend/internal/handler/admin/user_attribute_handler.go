@@ -14,11 +14,12 @@ import (
 // UserAttributeHandler handles user attribute management
 type UserAttributeHandler struct {
 	attrService *service.UserAttributeService
+	adminSvc    service.AdminService
 }
 
 // NewUserAttributeHandler creates a new handler
-func NewUserAttributeHandler(attrService *service.UserAttributeService) *UserAttributeHandler {
-	return &UserAttributeHandler{attrService: attrService}
+func NewUserAttributeHandler(attrService *service.UserAttributeService, adminSvc service.AdminService) *UserAttributeHandler {
+	return &UserAttributeHandler{attrService: attrService, adminSvc: adminSvc}
 }
 
 // --- Request/Response DTOs ---
@@ -158,7 +159,6 @@ func (h *UserAttributeHandler) CreateDefinition(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-
 	def, err := h.attrService.CreateDefinition(c.Request.Context(), service.CreateAttributeDefinitionInput{
 		Key:         req.Key,
 		Name:        req.Name,
@@ -291,6 +291,10 @@ func (h *UserAttributeHandler) UpdateUserAttributes(c *gin.Context) {
 	var req UpdateUserAttributesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminSvc, userID); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 

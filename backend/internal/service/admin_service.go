@@ -25,6 +25,7 @@ type AdminService interface {
 	GetUser(ctx context.Context, id int64) (*User, error)
 	CreateUser(ctx context.Context, input *CreateUserInput) (*User, error)
 	UpdateUser(ctx context.Context, id int64, input *UpdateUserInput) (*User, error)
+	UpdateUserRole(ctx context.Context, id int64, role string) (*User, error)
 	DeleteUser(ctx context.Context, id int64) error
 	UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string) (*User, error)
 	GetUserAPIKeys(ctx context.Context, userID int64, page, pageSize int) ([]APIKey, int64, error)
@@ -700,6 +701,31 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		}
 	}
 
+	return user, nil
+}
+
+func (s *adminServiceImpl) UpdateUserRole(ctx context.Context, id int64, role string) (*User, error) {
+	if role != RoleOperator && role != RoleUser {
+		return nil, infraerrors.BadRequest("INVALID_ROLE", "role must be operator or user")
+	}
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user.Role == RoleAdmin {
+		return nil, infraerrors.Forbidden("CANNOT_CHANGE_SUPER_ADMIN_ROLE", "cannot change super admin role")
+	}
+	oldRole := user.Role
+	if oldRole == role {
+		return user, nil
+	}
+	user.Role = role
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
+	}
 	return user, nil
 }
 

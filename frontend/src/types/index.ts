@@ -28,7 +28,7 @@ export interface User {
   id: number
   username: string
   email: string
-  role: 'admin' | 'user' // User role for authorization
+  role: 'admin' | 'operator' | 'user' // User role for authorization
   balance: number // User balance for API usage
   concurrency: number // Allowed concurrent requests
   status: 'active' | 'disabled' // Account status
@@ -1294,7 +1294,7 @@ export interface UpdateUserRequest {
   password?: string
   username?: string
   notes?: string
-  role?: 'admin' | 'user'
+  role?: 'admin' | 'operator' | 'user'
   balance?: number
   concurrency?: number
   status?: 'active' | 'disabled'

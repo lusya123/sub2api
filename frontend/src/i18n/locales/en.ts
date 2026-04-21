@@ -342,6 +342,7 @@ export default {
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
     promoCodes: 'Promo Codes',
+    auditLogs: 'Audit Logs',
     settings: 'Settings',
     myAccount: 'My Account',
     lightMode: 'Light Mode',
@@ -1354,7 +1355,13 @@ export default {
       searchGroups: 'Search groups...',
       fuzzySearch: 'Fuzzy search',
       admin: 'Admin',
+      operator: 'Operator',
       user: 'User',
+      delegateOperator: 'Delegate Operator',
+      revokeOperator: 'Revoke Operator',
+      operatorDelegated: 'User delegated as operator',
+      operatorRevoked: 'Operator role revoked',
+      failedToUpdateRole: 'Failed to update user role',
       disabled: 'Disabled',
       email: 'Email',
       password: 'Password',
@@ -1493,6 +1500,7 @@ export default {
       totalRecharged: 'Total Recharged',
       roles: {
         admin: 'Admin',
+        operator: 'Operator',
         user: 'User'
       },
       // Settings Dropdowns
@@ -1557,6 +1565,155 @@ export default {
         failedToReorder: 'Failed to update order',
         keyExists: 'Attribute key already exists',
         dragToReorder: 'Drag to reorder'
+      }
+    },
+
+    auditLogs: {
+      title: 'Audit Logs',
+      description: 'Review admin operations, request context, and execution results',
+      searchPlaceholder: 'Search summary, route, target, or error',
+      actorId: 'Actor ID',
+      targetType: 'Target Type',
+      targetId: 'Target ID',
+      statusCode: 'HTTP Status',
+      allRoles: 'All Roles',
+      allModules: 'All Modules',
+      allActionTypes: 'All Action Types',
+      allResults: 'All Results',
+      success: 'Success',
+      failed: 'Failed',
+      showReadLogs: 'Show read logs',
+      empty: 'No audit logs',
+      failedToLoad: 'Failed to load audit logs',
+      viewDetail: 'Details',
+      detailTitle: 'Audit Detail',
+      humanSummary: 'Plain-English Summary',
+      context: 'Redacted Context',
+      route: 'Route',
+      result: 'Result',
+      duration: 'Duration',
+      ip: 'IP',
+      columns: {
+        time: 'Time',
+        actor: 'Actor',
+        role: 'Role',
+        module: 'Module',
+        action: 'Action',
+        target: 'Target',
+        operation: 'Operation Details',
+        result: 'Result',
+        duration: 'Duration',
+        ip: 'IP',
+        actions: 'Actions'
+      },
+      actionTypes: {
+        read: 'Read',
+        write: 'Write',
+        delete: 'Delete'
+      },
+      modules: {
+        dashboard: 'Dashboard',
+        ops: 'Ops',
+        users: 'Users',
+        subscriptions: 'Subscriptions',
+        usage: 'Usage',
+        settings: 'Settings',
+        'audit-logs': 'Audit Logs'
+      },
+      targetTypes: {
+        user: 'User',
+        subscription: 'Subscription',
+        usage: 'Usage',
+        group: 'Group',
+        admin: 'Admin'
+      },
+      fields: {
+        user: 'User',
+        users: 'Users',
+        subscription: 'Subscription',
+        task: 'Task',
+        email: 'Email',
+        username: 'Username',
+        password: 'Password',
+        status: 'Status',
+        role: 'Role',
+        initialBalance: 'Initial balance',
+        balance: 'Balance',
+        amount: 'Amount',
+        balanceOperation: 'Balance operation',
+        concurrency: 'Concurrency limit',
+        allowedGroups: 'Allowed groups',
+        groupRates: 'Custom group rates',
+        oldGroup: 'Old group',
+        newGroup: 'New group',
+        group: 'Subscription group',
+        validityDays: 'Validity',
+        daysChanged: 'Days changed',
+        resetWindows: 'Reset scope',
+        daily: 'Daily quota',
+        weekly: 'Weekly quota',
+        monthly: 'Monthly quota',
+        attributes: 'User attributes',
+        notes: 'Notes',
+        route: 'Route',
+        method: 'Method',
+        query: 'Filters',
+        rawSummary: 'Raw summary',
+        dateRange: 'Date range',
+        apiKey: 'API Key',
+        account: 'Account',
+        model: 'Model',
+        requestType: 'Request type',
+        stream: 'Streaming',
+        billingType: 'Billing type',
+        timezone: 'Timezone',
+        soraStorageQuota: 'Sora storage quota'
+      },
+      values: {
+        changed: 'Changed',
+        removed: 'Removed',
+        none: 'None',
+        yes: 'Yes',
+        no: 'No',
+        days: '{count} days',
+        balanceOperations: {
+          add: 'Top up / add balance',
+          subtract: 'Deduct / reduce balance',
+          set: 'Set balance directly'
+        },
+        status: {
+          active: 'Active',
+          disabled: 'Disabled'
+        }
+      },
+      operations: {
+        read: 'Viewed {module}',
+        fallback: '{method} {route}',
+        users: {
+          create: 'Created user {user}',
+          update: 'Edited user {user}',
+          delete: 'Deleted user {user}',
+          delegateOperator: 'Delegated {user} as operator',
+          revokeOperator: 'Revoked operator access from {user}',
+          balanceAdd: 'Added {amount} to {user}',
+          balanceSubtract: 'Deducted {amount} from {user}',
+          balanceSet: 'Set {user} balance to {amount}',
+          balanceChange: 'Changed {user} balance by {amount}',
+          replaceGroup: 'Moved {user} from group {oldGroup} to group {newGroup}',
+          updateAttributes: 'Updated user attributes for {user}'
+        },
+        subscriptions: {
+          assign: 'Assigned subscription group {group} to {user} for {days}',
+          bulkAssign: 'Bulk assigned subscription group {group} to {count} users for {days}',
+          extend: 'Added {days} to {subscription}',
+          shorten: 'Removed {days} from {subscription}',
+          resetQuota: 'Reset usage quota for {subscription}',
+          revoke: 'Revoked {subscription}'
+        },
+        usage: {
+          createCleanup: 'Created usage cleanup task',
+          cancelCleanup: 'Canceled usage cleanup task {task}'
+        }
       }
     },
 

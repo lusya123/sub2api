@@ -61,6 +61,10 @@ type UpdateUserRequest struct {
 	SoraStorageQuotaBytes *int64             `json:"sora_storage_quota_bytes"`
 }
 
+type UpdateUserRoleRequest struct {
+	Role string `json:"role" binding:"required,oneof=operator user"`
+}
+
 // UpdateBalanceRequest represents balance update request
 type UpdateBalanceRequest struct {
 	Balance   float64 `json:"balance" binding:"required,gt=0"`
@@ -213,6 +217,10 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminService, userID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	// 使用指针类型直接传递，nil 表示未提供该字段
 	user, err := h.adminService.UpdateUser(c.Request.Context(), userID, &service.UpdateUserInput{
@@ -235,12 +243,37 @@ func (h *UserHandler) Update(c *gin.Context) {
 	response.Success(c, dto.UserFromServiceAdmin(user))
 }
 
+// UpdateRole delegates or revokes operator access. Super admin only by route middleware.
+// PUT /api/v1/admin/users/:id/role
+func (h *UserHandler) UpdateRole(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	var req UpdateUserRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	user, err := h.adminService.UpdateUserRole(c.Request.Context(), userID, req.Role)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.UserFromServiceAdmin(user))
+}
+
 // Delete handles deleting a user
 // DELETE /api/v1/admin/users/:id
 func (h *UserHandler) Delete(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminService, userID); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -265,6 +298,10 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 	var req UpdateBalanceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminService, userID); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -292,6 +329,10 @@ func (h *UserHandler) GetUserAPIKeys(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminService, userID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	page, pageSize := response.ParsePagination(c)
 
@@ -316,6 +357,10 @@ func (h *UserHandler) GetUserUsage(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminService, userID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	period := c.DefaultQuery("period", "month")
 
@@ -336,6 +381,10 @@ func (h *UserHandler) GetBalanceHistory(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminService, userID); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -387,6 +436,10 @@ func (h *UserHandler) ReplaceGroup(c *gin.Context) {
 	var req ReplaceGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := ensureOperatorCanManageUser(c.Request.Context(), c, h.adminService, userID); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 

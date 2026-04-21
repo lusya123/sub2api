@@ -342,6 +342,7 @@ export default {
     redeemCodes: '兑换码',
     ops: '运维监控',
     promoCodes: '优惠码',
+    auditLogs: '操作审计',
     settings: '系统设置',
     myAccount: '我的账户',
     lightMode: '浅色模式',
@@ -1381,7 +1382,13 @@ export default {
       statusFilter: '状态筛选',
       allStatuses: '全部状态',
       admin: '管理员',
+      operator: '普通管理员',
       user: '用户',
+      delegateOperator: '委派为管理员',
+      revokeOperator: '撤回管理员',
+      operatorDelegated: '已委派为普通管理员',
+      operatorRevoked: '已撤回为普通用户',
+      failedToUpdateRole: '更新用户角色失败',
       disabled: '禁用',
       email: '邮箱',
       password: '密码',
@@ -1451,6 +1458,7 @@ export default {
       deleteConfirm: "确定要删除用户 '{email}' 吗？此操作无法撤销。",
       roles: {
         admin: '管理员',
+        operator: '普通管理员',
         user: '用户'
       },
       form: {
@@ -1613,6 +1621,155 @@ export default {
         failedToReorder: '更新排序失败',
         keyExists: '属性键已存在',
         dragToReorder: '拖拽排序'
+      }
+    },
+
+    auditLogs: {
+      title: '操作审计',
+      description: '查看后台管理员操作记录、请求上下文和执行结果',
+      searchPlaceholder: '搜索摘要、路由、目标或错误信息',
+      actorId: '管理员 ID',
+      targetType: '目标类型',
+      targetId: '目标 ID',
+      statusCode: 'HTTP 状态',
+      allRoles: '全部角色',
+      allModules: '全部分类',
+      allActionTypes: '全部动作类型',
+      allResults: '全部结果',
+      success: '成功',
+      failed: '失败',
+      showReadLogs: '显示读取记录',
+      empty: '暂无审计记录',
+      failedToLoad: '加载审计日志失败',
+      viewDetail: '详情',
+      detailTitle: '审计详情',
+      humanSummary: '人话说明',
+      context: '脱敏上下文',
+      route: '路由',
+      result: '结果',
+      duration: '耗时',
+      ip: 'IP',
+      columns: {
+        time: '时间',
+        actor: '管理员',
+        role: '角色',
+        module: '分类',
+        action: '动作',
+        target: '目标',
+        operation: '操作内容',
+        result: '结果',
+        duration: '耗时',
+        ip: 'IP',
+        actions: '操作'
+      },
+      actionTypes: {
+        read: '读取',
+        write: '写入',
+        delete: '删除'
+      },
+      modules: {
+        dashboard: '仪表盘',
+        ops: '运维监控',
+        users: '用户管理',
+        subscriptions: '订阅管理',
+        usage: '使用记录',
+        settings: '系统设置',
+        'audit-logs': '操作审计'
+      },
+      targetTypes: {
+        user: '用户',
+        subscription: '订阅',
+        usage: '使用记录',
+        group: '分组',
+        admin: '后台'
+      },
+      fields: {
+        user: '用户',
+        users: '用户列表',
+        subscription: '订阅',
+        task: '任务',
+        email: '邮箱',
+        username: '用户名',
+        password: '密码',
+        status: '状态',
+        role: '角色',
+        initialBalance: '初始余额',
+        balance: '余额',
+        amount: '金额',
+        balanceOperation: '余额操作',
+        concurrency: '并发上限',
+        allowedGroups: '可用分组',
+        groupRates: '专属分组倍率',
+        oldGroup: '原分组',
+        newGroup: '新分组',
+        group: '订阅分组',
+        validityDays: '有效期',
+        daysChanged: '天数变化',
+        resetWindows: '重置范围',
+        daily: '日配额',
+        weekly: '周配额',
+        monthly: '月配额',
+        attributes: '用户属性',
+        notes: '备注',
+        route: '路由',
+        method: '请求方法',
+        query: '筛选条件',
+        rawSummary: '原始摘要',
+        dateRange: '时间范围',
+        apiKey: 'API Key',
+        account: '账号',
+        model: '模型',
+        requestType: '请求类型',
+        stream: '流式请求',
+        billingType: '计费类型',
+        timezone: '时区',
+        soraStorageQuota: 'Sora 存储额度'
+      },
+      values: {
+        changed: '已修改',
+        removed: '移除',
+        none: '无',
+        yes: '是',
+        no: '否',
+        days: '{count} 天',
+        balanceOperations: {
+          add: '充值/增加余额',
+          subtract: '扣款/减少余额',
+          set: '直接设置余额'
+        },
+        status: {
+          active: '启用',
+          disabled: '禁用'
+        }
+      },
+      operations: {
+        read: '查看{module}',
+        fallback: '{method} {route}',
+        users: {
+          create: '创建用户 {user}',
+          update: '编辑用户 {user}',
+          delete: '删除用户 {user}',
+          delegateOperator: '把 {user} 委派为普通管理员',
+          revokeOperator: '撤销 {user} 的普通管理员权限',
+          balanceAdd: '给 {user} 充值 {amount}',
+          balanceSubtract: '从 {user} 扣款 {amount}',
+          balanceSet: '把 {user} 的余额设为 {amount}',
+          balanceChange: '调整 {user} 的余额 {amount}',
+          replaceGroup: '把 {user} 从分组 {oldGroup} 换到分组 {newGroup}',
+          updateAttributes: '修改 {user} 的用户属性'
+        },
+        subscriptions: {
+          assign: '给 {user} 分配订阅分组 {group}，有效期 {days}',
+          bulkAssign: '给 {count} 个用户批量分配订阅分组 {group}，有效期 {days}',
+          extend: '给 {subscription} 增加 {days}',
+          shorten: '给 {subscription} 减少 {days}',
+          resetQuota: '重置 {subscription} 的用量配额',
+          revoke: '撤销 {subscription}'
+        },
+        usage: {
+          createCleanup: '创建使用记录清理任务',
+          cancelCleanup: '取消使用记录清理任务 {task}'
+        }
       }
     },
 

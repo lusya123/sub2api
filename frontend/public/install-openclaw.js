@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-'use strict';
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const cp = require('node:child_process');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import cp from 'node:child_process';
 
 const REQUIRED_NODE_VERSION = '22.16.0';
 

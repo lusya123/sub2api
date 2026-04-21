@@ -26,7 +26,7 @@
     <!-- Navigation -->
     <nav class="sidebar-nav scrollbar-hide">
       <!-- Admin View: Admin menu first, then personal menu -->
-      <template v-if="isAdmin">
+      <template v-if="canAccessAdmin">
         <!-- Admin Section -->
         <div class="sidebar-section">
           <template v-for="item in adminNavItems" :key="item.path">
@@ -237,6 +237,7 @@ const adminSettingsStore = useAdminSettingsStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
 const isAdmin = computed(() => authStore.isAdmin)
+const canAccessAdmin = computed(() => authStore.canAccessAdmin)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const purchaseMode = computed(() =>
   normalizePurchaseSubscriptionMode(appStore.cachedPublicSettings?.purchase_subscription_mode),
@@ -626,6 +627,7 @@ const customMenuItemsForUser = computed(() => {
 })
 
 const customMenuItemsForAdmin = computed(() => {
+  if (!isAdmin.value) return []
   return adminSettingsStore.customMenuItems
     .filter((item) => item.visibility === 'admin')
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -646,8 +648,15 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },
     { path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon, hideInSimpleMode: true },
+    { path: '/admin/audit-logs', label: t('nav.auditLogs'), icon: BellIcon },
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
   ]
+
+  if (!isAdmin.value) {
+    return baseItems.filter(item =>
+      ['/admin/dashboard', '/admin/ops', '/admin/users', '/admin/subscriptions', '/admin/usage'].includes(item.path)
+    )
+  }
 
   // 简单模式下，在系统设置前插入 API密钥
   if (authStore.isSimpleMode) {

@@ -29,12 +29,14 @@ func toResponsePagination(p *pagination.PaginationResult) *response.PaginationRe
 // SubscriptionHandler handles admin subscription management
 type SubscriptionHandler struct {
 	subscriptionService *service.SubscriptionService
+	userService         *service.UserService
 }
 
 // NewSubscriptionHandler creates a new admin subscription handler
-func NewSubscriptionHandler(subscriptionService *service.SubscriptionService) *SubscriptionHandler {
+func NewSubscriptionHandler(subscriptionService *service.SubscriptionService, userService *service.UserService) *SubscriptionHandler {
 	return &SubscriptionHandler{
 		subscriptionService: subscriptionService,
+		userService:         userService,
 	}
 }
 
@@ -140,6 +142,10 @@ func (h *SubscriptionHandler) Assign(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if err := ensureOperatorCanManageUserWithService(c.Request.Context(), c, h.userService, req.UserID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	// Get admin user ID from context
 	adminID := getAdminIDFromContext(c)
@@ -166,6 +172,14 @@ func (h *SubscriptionHandler) BulkAssign(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
+	}
+	if isOperatorRequest(c) {
+		for _, userID := range req.UserIDs {
+			if err := ensureOperatorCanManageUserWithService(c.Request.Context(), c, h.userService, userID); err != nil {
+				response.ErrorFrom(c, err)
+				return
+			}
+		}
 	}
 
 	// Get admin user ID from context
@@ -198,6 +212,10 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
 	var req AdjustSubscriptionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.ensureOperatorCanManageSubscription(c, subscriptionID); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -241,6 +259,10 @@ func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
 		response.BadRequest(c, "At least one of 'daily', 'weekly', or 'monthly' must be true")
 		return
 	}
+	if err := h.ensureOperatorCanManageSubscription(c, subscriptionID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	sub, err := h.subscriptionService.AdminResetQuota(c.Request.Context(), subscriptionID, req.Daily, req.Weekly, req.Monthly)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -255,6 +277,10 @@ func (h *SubscriptionHandler) Revoke(c *gin.Context) {
 	subscriptionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid subscription ID")
+		return
+	}
+	if err := h.ensureOperatorCanManageSubscription(c, subscriptionID); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 
@@ -320,4 +346,15 @@ func getAdminIDFromContext(c *gin.Context) int64 {
 		return 0
 	}
 	return subject.UserID
+}
+
+func (h *SubscriptionHandler) ensureOperatorCanManageSubscription(c *gin.Context, subscriptionID int64) error {
+	if !isOperatorRequest(c) {
+		return nil
+	}
+	sub, err := h.subscriptionService.GetByID(c.Request.Context(), subscriptionID)
+	if err != nil {
+		return err
+	}
+	return ensureOperatorCanManageUserWithService(c.Request.Context(), c, h.userService, sub.UserID)
 }

@@ -150,7 +150,7 @@
           {{ t('common.reset') }}
         </button>
         <slot name="after-reset" />
-        <button type="button" @click="$emit('cleanup')" class="btn btn-danger">
+        <button v-if="showCleanup" type="button" @click="$emit('cleanup')" class="btn btn-danger">
           {{ t('admin.usage.cleanup.button') }}
         </button>
         <button type="button" @click="$emit('export')" :disabled="exporting" class="btn btn-primary">
@@ -176,10 +176,12 @@ interface Props {
   startDate: string
   endDate: string
   showActions?: boolean
+  showCleanup?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showActions: true
+  showActions: true,
+  showCleanup: true
 })
 const emit = defineEmits([
   'update:modelValue',
