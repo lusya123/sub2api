@@ -190,8 +190,7 @@ func TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow(t *testing.T) {
 		progress := buildCodexUsageProgressFromExtra(extra, "7d", now)
 		if progress == nil {
 			t.Fatal("expected non-nil progress")
-		}
-		if progress.Utilization != 0 {
+		} else if progress.Utilization != 0 {
 			t.Fatalf("expected Utilization=0 for expired 7d window, got %v", progress.Utilization)
 		}
 	})

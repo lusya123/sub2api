@@ -467,14 +467,11 @@ func TestExtractGeminiUsage(t *testing.T) {
 			}
 			if got == nil {
 				t.Fatalf("期望返回非 nil，实际返回 nil")
-			}
-			if got.InputTokens != tt.wantUsage.InputTokens {
+			} else if got.InputTokens != tt.wantUsage.InputTokens {
 				t.Errorf("InputTokens: 期望 %d，实际 %d", tt.wantUsage.InputTokens, got.InputTokens)
-			}
-			if got.OutputTokens != tt.wantUsage.OutputTokens {
+			} else if got.OutputTokens != tt.wantUsage.OutputTokens {
 				t.Errorf("OutputTokens: 期望 %d，实际 %d", tt.wantUsage.OutputTokens, got.OutputTokens)
-			}
-			if got.CacheReadInputTokens != tt.wantUsage.CacheReadInputTokens {
+			} else if got.CacheReadInputTokens != tt.wantUsage.CacheReadInputTokens {
 				t.Errorf("CacheReadInputTokens: 期望 %d，实际 %d", tt.wantUsage.CacheReadInputTokens, got.CacheReadInputTokens)
 			}
 		})
