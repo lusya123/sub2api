@@ -83,7 +83,7 @@ FROM admin_audit_logs l` + where + fmt.Sprintf(" ORDER BY created_at DESC, id DE
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	logs := make([]service.AdminAuditLog, 0, pageSize)
 	for rows.Next() {

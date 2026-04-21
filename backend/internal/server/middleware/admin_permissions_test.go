@@ -78,10 +78,15 @@ func TestAdminAuditMiddlewareRecordsRedactedRequest(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(repo.input.RequestBodyJSON), &bodyJSON))
 	require.Equal(t, "[REDACTED]", bodyJSON["password"])
 	require.Equal(t, float64(100), bodyJSON["balance"])
-	nested := bodyJSON["nested"].(map[string]any)
+	nested, ok := bodyJSON["nested"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "[REDACTED]", nested["token"])
-	items := bodyJSON["items"].([]any)
-	require.Equal(t, "[REDACTED]", items[0].(map[string]any)["api_key"])
+	items, ok := bodyJSON["items"].([]any)
+	require.True(t, ok)
+	require.NotEmpty(t, items)
+	item, ok := items[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "[REDACTED]", item["api_key"])
 
 	var queryJSON map[string]any
 	require.NoError(t, json.Unmarshal([]byte(repo.input.QueryParamsJSON), &queryJSON))
