@@ -51,4 +51,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            GOLANG_IMAGE=golang:1.26.1-alpine
+            GOLANG_IMAGE=golang:1.26.2-alpine
