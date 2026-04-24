@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -37,6 +38,14 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 )
+
+// channelNameWhitelist defines the allowed characters for an operator-supplied
+// region/location tag that we'll echo back to the public status page. Emails,
+// IP:port tuples, CJK strings, and anything else are rejected so they can't
+// leak operator PII or infrastructure details to anonymous visitors.
+//
+//	Allowed: ASCII letters, digits, space, dot, hyphen. 1-32 chars.
+var channelNameWhitelist = regexp.MustCompile(`^[A-Za-z0-9 .\-]{1,32}$`)
 
 const (
 	// statusWindowMinutes is the rolling window used for heartbeat aggregation.
@@ -488,16 +497,17 @@ func availabilityFromBeats(beats []StatusBeat) float64 {
 //
 // Intentionally never echoes account.Name / notes / credentials — those
 // frequently contain email addresses, internal host names, or IP:port tuples.
+// Region/location values are operator-editable free-form strings so they must
+// also pass a strict whitelist before we echo them; otherwise
+// `extra.region = "ops@example.com"` would leak straight through. Anything
+// that doesn't match the whitelist falls back to the neutral id form.
 func maskChannelName(a *dbent.Account, id int64) string {
 	if a != nil {
-		if v, ok := a.Extra["region"]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
-			}
-		}
-		if v, ok := a.Extra["location"]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
+		for _, k := range []string{"region", "location"} {
+			if v, ok := a.Extra[k]; ok {
+				if s, ok := v.(string); ok && channelNameWhitelist.MatchString(s) {
+					return s
+				}
 			}
 		}
 	}

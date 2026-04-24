@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -162,6 +163,67 @@ func TestStatusPage_ChannelNameMasked(t *testing.T) {
 	require.Equal(t, "HK", got)
 	require.NotContains(t, got, "@")
 	require.NotContains(t, got, "ops@example.com")
+}
+
+// TestStatusPage_ChannelNameWhitelist locks in the whitelist behaviour: even
+// though extra.region is operator-editable free-form text, anything that
+// doesn't match ^[A-Za-z0-9 .-]{1,32}$ must fall back to "Channel #<id>" so
+// we can't leak ops@example.com / 1.2.3.4 / CJK notes to the public page.
+func TestStatusPage_ChannelNameWhitelist(t *testing.T) {
+	cases := []struct {
+		name   string
+		region string
+		// wantPass means the region value itself is echoed verbatim.
+		wantPass bool
+		// wantExact is the expected output when wantPass=true.
+		wantExact string
+	}{
+		{name: "email leaks blocked", region: "ops@example.com", wantPass: false},
+		{name: "simple region kept", region: "HK", wantPass: true, wantExact: "HK"},
+		{name: "mixed cjk blocked", region: "South 中国", wantPass: false},
+		{name: "dashed ascii kept", region: "US-East-1", wantPass: true, wantExact: "US-East-1"},
+		{name: "ip leaks blocked", region: "1.2.3.4:443", wantPass: false},
+		{name: "long region blocked", region: strings.Repeat("A", 33), wantPass: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := newChannelHealthTestClient(t)
+			model := "claude-opus-4-7"
+			acc, err := client.Account.Create().
+				SetName("test-acct").
+				SetPlatform("anthropic").
+				SetType("oauth").
+				SetCredentials(map[string]interface{}{}).
+				SetExtra(map[string]interface{}{"region": tc.region}).
+				SetConcurrency(1).
+				SetPriority(50).
+				SetRateMultiplier(1.0).
+				SetStatus("active").
+				SetAutoPauseOnExpired(false).
+				SetSchedulable(true).
+				Save(context.Background())
+			require.NoError(t, err)
+			gid := seedGroup(t, client, "g-wl", map[string][]int64{model: {acc.ID}})
+			seedAccountGroup(t, client, acc.ID, gid)
+
+			svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+			detail, err := svc.GetModelDetail(context.Background(), model)
+			require.NoError(t, err)
+			require.Len(t, detail.Groups, 1)
+			require.Len(t, detail.Groups[0].Channels, 1)
+			got := detail.Groups[0].Channels[0].Name
+
+			if tc.wantPass {
+				require.Equal(t, tc.wantExact, got)
+			} else {
+				require.Contains(t, got, "Channel #",
+					"non-whitelisted region %q must fall back to Channel #<id>, got %q",
+					tc.region, got)
+				require.NotContains(t, got, "@")
+				require.NotContains(t, got, tc.region)
+			}
+		})
+	}
 }
 
 func TestStatusPage_ChannelNameFallbackToID(t *testing.T) {
