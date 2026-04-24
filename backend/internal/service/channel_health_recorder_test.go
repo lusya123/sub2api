@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -130,6 +131,54 @@ func TestChannelHealthRecorder_OutcomeMapping(t *testing.T) {
 	require.Equal(t, 1, r.ErrorCount)
 	require.Equal(t, 1, r.RateLimitedCount)
 	require.Equal(t, 1, r.OverloadedCount)
+}
+
+// TestChannelHealthRecorder_ConcurrentSameBucket asserts that when N goroutines
+// race to record OutcomeSuccess into the *same* (bucket, account, group, model)
+// tuple, the final row has success_count == N and nothing is lost. The pre-fix
+// implementation did SELECT-then-UPDATE/INSERT inside a transaction: under real
+// gateway QPS, the unique index would fire and half the samples would silently
+// disappear after the tx rolled back. Post-fix ON CONFLICT makes the upsert
+// atomic in a single round-trip so this test exercises the regression.
+func TestChannelHealthRecorder_ConcurrentSameBucket(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	rec := NewChannelHealthRecorder(client)
+	ctx := context.Background()
+
+	at := time.Date(2026, 4, 24, 13, 0, 0, 0, time.UTC)
+	base := ChannelHealthEvent{
+		AccountID: 501,
+		GroupID:   11,
+		Model:     "claude-opus-4-7",
+		LatencyMs: 123,
+		Source:    SourcePassive,
+		At:        at,
+		Outcome:   OutcomeSuccess,
+	}
+
+	const n = 10
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			if err := rec.Record(ctx, base); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	rows, err := client.ChannelHealthSample.Query().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "concurrent same-bucket inserts must collapse to one row")
+	require.Equal(t, n, rows[0].SuccessCount,
+		"every concurrent Record call must be reflected in success_count")
 }
 
 func TestChannelHealthRecorder_LatencyUsesMax(t *testing.T) {

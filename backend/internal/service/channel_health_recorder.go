@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 )
 
 // HealthOutcome 描述一次请求 / 探针结果在健康指标意义上的分类。
@@ -70,17 +71,19 @@ func floorToMinute(t time.Time) time.Time {
 //
 // 语义:
 //   - bucket_ts = floor(e.At, 1min)
-//   - 若 (bucket_ts, account_id, group_id, model) 已存在则对应的 *_count 字段 +1,
-//     latency_p50_ms 取 MAX(old, new) —— 暂时用 MAX 近似 p50,后续替换为真实
-//     滑动 p50 估计器 (TODO: t-digest / HDR histogram)。
+//   - 若 (bucket_ts, account_id, group_id, model) 已存在,对应的 *_count 字段
+//     累加,latency_p50_ms 取 MAX(old, new)。
 //   - 否则插入一行,目标 count=1,其它 count=0。
 //
-// 实现走"事务内 SELECT -> 分支 UPDATE/INSERT",原因:
-//   - ent 的 OnConflictColumns 能支持 Add() 方便累加 count,但 latency_p50_ms
-//     要写 MAX() 在 sqlite/postgres 两套方言下表达不同
-//     (postgres: GREATEST(excluded, table); sqlite: MAX(excluded, table))。
-//   - 事务 + 读改写写法两种方言都原生支持,行为更容易预测,并且生产 QPS
-//     对单桶并发很低 (一个账号一分钟) —— 冲突窗口小,收益低于可移植性。
+// 实现:原生 SQL `INSERT ... ON CONFLICT DO UPDATE`,一次网络往返就能原子
+// upsert。解决了旧版"事务 SELECT → UPDATE/INSERT"在高 QPS 同桶并发下踩到
+// 唯一索引冲突导致样本丢失的问题(事务回滚,error 被调用方 log 吞掉)。
+//
+// 方言适配:
+//   - Postgres:`GREATEST(EXCLUDED.col, table.col)` 取最大延迟
+//   - SQLite  :`MAX(EXCLUDED.col, table.col)` —— SQLite 3.24+ 也支持 ON CONFLICT
+//     和 EXCLUDED 伪表,只是 `GREATEST` 是 Postgres 方言扩展,SQLite 下标量 `MAX()`
+//     等价。
 func (r *ChannelHealthRecorder) Record(ctx context.Context, e ChannelHealthEvent) error {
 	if r == nil || r.entClient == nil {
 		return errors.New("channel_health_recorder: entClient is nil")
@@ -96,81 +99,82 @@ func (r *ChannelHealthRecorder) Record(ctx context.Context, e ChannelHealthEvent
 	}
 	bucket := floorToMinute(e.At)
 
-	// 开启事务确保 "SELECT -> UPDATE/INSERT" 原子,避免两个并发 Record 双插入
-	// (唯一索引会兜底但事务能减少错误路径)。
-	tx, err := r.entClient.Tx(ctx)
-	if err != nil {
-		return fmt.Errorf("channel_health_recorder: begin tx: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-
-	existing, err := tx.ChannelHealthSample.Query().
-		Where(
-			channelhealthsample.BucketTsEQ(bucket),
-			channelhealthsample.AccountIDEQ(e.AccountID),
-			channelhealthsample.GroupIDEQ(e.GroupID),
-			channelhealthsample.ModelEQ(e.Model),
-		).
-		Only(ctx)
-
-	switch {
-	case err == nil:
-		// 行已存在: 累加对应的 count,latency 取 max。
-		upd := existing.Update()
-		switch e.Outcome {
-		case OutcomeSuccess:
-			upd = upd.AddSuccessCount(1)
-		case OutcomeError:
-			upd = upd.AddErrorCount(1)
-		case OutcomeRateLimited:
-			upd = upd.AddRateLimitedCount(1)
-		case OutcomeOverloaded:
-			upd = upd.AddOverloadedCount(1)
-		default:
-			return fmt.Errorf("channel_health_recorder: unknown outcome %d", e.Outcome)
-		}
-		if e.LatencyMs > existing.LatencyP50Ms {
-			upd = upd.SetLatencyP50Ms(e.LatencyMs)
-		}
-		if _, err := upd.Save(ctx); err != nil {
-			return fmt.Errorf("channel_health_recorder: update: %w", err)
-		}
-	case dbent.IsNotFound(err):
-		// 新桶: 插入初始行,目标 count=1。
-		builder := tx.ChannelHealthSample.Create().
-			SetBucketTs(bucket).
-			SetAccountID(e.AccountID).
-			SetGroupID(e.GroupID).
-			SetModel(e.Model).
-			SetLatencyP50Ms(e.LatencyMs).
-			SetSource(string(e.Source))
-		switch e.Outcome {
-		case OutcomeSuccess:
-			builder = builder.SetSuccessCount(1)
-		case OutcomeError:
-			builder = builder.SetErrorCount(1)
-		case OutcomeRateLimited:
-			builder = builder.SetRateLimitedCount(1)
-		case OutcomeOverloaded:
-			builder = builder.SetOverloadedCount(1)
-		default:
-			return fmt.Errorf("channel_health_recorder: unknown outcome %d", e.Outcome)
-		}
-		if _, err := builder.Save(ctx); err != nil {
-			return fmt.Errorf("channel_health_recorder: insert: %w", err)
-		}
+	// success / error / ratelimited / overloaded 初始值:只有本次事件对应的
+	// 那一列 = 1,其它 = 0。冲突路径下由 SQL 表达式把这些整体加到旧值。
+	var sc, ec, rc, oc int
+	switch e.Outcome {
+	case OutcomeSuccess:
+		sc = 1
+	case OutcomeError:
+		ec = 1
+	case OutcomeRateLimited:
+		rc = 1
+	case OutcomeOverloaded:
+		oc = 1
 	default:
-		return fmt.Errorf("channel_health_recorder: query existing: %w", err)
+		return fmt.Errorf("channel_health_recorder: unknown outcome %d", e.Outcome)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("channel_health_recorder: commit: %w", err)
+	drv, ok := r.entClient.Driver().(*entsql.Driver)
+	if !ok {
+		return errors.New("channel_health_recorder: driver is not *entsql.Driver")
 	}
-	committed = true
+	db := drv.DB()
+	if db == nil {
+		return errors.New("channel_health_recorder: driver DB() is nil")
+	}
+	dialectName := drv.Dialect()
+
+	query, args := buildUpsertSQL(dialectName, bucket, e, sc, ec, rc, oc)
+	if _, err := db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("channel_health_recorder: upsert: %w", err)
+	}
 	return nil
+}
+
+// buildUpsertSQL crafts the dialect-specific ON CONFLICT upsert. Kept as a
+// pure function so the test suite can reason about the emitted SQL without
+// hitting the database.
+func buildUpsertSQL(
+	dialectName string,
+	bucket time.Time,
+	e ChannelHealthEvent,
+	sc, ec, rc, oc int,
+) (string, []interface{}) {
+	// Column order MUST match the placeholders below.
+	args := []interface{}{
+		bucket,            // $1 bucket_ts
+		e.AccountID,       // $2 account_id
+		e.GroupID,         // $3 group_id
+		e.Model,           // $4 model
+		sc,                // $5 success_count
+		ec,                // $6 error_count
+		rc,                // $7 rate_limited_count
+		oc,                // $8 overloaded_count
+		e.LatencyMs,       // $9 latency_p50_ms
+		string(e.Source),  // $10 source
+		time.Now().UTC(),  // $11 created_at (immutable; only used on INSERT)
+	}
+
+	// Latency expression differs per dialect: Postgres has GREATEST, SQLite
+	// does not but `MAX(a, b)` in scalar position is equivalent.
+	latencyExpr := "GREATEST(EXCLUDED.latency_p50_ms, channel_health_samples.latency_p50_ms)"
+	if dialectName == dialect.SQLite {
+		latencyExpr = "MAX(EXCLUDED.latency_p50_ms, channel_health_samples.latency_p50_ms)"
+	}
+
+	q := `
+INSERT INTO channel_health_samples (
+  bucket_ts, account_id, group_id, model,
+  success_count, error_count, rate_limited_count, overloaded_count,
+  latency_p50_ms, source, created_at
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+ON CONFLICT (bucket_ts, account_id, group_id, model) DO UPDATE SET
+  success_count      = channel_health_samples.success_count      + EXCLUDED.success_count,
+  error_count        = channel_health_samples.error_count        + EXCLUDED.error_count,
+  rate_limited_count = channel_health_samples.rate_limited_count + EXCLUDED.rate_limited_count,
+  overloaded_count   = channel_health_samples.overloaded_count   + EXCLUDED.overloaded_count,
+  latency_p50_ms     = ` + latencyExpr
+
+	return q, args
 }
