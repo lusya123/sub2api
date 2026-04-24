@@ -154,19 +154,20 @@ func (s *OpsCleanupService) runScheduled() {
 }
 
 type opsCleanupDeletedCounts struct {
-	errorLogs     int64
-	retryAttempts int64
-	alertEvents   int64
-	systemLogs    int64
-	logAudits     int64
-	systemMetrics int64
-	hourlyPreagg  int64
-	dailyPreagg   int64
+	errorLogs            int64
+	retryAttempts        int64
+	alertEvents          int64
+	systemLogs           int64
+	logAudits            int64
+	systemMetrics        int64
+	hourlyPreagg         int64
+	dailyPreagg          int64
+	channelHealthSamples int64
 }
 
 func (c opsCleanupDeletedCounts) String() string {
 	return fmt.Sprintf(
-		"error_logs=%d retry_attempts=%d alert_events=%d system_logs=%d log_audits=%d system_metrics=%d hourly_preagg=%d daily_preagg=%d",
+		"error_logs=%d retry_attempts=%d alert_events=%d system_logs=%d log_audits=%d system_metrics=%d hourly_preagg=%d daily_preagg=%d channel_health_samples=%d",
 		c.errorLogs,
 		c.retryAttempts,
 		c.alertEvents,
@@ -175,6 +176,7 @@ func (c opsCleanupDeletedCounts) String() string {
 		c.systemMetrics,
 		c.hourlyPreagg,
 		c.dailyPreagg,
+		c.channelHealthSamples,
 	)
 }
 
@@ -246,6 +248,18 @@ func (s *OpsCleanupService) runCleanupOnce(ctx context.Context) (opsCleanupDelet
 			return out, err
 		}
 		out.dailyPreagg = n
+	}
+
+	// Channel health samples: fixed 24h retention (per migrations/084 + ent schema
+	// comment). High-volume table (~1 min-bucket × account × group × model), so
+	// this runs regardless of ops_cleanup retention config.
+	{
+		cutoff := now.Add(-24 * time.Hour)
+		n, err := deleteOldRowsByID(ctx, s.db, "channel_health_samples", "created_at", cutoff, batchSize, false)
+		if err != nil {
+			return out, err
+		}
+		out.channelHealthSamples = n
 	}
 
 	return out, nil
