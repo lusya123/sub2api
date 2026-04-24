@@ -54,6 +54,17 @@ type GeminiMessagesCompatService struct {
 	antigravityGatewayService *AntigravityGatewayService
 	cfg                       *config.Config
 	responseHeaderFilter      *responseheaders.CompiledHeaderFilter
+
+	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
+	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
+	channelHealthRecorder *ChannelHealthRecorder
+}
+
+// SetChannelHealthRecorder 注入被动健康采样 Recorder。
+func (s *GeminiMessagesCompatService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+	if s != nil {
+		s.channelHealthRecorder = r
+	}
 }
 
 func NewGeminiMessagesCompatService(
@@ -1020,6 +1031,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 	}
 
+	// 被动健康采样: Gemini messages-compat 分支。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+
 	// 图片生成计费
 	imageCount := 0
 	imageSize := s.extractImageSize(body)
@@ -1522,6 +1536,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
+
+	// 被动健康采样: Gemini native (ForwardNative) 分支。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
 
 	// 图片生成计费
 	imageCount := 0

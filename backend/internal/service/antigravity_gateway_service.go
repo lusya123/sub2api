@@ -878,6 +878,17 @@ type AntigravityGatewayService struct {
 	cache             GatewayCache // 用于模型级限流时清除粘性会话绑定
 	schedulerSnapshot *SchedulerSnapshotService
 	internal500Cache  Internal500CounterCache // INTERNAL 500 渐进惩罚计数器
+
+	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
+	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
+	channelHealthRecorder *ChannelHealthRecorder
+}
+
+// SetChannelHealthRecorder 注入被动健康采样 Recorder。
+func (s *AntigravityGatewayService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+	if s != nil {
+		s.channelHealthRecorder = r
+	}
 }
 
 func NewAntigravityGatewayService(
@@ -1760,6 +1771,9 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		firstTokenMs = streamRes.firstTokenMs
 	}
 
+	// 被动健康采样: Antigravity Claude 分支。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+
 	return &ForwardResult{
 		RequestID:        requestID,
 		Usage:            *usage,
@@ -2446,6 +2460,9 @@ handleSuccess:
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
+
+	// 被动健康采样: Antigravity Gemini 分支。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
 
 	// 判断是否为图片生成模型
 	imageCount := 0

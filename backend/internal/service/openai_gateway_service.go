@@ -337,6 +337,17 @@ type OpenAIGatewayService struct {
 	openaiWSRetryMetrics  openAIWSRetryMetrics
 	responseHeaderFilter  *responseheaders.CompiledHeaderFilter
 	codexSnapshotThrottle *accountWriteThrottle
+
+	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
+	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
+	channelHealthRecorder *ChannelHealthRecorder
+}
+
+// SetChannelHealthRecorder 注入被动健康采样 Recorder。
+func (s *OpenAIGatewayService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+	if s != nil {
+		s.channelHealthRecorder = r
+	}
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -2285,6 +2296,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 		}
 
+		// 被动健康采样: 请求完整走完后记录一条 (account, group, model, outcome, latency)。
+		// Record 内部出错只 warn 不阻塞响应。
+		emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+
 		// Extract and save Codex usage snapshot from response headers (for OAuth accounts)
 		if account.Type == AccountTypeOAuth {
 			if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
@@ -2449,6 +2464,9 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			return nil, err
 		}
 	}
+
+	// 被动健康采样 (passthrough 分支)。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, reqModel, resp.StatusCode, startTime)
 
 	if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
 		s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)

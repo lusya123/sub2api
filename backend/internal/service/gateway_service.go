@@ -570,6 +570,19 @@ type GatewayService struct {
 	debugClaudeMimic      atomic.Bool
 	debugGatewayBodyFile  atomic.Pointer[os.File] // non-nil when SUB2API_DEBUG_GATEWAY_BODY is set
 	tlsFPProfileService   *TLSFingerprintProfileService
+
+	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
+	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
+	// 暂不进入构造器签名以免连锁改 wire 和 8 个 gateway 测试工厂,
+	// 下个 wire DI 任务会把它接到 ProviderSet 里。
+	channelHealthRecorder *ChannelHealthRecorder
+}
+
+// SetChannelHealthRecorder 注入被动健康采样 Recorder。零次或多次调用都安全。
+func (s *GatewayService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+	if s != nil {
+		s.channelHealthRecorder = r
+	}
 }
 
 // NewGatewayService creates a new GatewayService
@@ -4659,6 +4672,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 	}
 
+	// 被动健康采样: Anthropic 路径 (stream + non-stream 合流后一次记录)。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-request-id"),
 		Usage:            *usage,
@@ -4910,6 +4926,9 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
+
+	// 被动健康采样: Anthropic API key passthrough 分支。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, input.OriginalModel, resp.StatusCode, input.StartTime)
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-request-id"),
@@ -5418,6 +5437,9 @@ func (s *GatewayService) forwardBedrock(
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
+
+	// 被动健康采样: Bedrock 分支。
+	emitChannelHealthSample(c, s.channelHealthRecorder, account, reqModel, resp.StatusCode, startTime)
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-amzn-requestid"),
