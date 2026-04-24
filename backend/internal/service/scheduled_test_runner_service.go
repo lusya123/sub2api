@@ -20,6 +20,11 @@ type ScheduledTestRunnerService struct {
 	rateLimitSvc   *RateLimitService
 	cfg            *config.Config
 
+	// healthProber, if set via SetChannelHealthProber, fires every 5 minutes
+	// from the same cron to refill cold (account × group × model) combos on
+	// the public status page. Optional — nil means the prober is disabled.
+	healthProber *ChannelHealthProber
+
 	cron      *cron.Cron
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -61,9 +66,19 @@ func (s *ScheduledTestRunnerService) Start() {
 			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] not started (invalid schedule): %v", err)
 			return
 		}
+		// Register the 5-minute sparse active prober alongside the per-minute
+		// test-plan tick. Failure inside the prober is isolated (recovered +
+		// logged) so the main scheduled plans keep running even if the prober
+		// panics or stalls. Deliberately runs on the cron's own goroutine so
+		// a slow prober doesn't back up the scheduler thread.
+		if s.healthProber != nil {
+			if _, err := c.AddFunc("*/5 * * * *", func() { s.runHealthProberTick() }); err != nil {
+				logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] health prober schedule failed: %v", err)
+			}
+		}
 		s.cron = c
 		s.cron.Start()
-		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] started (tick=every minute)")
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] started (tick=every minute, health prober=%v)", s.healthProber != nil)
 	})
 }
 
@@ -143,6 +158,46 @@ func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *Sched
 
 	if err := s.planRepo.UpdateAfterRun(ctx, plan.ID, time.Now(), nextRun); err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d UpdateAfterRun error: %v", plan.ID, err)
+	}
+}
+
+// SetChannelHealthProber wires a sparse active prober into the runner. The
+// setter is used by wire (next task) so this file does not have to import the
+// prober's dependency graph. Call before Start(); after Start() the cron is
+// already locked and late-binding the prober is a no-op.
+func (s *ScheduledTestRunnerService) SetChannelHealthProber(p *ChannelHealthProber) {
+	if s == nil {
+		return
+	}
+	s.healthProber = p
+}
+
+// runHealthProberTick is the cron-invoked entry point for the 5-minute active
+// prober. Wrapped in recover so any unexpected panic stays contained and does
+// not kill the scheduler (which also hosts the per-minute test-plan tick).
+func (s *ScheduledTestRunnerService) runHealthProberTick() {
+	if s == nil || s.healthProber == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ChannelHealthProber] panic recovered: %v", r)
+		}
+	}()
+
+	// Give the tick its own context; RunTick itself applies a 4-minute inner
+	// cap on top of this so one stalled account can never tie up the whole
+	// 5-minute interval.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	probed, err := s.healthProber.RunTick(ctx)
+	if err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ChannelHealthProber] tick error: %v", err)
+		return
+	}
+	if probed > 0 {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ChannelHealthProber] tick probed=%d", probed)
 	}
 }
 
