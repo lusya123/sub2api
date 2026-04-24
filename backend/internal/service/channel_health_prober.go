@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -446,34 +447,11 @@ func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candid
 func comboKey(accountID, groupID int64, model string) string {
 	var b strings.Builder
 	b.Grow(len(model) + 24)
-	b.WriteString(itoa64(accountID))
+	b.WriteString(strconv.FormatInt(accountID, 10))
 	b.WriteByte('|')
-	b.WriteString(itoa64(groupID))
+	b.WriteString(strconv.FormatInt(groupID, 10))
 	b.WriteByte('|')
 	b.WriteString(model)
 	return b.String()
-}
-
-// itoa64 is a tiny local int64 -> decimal avoiding strconv import churn.
-func itoa64(v int64) string {
-	if v == 0 {
-		return "0"
-	}
-	neg := v < 0
-	if neg {
-		v = -v
-	}
-	var buf [20]byte
-	i := len(buf)
-	for v > 0 {
-		i--
-		buf[i] = byte('0' + v%10)
-		v /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }
 

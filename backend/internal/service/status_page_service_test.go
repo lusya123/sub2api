@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -237,7 +238,7 @@ func TestStatusPage_ChannelNameFallbackToID(t *testing.T) {
 	require.Len(t, detail.Groups, 1)
 	require.Len(t, detail.Groups[0].Channels, 1)
 	require.Contains(t, detail.Groups[0].Channels[0].Name, "Channel #")
-	require.Contains(t, detail.Groups[0].Channels[0].Name, itoa64(aid))
+	require.Contains(t, detail.Groups[0].Channels[0].Name, strconv.FormatInt(aid, 10))
 }
 
 func TestStatusPage_ListModels(t *testing.T) {
