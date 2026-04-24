@@ -3,7 +3,7 @@
  * Defines all application routes with lazy loading and navigation guards
  */
 
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, type RouteLocationNormalizedLoaded, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
@@ -111,6 +111,16 @@ const routes: RouteRecordRaw[] = [
       title: 'Key Usage',
     }
   },
+  {
+    path: '/status',
+    name: 'Status',
+    component: () => import('@/views/status/StatusView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Status',
+      titleKey: 'status.title'
+    }
+  },
 
   // ==================== User Routes ====================
   {
@@ -151,6 +161,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Client Install',
       titleKey: 'clientInstallPage.title',
       descriptionKey: 'clientInstallPage.description'
+    }
+  },
+  {
+    path: '/models',
+    name: 'ModelMarketplace',
+    component: () => import('@/views/admin/ModelMarketplaceView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Model Marketplace',
+      titleKey: 'admin.modelMarketplace.title',
+      descriptionKey: 'admin.modelMarketplace.description'
     }
   },
   {
@@ -317,6 +339,17 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/model-marketplace',
+    redirect: '/models',
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Model Marketplace',
+      titleKey: 'admin.modelMarketplace.title',
+      descriptionKey: 'admin.modelMarketplace.description'
+    }
+  },
+  {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
     component: () => import('@/views/admin/AnnouncementsView.vue'),
@@ -445,6 +478,31 @@ const navigationLoading = useNavigationLoadingState()
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
 const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup']
 
+function updateDocumentTitle(to: RouteLocationNormalizedLoaded): void {
+  const appStore = useAppStore()
+  const authStore = useAuthStore()
+
+  // For custom pages, use menu item label as document title
+  if (to.name === 'CustomPage') {
+    const id = to.params.id as string
+    const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []
+    const adminSettingsStore = useAdminSettingsStore()
+    const menuItem = publicItems.find((item) => item.id === id)
+      ?? (authStore.isAdmin ? adminSettingsStore.customMenuItems.find((item) => item.id === id) : undefined)
+    if (menuItem?.label) {
+      const siteName = appStore.siteName || 'Sub2API'
+      document.title = `${menuItem.label} - ${siteName}`
+      return
+    }
+  }
+
+  document.title = resolveDocumentTitle(to.meta.title, appStore.siteName, to.meta.titleKey as string)
+}
+
+window.addEventListener('sub2api:locale-changed', () => {
+  updateDocumentTitle(router.currentRoute.value)
+})
+
 router.beforeEach((to, _from, next) => {
   // 开始导航加载状态
   navigationLoading.startNavigation()
@@ -459,22 +517,7 @@ router.beforeEach((to, _from, next) => {
 
   // Set page title
   const appStore = useAppStore()
-  // For custom pages, use menu item label as document title
-  if (to.name === 'CustomPage') {
-    const id = to.params.id as string
-    const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []
-    const adminSettingsStore = useAdminSettingsStore()
-    const menuItem = publicItems.find((item) => item.id === id)
-      ?? (authStore.isAdmin ? adminSettingsStore.customMenuItems.find((item) => item.id === id) : undefined)
-    if (menuItem?.label) {
-      const siteName = appStore.siteName || 'Sub2API'
-      document.title = `${menuItem.label} - ${siteName}`
-    } else {
-      document.title = resolveDocumentTitle(to.meta.title, appStore.siteName, to.meta.titleKey as string)
-    }
-  } else {
-    document.title = resolveDocumentTitle(to.meta.title, appStore.siteName, to.meta.titleKey as string)
-  }
+  updateDocumentTitle(to)
 
   // Check if route requires authentication
   const requiresAuth = to.meta.requiresAuth !== false // Default to true

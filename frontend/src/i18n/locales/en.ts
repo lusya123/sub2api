@@ -180,6 +180,14 @@ export default {
     queryFailedRetry: 'Query failed, please try again later',
   },
 
+  // Public Status Page
+  status: {
+    title: 'Model Health Status',
+    subtitle: 'Per-channel availability for each model × group, 90-minute window at 1-minute resolution',
+    lastUpdated: 'Last updated',
+    empty: 'No model data yet',
+  },
+
   // Setup Wizard
   setup: {
     title: 'Sub2API Setup',
@@ -338,6 +346,7 @@ export default {
     groups: 'Groups',
     subscriptions: 'Subscriptions',
     accounts: 'Accounts',
+    modelMarketplace: 'Model Marketplace',
     proxies: 'Proxies',
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
@@ -998,6 +1007,31 @@ export default {
 
   // Admin
   admin: {
+    modelMarketplace: {
+      title: 'Model Marketplace',
+      description: 'Models currently supported by schedulable accounts in the database, with billing prices',
+      searchPlaceholder: 'Search model ID, platform, or upstream model',
+      allPlatforms: 'All platforms',
+      totalModels: 'Models',
+      totalAccounts: 'Available accounts',
+      visibleModels: 'Visible',
+      pricedModels: 'Priced',
+      inputPrice: 'Input',
+      outputPrice: 'Output',
+      totalPrice: 'Total',
+      perMillionTokens: 'Prices are USD per 1M tokens',
+      pricedBy: 'Priced by {model}',
+      priceMissing: 'Price not configured',
+      empty: 'No models to display',
+      loadFailed: 'Failed to load model marketplace',
+      platforms: {
+        openai: 'OpenAI',
+        anthropic: 'Claude',
+        gemini: 'Gemini',
+        antigravity: 'Antigravity',
+        sora: 'Sora'
+      }
+    },
     // Dashboard
     dashboard: {
       title: 'Admin Dashboard',

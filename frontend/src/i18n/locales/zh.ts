@@ -180,6 +180,14 @@ export default {
     queryFailedRetry: '查询失败，请稍后重试',
   },
 
+  // Public Status Page
+  status: {
+    title: '模型健康状态',
+    subtitle: '每个模型在各分组下各渠道的实时可用率(90 分钟窗口,1 分钟粒度)',
+    lastUpdated: '最后更新',
+    empty: '暂无模型数据',
+  },
+
   // Setup Wizard
   setup: {
     title: 'Sub2API 安装向导',
@@ -338,6 +346,7 @@ export default {
     groups: '分组管理',
     subscriptions: '订阅管理',
     accounts: '账号管理',
+    modelMarketplace: '模型广场',
     proxies: 'IP管理',
     redeemCodes: '兑换码',
     ops: '运维监控',
@@ -1003,6 +1012,31 @@ export default {
 
   // Admin
   admin: {
+    modelMarketplace: {
+      title: '模型广场',
+      description: '展示当前数据库中可调度账号真实支持的模型 ID 与计费价格',
+      searchPlaceholder: '搜索模型 ID、平台或上游模型',
+      allPlatforms: '全部平台',
+      totalModels: '模型数量',
+      totalAccounts: '可用账号',
+      visibleModels: '当前显示',
+      pricedModels: '已配置价格',
+      inputPrice: '输入',
+      outputPrice: '输出',
+      totalPrice: '合计',
+      perMillionTokens: '价格单位：美元 / 100 万 Token',
+      pricedBy: '按 {model} 计价',
+      priceMissing: '价格未配置',
+      empty: '暂无可展示模型',
+      loadFailed: '加载模型广场失败',
+      platforms: {
+        openai: 'OpenAI',
+        anthropic: 'Claude',
+        gemini: 'Gemini',
+        antigravity: 'Antigravity',
+        sora: 'Sora'
+      }
+    },
     // Dashboard
     dashboard: {
       title: '管理控制台',
