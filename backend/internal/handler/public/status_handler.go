@@ -9,12 +9,29 @@
 package public
 
 import (
+	"errors"
 	"net/http"
+	"regexp"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
+
+// maxModelNameLen bounds the :name path parameter. Real model ids are well
+// under 64 chars ("claude-opus-4-7", "gemini-2.5-pro-exp-03-25" etc.); 128 is
+// enough headroom without giving attackers room to stuff huge blobs through
+// the parser.
+const maxModelNameLen = 128
+
+// modelNameRe is the whitelist for the :name path parameter. The set covers
+// every character observed in real model ids across Anthropic, OpenAI,
+// Google, and internal aliases: ASCII letters, digits, dot, underscore,
+// colon (for some gemini tag-like ids), slash, and hyphen. Everything else —
+// including `<`, `>`, null bytes, CJK, whitespace — is rejected before we
+// even enter the service layer, which blunts the attack surface for
+// anonymous DoS traffic trying to fuzz the endpoint.
+var modelNameRe = regexp.MustCompile(`^[A-Za-z0-9._:/-]+$`)
 
 // statusCacheControl is the response header used for both list and detail
 // endpoints. 30s matches StatusPageService.statusCacheTTL so anything served
@@ -62,9 +79,12 @@ func (h *PublicStatusHandler) ListModels(c *gin.Context) {
 
 // GetModelDetail handles GET /api/public/status/model/:name.
 //
-// The name path parameter is taken verbatim as the model id. Unknown models
-// still return 200 with an empty-heartbeat shell so the frontend can render
-// the pricing/metadata card even when a combo has never been probed.
+// The :name path parameter is validated against modelNameRe and bounded at
+// maxModelNameLen before we touch the service layer — this stops anonymous
+// DoS traffic with junk inputs (control chars, oversized blobs, exotic
+// characters) from ever reaching the DB. Well-formed but unknown model
+// names take the service-layer fast-path (ErrStatusModelUnknown) and
+// return 404 without running the 4-query aggregation.
 func (h *PublicStatusHandler) GetModelDetail(c *gin.Context) {
 	if h == nil || h.svc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "status service not available"})
@@ -75,8 +95,16 @@ func (h *PublicStatusHandler) GetModelDetail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "model name required"})
 		return
 	}
+	if len(name) > maxModelNameLen || !modelNameRe.MatchString(name) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid model name"})
+		return
+	}
 	detail, err := h.svc.GetModelDetail(c.Request.Context(), name)
 	if err != nil {
+		if errors.Is(err, service.ErrStatusModelUnknown) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

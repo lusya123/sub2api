@@ -241,6 +241,45 @@ func TestStatusPage_ChannelNameFallbackToID(t *testing.T) {
 	require.Contains(t, detail.Groups[0].Channels[0].Name, strconv.FormatInt(aid, 10))
 }
 
+// TestStatusPage_UnknownModelReturnsSentinel: GetModelDetail on a model that
+// isn't present in any group.model_routing short-circuits with
+// ErrStatusModelUnknown instead of running the 4-query aggregation — this is
+// the DoS fast-path.
+func TestStatusPage_UnknownModelReturnsSentinel(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	_ = seedGroup(t, client, "g-known", map[string][]int64{
+		"claude-opus-4-7": nil,
+	})
+
+	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	detail, err := svc.GetModelDetail(context.Background(), "totally-made-up-model-that-does-not-exist")
+	require.ErrorIs(t, err, ErrStatusModelUnknown)
+	require.Nil(t, detail)
+}
+
+// TestStatusPage_UnknownModelDoesNotCachePoison: hitting GetModelDetail with
+// a stream of junk names must not populate the detail cache with entries,
+// both to avoid unbounded memory growth and to confirm the fast-path runs
+// before the detail cache is consulted.
+func TestStatusPage_UnknownModelDoesNotCachePoison(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	_ = seedGroup(t, client, "g-known", map[string][]int64{
+		"claude-opus-4-7": nil,
+	})
+
+	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+
+	for i := 0; i < 50; i++ {
+		name := "bogus-" + strconv.Itoa(i)
+		_, err := svc.GetModelDetail(context.Background(), name)
+		require.ErrorIs(t, err, ErrStatusModelUnknown)
+	}
+	svc.detailMu.RLock()
+	size := len(svc.detailCache)
+	svc.detailMu.RUnlock()
+	require.Equal(t, 0, size, "unknown-model fast-path must not populate detail cache")
+}
+
 // TestStatusPage_CacheHits: two back-to-back ListModels calls share one DB
 // Group.Query. We verify by creating a new group between the two calls and
 // confirming the cached response is returned unchanged. A real miss would

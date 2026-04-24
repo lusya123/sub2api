@@ -81,6 +81,84 @@ func TestListModels_ResponseShape(t *testing.T) {
 	require.GreaterOrEqual(t, len(models), 2)
 }
 
+// TestGetModelDetail_InputValidation guards the :name path parameter against
+// the categories of hostile input we see in real DoS traffic: oversized
+// blobs, HTML injection probes, null bytes, exotic characters. All must
+// fail fast at the handler with 400 before service-layer DB queries.
+func TestGetModelDetail_InputValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := newTestEntClient(t)
+	svc := service.NewStatusPageService(client)
+	h := NewPublicStatusHandler(svc)
+
+	r := gin.New()
+	r.GET("/api/public/status/model/:name", h.GetModelDetail)
+
+	cases := []struct {
+		label string
+		name  string
+	}{
+		{"too_long", strings.Repeat("a", 129)},
+		{"html_tag", "claude<script>"},
+		{"null_byte", "claude\x00opus"},
+		{"cjk", "模型名"},
+		{"whitespace", "claude opus"},
+		{"semicolon", "claude;drop"},
+		{"backtick", "claude`rm"},
+	}
+	// Path-traversal sequences that include `/` never reach this handler
+	// because gin's router treats `/` as a separator — those already 404 at
+	// the router layer, a stricter (safer) outcome.
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/public/status/model/"+pathEscape(tc.name), nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, http.StatusBadRequest, w.Code,
+				"case=%s body=%s", tc.label, w.Body.String())
+		})
+	}
+}
+
+// TestGetModelDetail_UnknownModelIs404 verifies the unknown-model fast-path
+// returns 404 (not 500) when the model name is well-formed but not routed in
+// any group.
+func TestGetModelDetail_UnknownModelIs404(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := newTestEntClient(t)
+	_, err := client.Group.Create().
+		SetName("handler-unknown-test-group").
+		SetRateMultiplier(1.0).
+		SetModelRouting(map[string][]int64{"claude-opus-4-7": nil}).
+		Save(context.Background())
+	require.NoError(t, err)
+
+	svc := service.NewStatusPageService(client)
+	h := NewPublicStatusHandler(svc)
+
+	r := gin.New()
+	r.GET("/api/public/status/model/:name", h.GetModelDetail)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/public/status/model/no-such-model-exists", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code, "unknown model must 404, got body=%s", w.Body.String())
+}
+
+// pathEscape is a tiny URL-path escaper used only by the validation test
+// suite. Keeps test inputs readable while still reaching the handler with
+// bytes that would otherwise be rejected by the HTTP parser.
+func pathEscape(s string) string {
+	s = strings.ReplaceAll(s, "/", "%2F")
+	s = strings.ReplaceAll(s, "\x00", "%00")
+	s = strings.ReplaceAll(s, "<", "%3C")
+	s = strings.ReplaceAll(s, ">", "%3E")
+	s = strings.ReplaceAll(s, " ", "%20")
+	return s
+}
+
 // TestListAndDetail_CacheControlHeaders: both public endpoints must emit the
 // 30s Cache-Control header so reverse proxies / CDN layers can ride along.
 func TestListAndDetail_CacheControlHeaders(t *testing.T) {

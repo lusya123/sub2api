@@ -320,10 +320,45 @@ func (s *StatusPageService) loadListFromDB(ctx context.Context) (*listModelsCach
 	}, nil
 }
 
+// ErrStatusModelUnknown is returned by GetModelDetail when the requested model
+// is not present in any non-deleted group's model_routing. The handler layer
+// translates this sentinel into a 404 response so hostile traffic with junk
+// model names doesn't pay the full 4-query aggregation cost.
+var ErrStatusModelUnknown = errors.New("status_page_service: unknown model")
+
+// isKnownModel reports whether `name` appears as a non-wildcard routing key
+// in any non-deleted group. Reuses the ListModels cache so a GetModelDetail
+// call on a junk name costs one cache lookup, not a full DB scan.
+//
+// Intentionally does NOT consider wildcard patterns — the status page and
+// prober both only track concrete model ids, so "claude-*" in a group's
+// routing map doesn't imply coverage of arbitrary names.
+func (s *StatusPageService) isKnownModel(ctx context.Context, name string) (bool, error) {
+	if name == "" {
+		return false, nil
+	}
+	// Ensure the list cache is primed (populates modelSet). On cache hit this
+	// is a ~nanosecond RWMutex read — no DB traffic for repeated junk names.
+	if _, err := s.ListModels(ctx); err != nil {
+		return false, err
+	}
+	s.listMu.RLock()
+	defer s.listMu.RUnlock()
+	if s.listCache == nil {
+		return false, nil
+	}
+	_, ok := s.listCache.modelSet[name]
+	return ok, nil
+}
+
 // GetModelDetail returns the fully-populated status payload for one model.
 // The 90-minute window is fixed and not configurable via the public API
 // (callers must not get to control cost). The returned *StatusModel is
 // ready to be JSON-marshalled for the /api/public/status/model/:name endpoint.
+//
+// Unknown models (not routed in any non-deleted group) return
+// ErrStatusModelUnknown without hitting the samples/accounts/groups tables —
+// this is the DoS fast-path that lets the handler 404 hostile traffic cheaply.
 //
 // Cached for statusCacheTTL per-model. singleflight collapses concurrent
 // misses on the same model name.
@@ -333,6 +368,16 @@ func (s *StatusPageService) GetModelDetail(ctx context.Context, modelName string
 	}
 	if modelName == "" {
 		return nil, errors.New("status_page_service: model name required")
+	}
+
+	// Unknown-model fast-path: piggyback on the ListModels cache so a flood
+	// of GetModelDetail("bogus-<n>") calls costs no DB traffic at all.
+	known, err := s.isKnownModel(ctx, modelName)
+	if err != nil {
+		return nil, err
+	}
+	if !known {
+		return nil, ErrStatusModelUnknown
 	}
 
 	// Fresh cache hit?
