@@ -389,12 +389,19 @@ func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candid
 	}
 	now := p.nowFn()
 	freshCutoff := now.Add(-p.coldFreshness)
+	// Bound the scan by time too — without this, 24h × millions of samples
+	// would be loaded every RunTick. 2x coldFreshness keeps enough buffer for
+	// the "lastSampleTs for ordering" use case (a combo with a sample slightly
+	// older than coldFreshness still needs its timestamp to sort NULLS-FIRST
+	// candidates against it), while capping the read to a predictable window.
+	scanCutoff := now.Add(-2 * p.coldFreshness)
 
 	samples, err := p.entClient.ChannelHealthSample.Query().
 		Where(
 			channelhealthsample.AccountIDIn(accIDs...),
 			channelhealthsample.GroupIDIn(gIDs...),
 			channelhealthsample.ModelIn(models...),
+			channelhealthsample.BucketTsGTE(scanCutoff),
 		).
 		All(ctx)
 	if err != nil {

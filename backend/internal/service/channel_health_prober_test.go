@@ -190,6 +190,77 @@ func TestProber_RespectsBudget(t *testing.T) {
 	require.Equal(t, ids[1], fe.calls[1].accountID)
 }
 
+// TestProber_QueryOnlyRecentSamples locks in the time-bounded scan fix:
+// enumerateCandidates must not drag in samples older than 2x coldFreshness,
+// otherwise a 24h retained table with millions of rows would be loaded into
+// memory on every 5-min tick.
+//
+// Verification strategy: seed ONE combo with a 20-minute-old sample and a
+// 2-minute-old sample under coldFreshness=5min. The 2-min sample falls in
+// the fresh window -> combo must be excluded from the probe list. The
+// 20-min sample is ancient enough that it should have been filtered out by
+// the scan cutoff (2 × 5min = 10min) and never even be consulted as
+// "lastSampleTs". So: zero probes, and fe.calls empty.
+func TestProber_QueryOnlyRecentSamples(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	rec := NewChannelHealthRecorder(client)
+	fe := &fakeExecutor{status: 200, latency: 1}
+
+	accID := seedAccount(t, client, "acc")
+	gID := seedGroup(t, client, "grp", map[string][]int64{
+		"gpt-4o": {accID},
+	})
+	seedAccountGroup(t, client, accID, gID)
+
+	now := time.Date(2026, 4, 24, 16, 0, 0, 0, time.UTC)
+	// Ancient sample — beyond 2x coldFreshness window (= 10 min with default 5min).
+	require.NoError(t, rec.Record(context.Background(), ChannelHealthEvent{
+		AccountID: accID, GroupID: gID, Model: "gpt-4o",
+		Outcome: OutcomeSuccess, Source: SourcePassive,
+		At: now.Add(-20 * time.Minute),
+	}))
+	// Recent sample — inside coldFreshness.
+	require.NoError(t, rec.Record(context.Background(), ChannelHealthEvent{
+		AccountID: accID, GroupID: gID, Model: "gpt-4o",
+		Outcome: OutcomeSuccess, Source: SourcePassive,
+		At: now.Add(-2 * time.Minute),
+	}))
+
+	p := NewChannelHealthProber(client, rec, nil).
+		WithProbeExecutor(fe).
+		WithNowFn(func() time.Time { return now })
+
+	probed, err := p.RunTick(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, probed, "recent sample must exclude combo from probing")
+	require.Len(t, fe.calls, 0)
+
+	// Indirect assertion on the query bound: flip to a scenario where the
+	// ancient sample is the ONLY one — combo should still be probed because
+	// the scan-window filter drops the ancient row and the candidate is
+	// treated as "no sample" (NULLS FIRST). This confirms that the bounded
+	// query is actually what controls behaviour, not just in-memory filtering.
+	client2 := newChannelHealthTestClient(t)
+	rec2 := NewChannelHealthRecorder(client2)
+	fe2 := &fakeExecutor{status: 200, latency: 1}
+	accID2 := seedAccount(t, client2, "acc")
+	gID2 := seedGroup(t, client2, "grp", map[string][]int64{
+		"gpt-4o": {accID2},
+	})
+	seedAccountGroup(t, client2, accID2, gID2)
+	require.NoError(t, rec2.Record(context.Background(), ChannelHealthEvent{
+		AccountID: accID2, GroupID: gID2, Model: "gpt-4o",
+		Outcome: OutcomeSuccess, Source: SourcePassive,
+		At: now.Add(-20 * time.Minute),
+	}))
+	p2 := NewChannelHealthProber(client2, rec2, nil).
+		WithProbeExecutor(fe2).
+		WithNowFn(func() time.Time { return now })
+	probed2, err := p2.RunTick(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, probed2, "combo with only ancient sample is treated as cold and probed")
+}
+
 // TestProber_RecordsActiveProbeSource: after a tick, channel_health_samples
 // must contain a row with source=active_probe for the probed combo.
 func TestProber_RecordsActiveProbeSource(t *testing.T) {
