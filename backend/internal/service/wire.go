@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/google/wire"
@@ -353,16 +354,66 @@ func ProvideScheduledTestService(
 }
 
 // ProvideScheduledTestRunnerService creates and starts ScheduledTestRunnerService.
+// The ChannelHealthProber is injected via SetChannelHealthProber so the
+// 5-minute cron inside the runner fires active probes alongside the existing
+// scheduled test cadence.
 func ProvideScheduledTestRunnerService(
 	planRepo ScheduledTestPlanRepository,
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,
+	prober *ChannelHealthProber,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
 	svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg)
+	svc.SetChannelHealthProber(prober)
 	svc.Start()
 	return svc
+}
+
+// ChannelHealthWiring is a zero-sized marker type whose constructor wires the
+// passive ChannelHealthRecorder into every gateway service that emits samples.
+// Depending on it (via the Handlers or the cleanup closure) forces wire to
+// evaluate the setters before the HTTP server starts serving traffic.
+type ChannelHealthWiring struct{}
+
+// ProvideChannelHealthWiring calls SetChannelHealthRecorder on every gateway
+// service that supports it. Any gateway pointer may legitimately be nil in
+// trimmed-down test builds; the setters all null-check internally.
+func ProvideChannelHealthWiring(
+	recorder *ChannelHealthRecorder,
+	gateway *GatewayService,
+	openAIGateway *OpenAIGatewayService,
+	antigravityGateway *AntigravityGatewayService,
+	geminiMessagesCompat *GeminiMessagesCompatService,
+) *ChannelHealthWiring {
+	if gateway != nil {
+		gateway.SetChannelHealthRecorder(recorder)
+	}
+	if openAIGateway != nil {
+		openAIGateway.SetChannelHealthRecorder(recorder)
+	}
+	if antigravityGateway != nil {
+		antigravityGateway.SetChannelHealthRecorder(recorder)
+	}
+	if geminiMessagesCompat != nil {
+		geminiMessagesCompat.SetChannelHealthRecorder(recorder)
+	}
+	return &ChannelHealthWiring{}
+}
+
+// ProvideChannelHealthProber builds the prober with the tester adapter.
+func ProvideChannelHealthProber(
+	entClient *dbent.Client,
+	recorder *ChannelHealthRecorder,
+	tester *AccountTestService,
+) *ChannelHealthProber {
+	return NewChannelHealthProber(entClient, recorder, tester)
+}
+
+// ProvideStatusPageService wires the public status page aggregator.
+func ProvideStatusPageService(entClient *dbent.Client) *StatusPageService {
+	return NewStatusPageService(entClient)
 }
 
 // ProvideOpsScheduledReportService creates and starts OpsScheduledReportService.
@@ -421,6 +472,7 @@ var ProviderSet = wire.NewSet(
 	NewDashboardService,
 	ProvidePricingService,
 	NewBillingService,
+	NewModelMarketplaceService,
 	NewBillingCacheService,
 	NewAnnouncementService,
 	NewAdminService,
@@ -491,4 +543,8 @@ var ProviderSet = wire.NewSet(
 	ProvideScheduledTestService,
 	ProvideScheduledTestRunnerService,
 	NewGroupCapacityService,
+	NewChannelHealthRecorder,
+	ProvideChannelHealthProber,
+	ProvideStatusPageService,
+	ProvideChannelHealthWiring,
 )

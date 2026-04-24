@@ -105,6 +105,9 @@ func registerRoutes(
 	// 通用路由（健康检查、状态等）
 	routes.RegisterCommonRoutes(r)
 
+	// 公共状态页路由（无需认证，暴露给匿名访客）
+	routes.RegisterPublicStatusRoutes(r, h.PublicStatus)
+
 	// API v1
 	v1 := r.Group("/api/v1")
 

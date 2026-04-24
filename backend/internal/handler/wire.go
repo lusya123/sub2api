@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
+	"github.com/Wei-Shaw/sub2api/internal/handler/public"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/google/wire"
@@ -13,6 +14,7 @@ func ProvideAdminHandlers(
 	userHandler *admin.UserHandler,
 	groupHandler *admin.GroupHandler,
 	accountHandler *admin.AccountHandler,
+	modelMarketplaceHandler *admin.ModelMarketplaceHandler,
 	announcementHandler *admin.AnnouncementHandler,
 	dataManagementHandler *admin.DataManagementHandler,
 	backupHandler *admin.BackupHandler,
@@ -41,6 +43,7 @@ func ProvideAdminHandlers(
 		User:                  userHandler,
 		Group:                 groupHandler,
 		Account:               accountHandler,
+		ModelMarketplace:      modelMarketplaceHandler,
 		Announcement:          announcementHandler,
 		DataManagement:        dataManagementHandler,
 		Backup:                backupHandler,
@@ -92,8 +95,12 @@ func ProvideHandlers(
 	soraClientHandler *SoraClientHandler,
 	settingHandler *SettingHandler,
 	totpHandler *TotpHandler,
+	publicStatusHandler *public.PublicStatusHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
+	// Depend on the marker so wire evaluates the recorder setters before the
+	// handlers ever get constructed / called.
+	_ *service.ChannelHealthWiring,
 ) *Handlers {
 	return &Handlers{
 		Auth:          authHandler,
@@ -110,6 +117,7 @@ func ProvideHandlers(
 		SoraClient:    soraClientHandler,
 		Setting:       settingHandler,
 		Totp:          totpHandler,
+		PublicStatus:  publicStatusHandler,
 	}
 }
 
@@ -134,6 +142,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewUserHandler,
 	admin.NewGroupHandler,
 	admin.NewAccountHandler,
+	admin.NewModelMarketplaceHandler,
 	admin.NewAnnouncementHandler,
 	admin.NewDataManagementHandler,
 	admin.NewBackupHandler,
@@ -156,6 +165,9 @@ var ProviderSet = wire.NewSet(
 	admin.NewScheduledTestHandler,
 	admin.NewAuditHandler,
 	admin.NewRefundInspectionHandler,
+
+	// Public handlers (no auth)
+	public.NewPublicStatusHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
+	"github.com/Wei-Shaw/sub2api/internal/handler/public"
 )
 
 // AdminHandlers contains all admin-related HTTP handlers
@@ -10,6 +11,7 @@ type AdminHandlers struct {
 	User                  *admin.UserHandler
 	Group                 *admin.GroupHandler
 	Account               *admin.AccountHandler
+	ModelMarketplace      *admin.ModelMarketplaceHandler
 	Announcement          *admin.AnnouncementHandler
 	DataManagement        *admin.DataManagementHandler
 	Backup                *admin.BackupHandler
@@ -50,6 +52,7 @@ type Handlers struct {
 	SoraClient    *SoraClientHandler
 	Setting       *SettingHandler
 	Totp          *TotpHandler
+	PublicStatus  *public.PublicStatusHandler
 }
 
 // BuildInfo contains build-time information
