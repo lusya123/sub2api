@@ -29,10 +29,10 @@ func NewPublicStatusHandler(svc *service.StatusPageService) *PublicStatusHandler
 
 // ListModels handles GET /api/public/status/models.
 //
-// Response shape is a plain array of StatusModel (no envelope) — keeps the
-// public contract independent of the internal {code,data,message} wrapper
-// used by authenticated endpoints, so a future cache or CDN layer can store
-// these verbatim without needing to strip envelopes.
+// Response shape is a JSON object `{"models": [...]}` — mirrors the object
+// response style used by GetModelDetail and keeps the frontend client free
+// to add sibling fields (pagination, generated_at, etc.) later without
+// breaking callers that already destructure `data.models`.
 func (h *PublicStatusHandler) ListModels(c *gin.Context) {
 	if h == nil || h.svc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "status service not available"})
@@ -46,7 +46,7 @@ func (h *PublicStatusHandler) ListModels(c *gin.Context) {
 	if models == nil {
 		models = []service.StatusModel{}
 	}
-	c.JSON(http.StatusOK, models)
+	c.JSON(http.StatusOK, gin.H{"models": models})
 }
 
 // GetModelDetail handles GET /api/public/status/model/:name.
