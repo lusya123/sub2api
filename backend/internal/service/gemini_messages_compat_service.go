@@ -55,15 +55,15 @@ type GeminiMessagesCompatService struct {
 	cfg                       *config.Config
 	responseHeaderFilter      *responseheaders.CompiledHeaderFilter
 
-	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
+	// channelHealthEnqueuer 在 gateway 完成点做被动采样,喂给公开状态页。
 	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
-	channelHealthRecorder *ChannelHealthRecorder
+	channelHealthEnqueuer ChannelHealthEnqueuer
 }
 
-// SetChannelHealthRecorder 注入被动健康采样 Recorder。
-func (s *GeminiMessagesCompatService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+// SetChannelHealthRecorder 注入被动健康采样 Enqueuer。接受接口类型。
+func (s *GeminiMessagesCompatService) SetChannelHealthRecorder(r ChannelHealthEnqueuer) {
 	if s != nil {
-		s.channelHealthRecorder = r
+		s.channelHealthEnqueuer = r
 	}
 }
 
@@ -1032,7 +1032,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	}
 
 	// 被动健康采样: Gemini messages-compat 分支。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
 
 	// 图片生成计费
 	imageCount := 0
@@ -1538,7 +1538,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 
 	// 被动健康采样: Gemini native (ForwardNative) 分支。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
 
 	// 图片生成计费
 	imageCount := 0

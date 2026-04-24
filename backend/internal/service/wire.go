@@ -377,27 +377,41 @@ func ProvideScheduledTestRunnerService(
 // evaluate the setters before the HTTP server starts serving traffic.
 type ChannelHealthWiring struct{}
 
+// ProvideAsyncChannelHealthRecorder wraps the synchronous recorder in a
+// bounded buffered-channel async adapter. Gateway hot paths must use this
+// adapter (not the raw recorder) so a slow DB upsert can never backpressure
+// live request traffic. The prober keeps using the synchronous recorder —
+// it is already budget-controlled so drops would be strictly worse than
+// blocking on one upsert.
+func ProvideAsyncChannelHealthRecorder(recorder *ChannelHealthRecorder) *AsyncChannelHealthRecorder {
+	return NewAsyncChannelHealthRecorder(recorder, 0) // 0 = defaultAsyncBufSize (1024)
+}
+
 // ProvideChannelHealthWiring calls SetChannelHealthRecorder on every gateway
 // service that supports it. Any gateway pointer may legitimately be nil in
 // trimmed-down test builds; the setters all null-check internally.
+//
+// Gateways receive the AsyncChannelHealthRecorder (fire-and-forget, buffer
+// drops on saturation). The prober wire path takes the plain recorder; see
+// ProvideChannelHealthProber.
 func ProvideChannelHealthWiring(
-	recorder *ChannelHealthRecorder,
+	asyncRecorder *AsyncChannelHealthRecorder,
 	gateway *GatewayService,
 	openAIGateway *OpenAIGatewayService,
 	antigravityGateway *AntigravityGatewayService,
 	geminiMessagesCompat *GeminiMessagesCompatService,
 ) *ChannelHealthWiring {
 	if gateway != nil {
-		gateway.SetChannelHealthRecorder(recorder)
+		gateway.SetChannelHealthRecorder(asyncRecorder)
 	}
 	if openAIGateway != nil {
-		openAIGateway.SetChannelHealthRecorder(recorder)
+		openAIGateway.SetChannelHealthRecorder(asyncRecorder)
 	}
 	if antigravityGateway != nil {
-		antigravityGateway.SetChannelHealthRecorder(recorder)
+		antigravityGateway.SetChannelHealthRecorder(asyncRecorder)
 	}
 	if geminiMessagesCompat != nil {
-		geminiMessagesCompat.SetChannelHealthRecorder(recorder)
+		geminiMessagesCompat.SetChannelHealthRecorder(asyncRecorder)
 	}
 	return &ChannelHealthWiring{}
 }
@@ -544,6 +558,7 @@ var ProviderSet = wire.NewSet(
 	ProvideScheduledTestRunnerService,
 	NewGroupCapacityService,
 	NewChannelHealthRecorder,
+	ProvideAsyncChannelHealthRecorder,
 	ProvideChannelHealthProber,
 	ProvideStatusPageService,
 	ProvideChannelHealthWiring,

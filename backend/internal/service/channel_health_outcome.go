@@ -1,10 +1,8 @@
 package service
 
 import (
-	"context"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,20 +31,25 @@ func mapStatusToOutcome(statusCode int) HealthOutcome {
 
 // emitChannelHealthSample 在 gateway 完成点被动采样一次请求的健康数据。
 //
-// 该函数是 fire-and-forget 语义: Record 返回 error 只写一条 warn log,绝对
-// 不阻断请求响应路径。recorder 可能为 nil (wire DI 未接入),此时直接 no-op。
+// 该函数是 fire-and-forget 语义: TryEnqueue 的 bool 返回值被刻意忽略 (drop
+// 监控走 AsyncChannelHealthRecorder.Dropped()),绝对不阻断请求响应路径。
+// enqueuer 可能为 nil (wire DI 未接入,或 mock),此时直接 no-op。
 //
 // groupID 从 gin.Context 中的 "api_key" (*APIKey) 读取,0 表示无分组。
 // startTime 用来计算 latency_ms。
+//
+// 参数签名接受的是 ChannelHealthEnqueuer 接口而非 *ChannelHealthRecorder 本体,
+// 这样生产环境走 AsyncChannelHealthRecorder (非阻塞),测试和主动探针走同步的
+// *ChannelHealthRecorder——同一套调用点,零分支。
 func emitChannelHealthSample(
 	c *gin.Context,
-	recorder *ChannelHealthRecorder,
+	enqueuer ChannelHealthEnqueuer,
 	account *Account,
 	model string,
 	statusCode int,
 	startTime time.Time,
 ) {
-	if recorder == nil || account == nil {
+	if enqueuer == nil || account == nil {
 		return
 	}
 	if model == "" {
@@ -67,12 +70,10 @@ func emitChannelHealthSample(
 		latencyMs = 0
 	}
 
-	// 优先使用 gin 请求 ctx; 缺失时退化到 Background,避免因 c/Request 为 nil 崩溃。
-	ctx := context.Background()
-	if c != nil && c.Request != nil {
-		ctx = c.Request.Context()
-	}
-	if err := recorder.Record(ctx, ChannelHealthEvent{
+	// Fire-and-forget; the async worker owns its own ctx with timeout, so
+	// we don't pass c.Request.Context() here (a cancelled request must not
+	// cancel the sample we're already enqueuing).
+	_ = enqueuer.TryEnqueue(ChannelHealthEvent{
 		AccountID: account.ID,
 		GroupID:   groupID,
 		Model:     model,
@@ -80,8 +81,5 @@ func emitChannelHealthSample(
 		LatencyMs: latencyMs,
 		Source:    SourcePassive,
 		At:        time.Now(),
-	}); err != nil {
-		logger.LegacyPrintf("service.channel_health", "passive sample dropped: account=%d group=%d model=%s status=%d err=%v",
-			account.ID, groupID, model, statusCode, err)
-	}
+	})
 }

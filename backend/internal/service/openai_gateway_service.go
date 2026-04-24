@@ -338,15 +338,16 @@ type OpenAIGatewayService struct {
 	responseHeaderFilter  *responseheaders.CompiledHeaderFilter
 	codexSnapshotThrottle *accountWriteThrottle
 
-	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
+	// channelHealthEnqueuer 在 gateway 完成点做被动采样,喂给公开状态页。
 	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
-	channelHealthRecorder *ChannelHealthRecorder
+	channelHealthEnqueuer ChannelHealthEnqueuer
 }
 
-// SetChannelHealthRecorder 注入被动健康采样 Recorder。
-func (s *OpenAIGatewayService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+// SetChannelHealthRecorder 注入被动健康采样 Enqueuer。接受接口类型,运行时通常
+// 是 *AsyncChannelHealthRecorder。
+func (s *OpenAIGatewayService) SetChannelHealthRecorder(r ChannelHealthEnqueuer) {
 	if s != nil {
-		s.channelHealthRecorder = r
+		s.channelHealthEnqueuer = r
 	}
 }
 
@@ -2298,7 +2299,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 		// 被动健康采样: 请求完整走完后记录一条 (account, group, model, outcome, latency)。
 		// Record 内部出错只 warn 不阻塞响应。
-		emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+		emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
 
 		// Extract and save Codex usage snapshot from response headers (for OAuth accounts)
 		if account.Type == AccountTypeOAuth {
@@ -2466,7 +2467,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	// 被动健康采样 (passthrough 分支)。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, reqModel, resp.StatusCode, startTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, reqModel, resp.StatusCode, startTime)
 
 	if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
 		s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)

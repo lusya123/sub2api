@@ -571,17 +571,22 @@ type GatewayService struct {
 	debugGatewayBodyFile  atomic.Pointer[os.File] // non-nil when SUB2API_DEBUG_GATEWAY_BODY is set
 	tlsFPProfileService   *TLSFingerprintProfileService
 
-	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
-	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
-	// 暂不进入构造器签名以免连锁改 wire 和 8 个 gateway 测试工厂,
-	// 下个 wire DI 任务会把它接到 ProviderSet 里。
-	channelHealthRecorder *ChannelHealthRecorder
+	// channelHealthEnqueuer 在 gateway 完成点做被动采样,喂给公开状态页。
+	// 运行时注入的是 *AsyncChannelHealthRecorder (非阻塞 fire-and-forget),
+	// 测试可以注入 *ChannelHealthRecorder 直接走同步路径;nil 时钩子自动 no-op。
+	// 暂不进入构造器签名以免连锁改 wire 和 8 个 gateway 测试工厂。
+	channelHealthEnqueuer ChannelHealthEnqueuer
 }
 
-// SetChannelHealthRecorder 注入被动健康采样 Recorder。零次或多次调用都安全。
-func (s *GatewayService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+// SetChannelHealthRecorder 注入被动健康采样 Enqueuer。零次或多次调用都安全。
+// 接收接口类型,所以 *ChannelHealthRecorder 和 *AsyncChannelHealthRecorder 都可以传。
+// 方法名保持旧名以避免连锁改 wire;语义是"设置 enqueuer"。
+func (s *GatewayService) SetChannelHealthRecorder(r ChannelHealthEnqueuer) {
 	if s != nil {
-		s.channelHealthRecorder = r
+		// Interface nil-check: a typed-nil *ChannelHealthRecorder would sneak
+		// past the plain `r != nil` guard and crash TryEnqueue. Accept any
+		// non-nil-interface value; each enqueuer null-checks its own receiver.
+		s.channelHealthEnqueuer = r
 	}
 }
 
@@ -4673,7 +4678,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	}
 
 	// 被动健康采样: Anthropic 路径 (stream + non-stream 合流后一次记录)。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-request-id"),
@@ -4928,7 +4933,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	}
 
 	// 被动健康采样: Anthropic API key passthrough 分支。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, input.OriginalModel, resp.StatusCode, input.StartTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, input.OriginalModel, resp.StatusCode, input.StartTime)
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-request-id"),
@@ -5439,7 +5444,7 @@ func (s *GatewayService) forwardBedrock(
 	}
 
 	// 被动健康采样: Bedrock 分支。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, reqModel, resp.StatusCode, startTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, reqModel, resp.StatusCode, startTime)
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-amzn-requestid"),

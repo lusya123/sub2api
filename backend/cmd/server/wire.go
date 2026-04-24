@@ -95,6 +95,7 @@ func provideCleanup(
 	openAIGateway *service.OpenAIGatewayService,
 	scheduledTestRunner *service.ScheduledTestRunnerService,
 	backupSvc *service.BackupService,
+	asyncHealthRecorder *service.AsyncChannelHealthRecorder,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -234,6 +235,19 @@ func provideCleanup(
 			{"BackupService", func() error {
 				if backupSvc != nil {
 					backupSvc.Stop()
+				}
+				return nil
+			}},
+			{"AsyncChannelHealthRecorder", func() error {
+				if asyncHealthRecorder == nil {
+					return nil
+				}
+				// 5s drain budget — matches each per-sample Record ctx
+				// timeout so a single stuck upsert can't block the whole
+				// shutdown. Buffer capacity = 1024, so worst-case drop on
+				// clean shutdown is 1024 samples.
+				if err := asyncHealthRecorder.Shutdown(5 * time.Second); err != nil {
+					log.Printf("[Cleanup] AsyncChannelHealthRecorder drain warning: %v", err)
 				}
 				return nil
 			}},

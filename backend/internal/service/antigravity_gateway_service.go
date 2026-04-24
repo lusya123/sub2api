@@ -879,15 +879,15 @@ type AntigravityGatewayService struct {
 	schedulerSnapshot *SchedulerSnapshotService
 	internal500Cache  Internal500CounterCache // INTERNAL 500 渐进惩罚计数器
 
-	// channelHealthRecorder 在 gateway 完成点做被动采样,喂给公开状态页。
+	// channelHealthEnqueuer 在 gateway 完成点做被动采样,喂给公开状态页。
 	// 通过 SetChannelHealthRecorder 注入;nil 时钩子自动 no-op。
-	channelHealthRecorder *ChannelHealthRecorder
+	channelHealthEnqueuer ChannelHealthEnqueuer
 }
 
-// SetChannelHealthRecorder 注入被动健康采样 Recorder。
-func (s *AntigravityGatewayService) SetChannelHealthRecorder(r *ChannelHealthRecorder) {
+// SetChannelHealthRecorder 注入被动健康采样 Enqueuer。接受接口类型。
+func (s *AntigravityGatewayService) SetChannelHealthRecorder(r ChannelHealthEnqueuer) {
 	if s != nil {
-		s.channelHealthRecorder = r
+		s.channelHealthEnqueuer = r
 	}
 }
 
@@ -1772,7 +1772,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 	}
 
 	// 被动健康采样: Antigravity Claude 分支。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
 
 	return &ForwardResult{
 		RequestID:        requestID,
@@ -2462,7 +2462,7 @@ handleSuccess:
 	}
 
 	// 被动健康采样: Antigravity Gemini 分支。
-	emitChannelHealthSample(c, s.channelHealthRecorder, account, originalModel, resp.StatusCode, startTime)
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
 
 	// 判断是否为图片生成模型
 	imageCount := 0

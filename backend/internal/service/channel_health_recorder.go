@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
 // HealthOutcome 描述一次请求 / 探针结果在健康指标意义上的分类。
@@ -177,4 +179,155 @@ ON CONFLICT (bucket_ts, account_id, group_id, model) DO UPDATE SET
   latency_p50_ms     = ` + latencyExpr
 
 	return q, args
+}
+
+// ChannelHealthEnqueuer is the surface emitChannelHealthSample depends on.
+// Two implementations:
+//
+//  1. *ChannelHealthRecorder itself — TryEnqueue just wraps Record, keeping
+//     behaviour identical for callers that want the old synchronous path
+//     (the prober, test fixtures).
+//  2. *AsyncChannelHealthRecorder — buffered channel + background worker,
+//     used by gateway hot paths so a slow DB never backpressures live
+//     request traffic.
+type ChannelHealthEnqueuer interface {
+	TryEnqueue(e ChannelHealthEvent) bool
+}
+
+// TryEnqueue on the raw recorder runs the upsert synchronously and always
+// returns true. It exists so tests (and the prober, which is already budget-
+// bounded) can keep using *ChannelHealthRecorder directly against the
+// ChannelHealthEnqueuer interface.
+func (r *ChannelHealthRecorder) TryEnqueue(e ChannelHealthEvent) bool {
+	if r == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := r.Record(ctx, e); err != nil {
+		logger.LegacyPrintf("service.channel_health",
+			"sync TryEnqueue dropped sample: account=%d group=%d model=%s err=%v",
+			e.AccountID, e.GroupID, e.Model, err)
+		return false
+	}
+	return true
+}
+
+// AsyncChannelHealthRecorder wraps a synchronous *ChannelHealthRecorder with a
+// bounded buffer + a single background worker. Gateway completion hooks push
+// samples via TryEnqueue and never block: when the buffer is full the event
+// is dropped and the dropped-counter incremented, so the Recorder can never
+// backpressure the HTTP request path.
+//
+// Semantics:
+//   - TryEnqueue is non-blocking, returns false + increments dropped counter
+//     on buffer-full.
+//   - A single worker goroutine drains the channel and calls the inner
+//     Recorder.Record with a 5s context timeout per sample. One slow DB
+//     upsert does not stall the queue permanently — it stalls only that one
+//     sample. Subsequent samples keep flowing once the timeout elapses.
+//   - Shutdown(t) closes the buffer and waits up to `t` for the worker to
+//     finish draining. After Shutdown returns, TryEnqueue always drops.
+//
+// Multi-instance note: the dropped counter is PER-PROCESS. In a
+// horizontally-scaled deployment each replica has its own counter; aggregate
+// monitoring must sum across replicas. This is intentional — queue fullness
+// is a local condition (one replica's DB pool contention), not a global one.
+type AsyncChannelHealthRecorder struct {
+	inner   *ChannelHealthRecorder
+	ch      chan ChannelHealthEvent
+	done    chan struct{}
+	dropped atomic.Uint64
+	closed  atomic.Bool
+}
+
+// defaultAsyncBufSize is the enqueue channel capacity used when the caller
+// passes <=0. 1024 gives ~1s of headroom at 1k QPS before drops start — well
+// above the steady-state passive sample rate for a single sub2api replica.
+const defaultAsyncBufSize = 1024
+
+// NewAsyncChannelHealthRecorder wires the async wrapper and starts its
+// background worker. The worker stops when Shutdown is called (or the
+// process exits — the goroutine is not registered with a lifecycle manager
+// because the cleanup path already sequences shutdown).
+func NewAsyncChannelHealthRecorder(inner *ChannelHealthRecorder, bufSize int) *AsyncChannelHealthRecorder {
+	if bufSize <= 0 {
+		bufSize = defaultAsyncBufSize
+	}
+	r := &AsyncChannelHealthRecorder{
+		inner: inner,
+		ch:    make(chan ChannelHealthEvent, bufSize),
+		done:  make(chan struct{}),
+	}
+	go r.worker()
+	return r
+}
+
+// TryEnqueue adds e to the buffer without blocking. Returns false when the
+// buffer is full (so the gateway hot path is never stalled). Callers should
+// treat the bool as advisory only — drop monitoring is done via Dropped().
+func (r *AsyncChannelHealthRecorder) TryEnqueue(e ChannelHealthEvent) bool {
+	if r == nil || r.closed.Load() {
+		// Post-shutdown drops silently; do NOT increment dropped here because
+		// that metric is for "queue full at runtime", not "queue closed".
+		return false
+	}
+	select {
+	case r.ch <- e:
+		return true
+	default:
+		r.dropped.Add(1)
+		return false
+	}
+}
+
+// Dropped returns the total number of samples that failed to enqueue due to
+// the buffer being full. Monotonically increasing; callers should diff
+// across scrapes to compute rate. Per-process only (see type doc).
+func (r *AsyncChannelHealthRecorder) Dropped() uint64 {
+	if r == nil {
+		return 0
+	}
+	return r.dropped.Load()
+}
+
+// worker is the single goroutine that drains the channel. One-at-a-time is
+// intentional: the underlying upsert is already one round-trip, and
+// serialising drains prevents us from hammering the DB with parallel writes
+// from a single replica under load.
+func (r *AsyncChannelHealthRecorder) worker() {
+	defer close(r.done)
+	for e := range r.ch {
+		if r.inner == nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := r.inner.Record(ctx, e); err != nil {
+			logger.LegacyPrintf("service.channel_health",
+				"async sample dropped: account=%d group=%d model=%s err=%v",
+				e.AccountID, e.GroupID, e.Model, err)
+		}
+		cancel()
+	}
+}
+
+// Shutdown closes the enqueue channel and waits up to `timeout` for the
+// worker to drain everything that was already in flight. Returns an error if
+// the timeout elapses before the worker exits (caller should log + proceed;
+// an incomplete drain loses at most `bufSize` samples).
+func (r *AsyncChannelHealthRecorder) Shutdown(timeout time.Duration) error {
+	if r == nil {
+		return nil
+	}
+	// CAS so two overlapping Shutdown calls don't double-close the channel.
+	if !r.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+	close(r.ch)
+	select {
+	case <-r.done:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("async_channel_health_recorder: shutdown timeout after %s", timeout)
+	}
 }
