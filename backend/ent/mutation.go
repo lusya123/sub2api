@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -52,6 +53,7 @@ const (
 	TypeAccountGroup            = "AccountGroup"
 	TypeAnnouncement            = "Announcement"
 	TypeAnnouncementRead        = "AnnouncementRead"
+	TypeChannelHealthSample     = "ChannelHealthSample"
 	TypeErrorPassthroughRule    = "ErrorPassthroughRule"
 	TypeGroup                   = "Group"
 	TypeIdempotencyRecord       = "IdempotencyRecord"
@@ -6877,6 +6879,1112 @@ func (m *AnnouncementReadMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown AnnouncementRead edge %s", name)
+}
+
+// ChannelHealthSampleMutation represents an operation that mutates the ChannelHealthSample nodes in the graph.
+type ChannelHealthSampleMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	bucket_ts             *time.Time
+	account_id            *int64
+	addaccount_id         *int64
+	group_id              *int64
+	addgroup_id           *int64
+	model                 *string
+	success_count         *int
+	addsuccess_count      *int
+	error_count           *int
+	adderror_count        *int
+	rate_limited_count    *int
+	addrate_limited_count *int
+	overloaded_count      *int
+	addoverloaded_count   *int
+	latency_p50_ms        *int
+	addlatency_p50_ms     *int
+	source                *string
+	created_at            *time.Time
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*ChannelHealthSample, error)
+	predicates            []predicate.ChannelHealthSample
+}
+
+var _ ent.Mutation = (*ChannelHealthSampleMutation)(nil)
+
+// channelhealthsampleOption allows management of the mutation configuration using functional options.
+type channelhealthsampleOption func(*ChannelHealthSampleMutation)
+
+// newChannelHealthSampleMutation creates new mutation for the ChannelHealthSample entity.
+func newChannelHealthSampleMutation(c config, op Op, opts ...channelhealthsampleOption) *ChannelHealthSampleMutation {
+	m := &ChannelHealthSampleMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeChannelHealthSample,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withChannelHealthSampleID sets the ID field of the mutation.
+func withChannelHealthSampleID(id int64) channelhealthsampleOption {
+	return func(m *ChannelHealthSampleMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ChannelHealthSample
+		)
+		m.oldValue = func(ctx context.Context) (*ChannelHealthSample, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ChannelHealthSample.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withChannelHealthSample sets the old ChannelHealthSample of the mutation.
+func withChannelHealthSample(node *ChannelHealthSample) channelhealthsampleOption {
+	return func(m *ChannelHealthSampleMutation) {
+		m.oldValue = func(context.Context) (*ChannelHealthSample, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ChannelHealthSampleMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ChannelHealthSampleMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ChannelHealthSample entities.
+func (m *ChannelHealthSampleMutation) SetID(id int64) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ChannelHealthSampleMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ChannelHealthSampleMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ChannelHealthSample.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketTs sets the "bucket_ts" field.
+func (m *ChannelHealthSampleMutation) SetBucketTs(t time.Time) {
+	m.bucket_ts = &t
+}
+
+// BucketTs returns the value of the "bucket_ts" field in the mutation.
+func (m *ChannelHealthSampleMutation) BucketTs() (r time.Time, exists bool) {
+	v := m.bucket_ts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketTs returns the old "bucket_ts" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldBucketTs(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketTs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketTs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketTs: %w", err)
+	}
+	return oldValue.BucketTs, nil
+}
+
+// ResetBucketTs resets all changes to the "bucket_ts" field.
+func (m *ChannelHealthSampleMutation) ResetBucketTs() {
+	m.bucket_ts = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *ChannelHealthSampleMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *ChannelHealthSampleMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldAccountID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *ChannelHealthSampleMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *ChannelHealthSampleMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *ChannelHealthSampleMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *ChannelHealthSampleMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *ChannelHealthSampleMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *ChannelHealthSampleMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *ChannelHealthSampleMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *ChannelHealthSampleMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetModel sets the "model" field.
+func (m *ChannelHealthSampleMutation) SetModel(s string) {
+	m.model = &s
+}
+
+// Model returns the value of the "model" field in the mutation.
+func (m *ChannelHealthSampleMutation) Model() (r string, exists bool) {
+	v := m.model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModel returns the old "model" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldModel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModel: %w", err)
+	}
+	return oldValue.Model, nil
+}
+
+// ResetModel resets all changes to the "model" field.
+func (m *ChannelHealthSampleMutation) ResetModel() {
+	m.model = nil
+}
+
+// SetSuccessCount sets the "success_count" field.
+func (m *ChannelHealthSampleMutation) SetSuccessCount(i int) {
+	m.success_count = &i
+	m.addsuccess_count = nil
+}
+
+// SuccessCount returns the value of the "success_count" field in the mutation.
+func (m *ChannelHealthSampleMutation) SuccessCount() (r int, exists bool) {
+	v := m.success_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSuccessCount returns the old "success_count" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldSuccessCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSuccessCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSuccessCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSuccessCount: %w", err)
+	}
+	return oldValue.SuccessCount, nil
+}
+
+// AddSuccessCount adds i to the "success_count" field.
+func (m *ChannelHealthSampleMutation) AddSuccessCount(i int) {
+	if m.addsuccess_count != nil {
+		*m.addsuccess_count += i
+	} else {
+		m.addsuccess_count = &i
+	}
+}
+
+// AddedSuccessCount returns the value that was added to the "success_count" field in this mutation.
+func (m *ChannelHealthSampleMutation) AddedSuccessCount() (r int, exists bool) {
+	v := m.addsuccess_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSuccessCount resets all changes to the "success_count" field.
+func (m *ChannelHealthSampleMutation) ResetSuccessCount() {
+	m.success_count = nil
+	m.addsuccess_count = nil
+}
+
+// SetErrorCount sets the "error_count" field.
+func (m *ChannelHealthSampleMutation) SetErrorCount(i int) {
+	m.error_count = &i
+	m.adderror_count = nil
+}
+
+// ErrorCount returns the value of the "error_count" field in the mutation.
+func (m *ChannelHealthSampleMutation) ErrorCount() (r int, exists bool) {
+	v := m.error_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorCount returns the old "error_count" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldErrorCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorCount: %w", err)
+	}
+	return oldValue.ErrorCount, nil
+}
+
+// AddErrorCount adds i to the "error_count" field.
+func (m *ChannelHealthSampleMutation) AddErrorCount(i int) {
+	if m.adderror_count != nil {
+		*m.adderror_count += i
+	} else {
+		m.adderror_count = &i
+	}
+}
+
+// AddedErrorCount returns the value that was added to the "error_count" field in this mutation.
+func (m *ChannelHealthSampleMutation) AddedErrorCount() (r int, exists bool) {
+	v := m.adderror_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetErrorCount resets all changes to the "error_count" field.
+func (m *ChannelHealthSampleMutation) ResetErrorCount() {
+	m.error_count = nil
+	m.adderror_count = nil
+}
+
+// SetRateLimitedCount sets the "rate_limited_count" field.
+func (m *ChannelHealthSampleMutation) SetRateLimitedCount(i int) {
+	m.rate_limited_count = &i
+	m.addrate_limited_count = nil
+}
+
+// RateLimitedCount returns the value of the "rate_limited_count" field in the mutation.
+func (m *ChannelHealthSampleMutation) RateLimitedCount() (r int, exists bool) {
+	v := m.rate_limited_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRateLimitedCount returns the old "rate_limited_count" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldRateLimitedCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRateLimitedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRateLimitedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRateLimitedCount: %w", err)
+	}
+	return oldValue.RateLimitedCount, nil
+}
+
+// AddRateLimitedCount adds i to the "rate_limited_count" field.
+func (m *ChannelHealthSampleMutation) AddRateLimitedCount(i int) {
+	if m.addrate_limited_count != nil {
+		*m.addrate_limited_count += i
+	} else {
+		m.addrate_limited_count = &i
+	}
+}
+
+// AddedRateLimitedCount returns the value that was added to the "rate_limited_count" field in this mutation.
+func (m *ChannelHealthSampleMutation) AddedRateLimitedCount() (r int, exists bool) {
+	v := m.addrate_limited_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRateLimitedCount resets all changes to the "rate_limited_count" field.
+func (m *ChannelHealthSampleMutation) ResetRateLimitedCount() {
+	m.rate_limited_count = nil
+	m.addrate_limited_count = nil
+}
+
+// SetOverloadedCount sets the "overloaded_count" field.
+func (m *ChannelHealthSampleMutation) SetOverloadedCount(i int) {
+	m.overloaded_count = &i
+	m.addoverloaded_count = nil
+}
+
+// OverloadedCount returns the value of the "overloaded_count" field in the mutation.
+func (m *ChannelHealthSampleMutation) OverloadedCount() (r int, exists bool) {
+	v := m.overloaded_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOverloadedCount returns the old "overloaded_count" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldOverloadedCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOverloadedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOverloadedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOverloadedCount: %w", err)
+	}
+	return oldValue.OverloadedCount, nil
+}
+
+// AddOverloadedCount adds i to the "overloaded_count" field.
+func (m *ChannelHealthSampleMutation) AddOverloadedCount(i int) {
+	if m.addoverloaded_count != nil {
+		*m.addoverloaded_count += i
+	} else {
+		m.addoverloaded_count = &i
+	}
+}
+
+// AddedOverloadedCount returns the value that was added to the "overloaded_count" field in this mutation.
+func (m *ChannelHealthSampleMutation) AddedOverloadedCount() (r int, exists bool) {
+	v := m.addoverloaded_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOverloadedCount resets all changes to the "overloaded_count" field.
+func (m *ChannelHealthSampleMutation) ResetOverloadedCount() {
+	m.overloaded_count = nil
+	m.addoverloaded_count = nil
+}
+
+// SetLatencyP50Ms sets the "latency_p50_ms" field.
+func (m *ChannelHealthSampleMutation) SetLatencyP50Ms(i int) {
+	m.latency_p50_ms = &i
+	m.addlatency_p50_ms = nil
+}
+
+// LatencyP50Ms returns the value of the "latency_p50_ms" field in the mutation.
+func (m *ChannelHealthSampleMutation) LatencyP50Ms() (r int, exists bool) {
+	v := m.latency_p50_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLatencyP50Ms returns the old "latency_p50_ms" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldLatencyP50Ms(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLatencyP50Ms is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLatencyP50Ms requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLatencyP50Ms: %w", err)
+	}
+	return oldValue.LatencyP50Ms, nil
+}
+
+// AddLatencyP50Ms adds i to the "latency_p50_ms" field.
+func (m *ChannelHealthSampleMutation) AddLatencyP50Ms(i int) {
+	if m.addlatency_p50_ms != nil {
+		*m.addlatency_p50_ms += i
+	} else {
+		m.addlatency_p50_ms = &i
+	}
+}
+
+// AddedLatencyP50Ms returns the value that was added to the "latency_p50_ms" field in this mutation.
+func (m *ChannelHealthSampleMutation) AddedLatencyP50Ms() (r int, exists bool) {
+	v := m.addlatency_p50_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetLatencyP50Ms resets all changes to the "latency_p50_ms" field.
+func (m *ChannelHealthSampleMutation) ResetLatencyP50Ms() {
+	m.latency_p50_ms = nil
+	m.addlatency_p50_ms = nil
+}
+
+// SetSource sets the "source" field.
+func (m *ChannelHealthSampleMutation) SetSource(s string) {
+	m.source = &s
+}
+
+// Source returns the value of the "source" field in the mutation.
+func (m *ChannelHealthSampleMutation) Source() (r string, exists bool) {
+	v := m.source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSource returns the old "source" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldSource(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+	}
+	return oldValue.Source, nil
+}
+
+// ResetSource resets all changes to the "source" field.
+func (m *ChannelHealthSampleMutation) ResetSource() {
+	m.source = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ChannelHealthSampleMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ChannelHealthSampleMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ChannelHealthSample entity.
+// If the ChannelHealthSample object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelHealthSampleMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ChannelHealthSampleMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the ChannelHealthSampleMutation builder.
+func (m *ChannelHealthSampleMutation) Where(ps ...predicate.ChannelHealthSample) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ChannelHealthSampleMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ChannelHealthSampleMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ChannelHealthSample, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ChannelHealthSampleMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ChannelHealthSampleMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ChannelHealthSample).
+func (m *ChannelHealthSampleMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ChannelHealthSampleMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.bucket_ts != nil {
+		fields = append(fields, channelhealthsample.FieldBucketTs)
+	}
+	if m.account_id != nil {
+		fields = append(fields, channelhealthsample.FieldAccountID)
+	}
+	if m.group_id != nil {
+		fields = append(fields, channelhealthsample.FieldGroupID)
+	}
+	if m.model != nil {
+		fields = append(fields, channelhealthsample.FieldModel)
+	}
+	if m.success_count != nil {
+		fields = append(fields, channelhealthsample.FieldSuccessCount)
+	}
+	if m.error_count != nil {
+		fields = append(fields, channelhealthsample.FieldErrorCount)
+	}
+	if m.rate_limited_count != nil {
+		fields = append(fields, channelhealthsample.FieldRateLimitedCount)
+	}
+	if m.overloaded_count != nil {
+		fields = append(fields, channelhealthsample.FieldOverloadedCount)
+	}
+	if m.latency_p50_ms != nil {
+		fields = append(fields, channelhealthsample.FieldLatencyP50Ms)
+	}
+	if m.source != nil {
+		fields = append(fields, channelhealthsample.FieldSource)
+	}
+	if m.created_at != nil {
+		fields = append(fields, channelhealthsample.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ChannelHealthSampleMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case channelhealthsample.FieldBucketTs:
+		return m.BucketTs()
+	case channelhealthsample.FieldAccountID:
+		return m.AccountID()
+	case channelhealthsample.FieldGroupID:
+		return m.GroupID()
+	case channelhealthsample.FieldModel:
+		return m.Model()
+	case channelhealthsample.FieldSuccessCount:
+		return m.SuccessCount()
+	case channelhealthsample.FieldErrorCount:
+		return m.ErrorCount()
+	case channelhealthsample.FieldRateLimitedCount:
+		return m.RateLimitedCount()
+	case channelhealthsample.FieldOverloadedCount:
+		return m.OverloadedCount()
+	case channelhealthsample.FieldLatencyP50Ms:
+		return m.LatencyP50Ms()
+	case channelhealthsample.FieldSource:
+		return m.Source()
+	case channelhealthsample.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ChannelHealthSampleMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case channelhealthsample.FieldBucketTs:
+		return m.OldBucketTs(ctx)
+	case channelhealthsample.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case channelhealthsample.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case channelhealthsample.FieldModel:
+		return m.OldModel(ctx)
+	case channelhealthsample.FieldSuccessCount:
+		return m.OldSuccessCount(ctx)
+	case channelhealthsample.FieldErrorCount:
+		return m.OldErrorCount(ctx)
+	case channelhealthsample.FieldRateLimitedCount:
+		return m.OldRateLimitedCount(ctx)
+	case channelhealthsample.FieldOverloadedCount:
+		return m.OldOverloadedCount(ctx)
+	case channelhealthsample.FieldLatencyP50Ms:
+		return m.OldLatencyP50Ms(ctx)
+	case channelhealthsample.FieldSource:
+		return m.OldSource(ctx)
+	case channelhealthsample.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ChannelHealthSample field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ChannelHealthSampleMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case channelhealthsample.FieldBucketTs:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketTs(v)
+		return nil
+	case channelhealthsample.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case channelhealthsample.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case channelhealthsample.FieldModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModel(v)
+		return nil
+	case channelhealthsample.FieldSuccessCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSuccessCount(v)
+		return nil
+	case channelhealthsample.FieldErrorCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorCount(v)
+		return nil
+	case channelhealthsample.FieldRateLimitedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRateLimitedCount(v)
+		return nil
+	case channelhealthsample.FieldOverloadedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOverloadedCount(v)
+		return nil
+	case channelhealthsample.FieldLatencyP50Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLatencyP50Ms(v)
+		return nil
+	case channelhealthsample.FieldSource:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSource(v)
+		return nil
+	case channelhealthsample.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthSample field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ChannelHealthSampleMutation) AddedFields() []string {
+	var fields []string
+	if m.addaccount_id != nil {
+		fields = append(fields, channelhealthsample.FieldAccountID)
+	}
+	if m.addgroup_id != nil {
+		fields = append(fields, channelhealthsample.FieldGroupID)
+	}
+	if m.addsuccess_count != nil {
+		fields = append(fields, channelhealthsample.FieldSuccessCount)
+	}
+	if m.adderror_count != nil {
+		fields = append(fields, channelhealthsample.FieldErrorCount)
+	}
+	if m.addrate_limited_count != nil {
+		fields = append(fields, channelhealthsample.FieldRateLimitedCount)
+	}
+	if m.addoverloaded_count != nil {
+		fields = append(fields, channelhealthsample.FieldOverloadedCount)
+	}
+	if m.addlatency_p50_ms != nil {
+		fields = append(fields, channelhealthsample.FieldLatencyP50Ms)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ChannelHealthSampleMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case channelhealthsample.FieldAccountID:
+		return m.AddedAccountID()
+	case channelhealthsample.FieldGroupID:
+		return m.AddedGroupID()
+	case channelhealthsample.FieldSuccessCount:
+		return m.AddedSuccessCount()
+	case channelhealthsample.FieldErrorCount:
+		return m.AddedErrorCount()
+	case channelhealthsample.FieldRateLimitedCount:
+		return m.AddedRateLimitedCount()
+	case channelhealthsample.FieldOverloadedCount:
+		return m.AddedOverloadedCount()
+	case channelhealthsample.FieldLatencyP50Ms:
+		return m.AddedLatencyP50Ms()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ChannelHealthSampleMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case channelhealthsample.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case channelhealthsample.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case channelhealthsample.FieldSuccessCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSuccessCount(v)
+		return nil
+	case channelhealthsample.FieldErrorCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddErrorCount(v)
+		return nil
+	case channelhealthsample.FieldRateLimitedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRateLimitedCount(v)
+		return nil
+	case channelhealthsample.FieldOverloadedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOverloadedCount(v)
+		return nil
+	case channelhealthsample.FieldLatencyP50Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLatencyP50Ms(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthSample numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ChannelHealthSampleMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ChannelHealthSampleMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ChannelHealthSampleMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown ChannelHealthSample nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ChannelHealthSampleMutation) ResetField(name string) error {
+	switch name {
+	case channelhealthsample.FieldBucketTs:
+		m.ResetBucketTs()
+		return nil
+	case channelhealthsample.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case channelhealthsample.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case channelhealthsample.FieldModel:
+		m.ResetModel()
+		return nil
+	case channelhealthsample.FieldSuccessCount:
+		m.ResetSuccessCount()
+		return nil
+	case channelhealthsample.FieldErrorCount:
+		m.ResetErrorCount()
+		return nil
+	case channelhealthsample.FieldRateLimitedCount:
+		m.ResetRateLimitedCount()
+		return nil
+	case channelhealthsample.FieldOverloadedCount:
+		m.ResetOverloadedCount()
+		return nil
+	case channelhealthsample.FieldLatencyP50Ms:
+		m.ResetLatencyP50Ms()
+		return nil
+	case channelhealthsample.FieldSource:
+		m.ResetSource()
+		return nil
+	case channelhealthsample.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ChannelHealthSample field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ChannelHealthSampleMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ChannelHealthSampleMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ChannelHealthSampleMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ChannelHealthSampleMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ChannelHealthSampleMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ChannelHealthSampleMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ChannelHealthSampleMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ChannelHealthSample unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ChannelHealthSampleMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ChannelHealthSample edge %s", name)
 }
 
 // ErrorPassthroughRuleMutation represents an operation that mutates the ErrorPassthroughRule nodes in the graph.

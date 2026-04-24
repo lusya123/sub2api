@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -304,6 +305,42 @@ func init() {
 	announcementreadDescCreatedAt := announcementreadFields[3].Descriptor()
 	// announcementread.DefaultCreatedAt holds the default value on creation for the created_at field.
 	announcementread.DefaultCreatedAt = announcementreadDescCreatedAt.Default.(func() time.Time)
+	channelhealthsampleFields := schema.ChannelHealthSample{}.Fields()
+	_ = channelhealthsampleFields
+	// channelhealthsampleDescModel is the schema descriptor for model field.
+	channelhealthsampleDescModel := channelhealthsampleFields[4].Descriptor()
+	// channelhealthsample.ModelValidator is a validator for the "model" field. It is called by the builders before save.
+	channelhealthsample.ModelValidator = channelhealthsampleDescModel.Validators[0].(func(string) error)
+	// channelhealthsampleDescSuccessCount is the schema descriptor for success_count field.
+	channelhealthsampleDescSuccessCount := channelhealthsampleFields[5].Descriptor()
+	// channelhealthsample.DefaultSuccessCount holds the default value on creation for the success_count field.
+	channelhealthsample.DefaultSuccessCount = channelhealthsampleDescSuccessCount.Default.(int)
+	// channelhealthsampleDescErrorCount is the schema descriptor for error_count field.
+	channelhealthsampleDescErrorCount := channelhealthsampleFields[6].Descriptor()
+	// channelhealthsample.DefaultErrorCount holds the default value on creation for the error_count field.
+	channelhealthsample.DefaultErrorCount = channelhealthsampleDescErrorCount.Default.(int)
+	// channelhealthsampleDescRateLimitedCount is the schema descriptor for rate_limited_count field.
+	channelhealthsampleDescRateLimitedCount := channelhealthsampleFields[7].Descriptor()
+	// channelhealthsample.DefaultRateLimitedCount holds the default value on creation for the rate_limited_count field.
+	channelhealthsample.DefaultRateLimitedCount = channelhealthsampleDescRateLimitedCount.Default.(int)
+	// channelhealthsampleDescOverloadedCount is the schema descriptor for overloaded_count field.
+	channelhealthsampleDescOverloadedCount := channelhealthsampleFields[8].Descriptor()
+	// channelhealthsample.DefaultOverloadedCount holds the default value on creation for the overloaded_count field.
+	channelhealthsample.DefaultOverloadedCount = channelhealthsampleDescOverloadedCount.Default.(int)
+	// channelhealthsampleDescLatencyP50Ms is the schema descriptor for latency_p50_ms field.
+	channelhealthsampleDescLatencyP50Ms := channelhealthsampleFields[9].Descriptor()
+	// channelhealthsample.DefaultLatencyP50Ms holds the default value on creation for the latency_p50_ms field.
+	channelhealthsample.DefaultLatencyP50Ms = channelhealthsampleDescLatencyP50Ms.Default.(int)
+	// channelhealthsampleDescSource is the schema descriptor for source field.
+	channelhealthsampleDescSource := channelhealthsampleFields[10].Descriptor()
+	// channelhealthsample.DefaultSource holds the default value on creation for the source field.
+	channelhealthsample.DefaultSource = channelhealthsampleDescSource.Default.(string)
+	// channelhealthsample.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	channelhealthsample.SourceValidator = channelhealthsampleDescSource.Validators[0].(func(string) error)
+	// channelhealthsampleDescCreatedAt is the schema descriptor for created_at field.
+	channelhealthsampleDescCreatedAt := channelhealthsampleFields[11].Descriptor()
+	// channelhealthsample.DefaultCreatedAt holds the default value on creation for the created_at field.
+	channelhealthsample.DefaultCreatedAt = channelhealthsampleDescCreatedAt.Default.(func() time.Time)
 	errorpassthroughruleMixin := schema.ErrorPassthroughRule{}.Mixin()
 	errorpassthroughruleMixinFields0 := errorpassthroughruleMixin[0].Fields()
 	_ = errorpassthroughruleMixinFields0

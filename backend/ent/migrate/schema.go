@@ -338,6 +338,44 @@ var (
 			},
 		},
 	}
+	// ChannelHealthSamplesColumns holds the columns for the "channel_health_samples" table.
+	ChannelHealthSamplesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "bucket_ts", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "model", Type: field.TypeString, Size: 128},
+		{Name: "success_count", Type: field.TypeInt, Default: 0},
+		{Name: "error_count", Type: field.TypeInt, Default: 0},
+		{Name: "rate_limited_count", Type: field.TypeInt, Default: 0},
+		{Name: "overloaded_count", Type: field.TypeInt, Default: 0},
+		{Name: "latency_p50_ms", Type: field.TypeInt, Default: 0},
+		{Name: "source", Type: field.TypeString, Size: 16, Default: "passive"},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ChannelHealthSamplesTable holds the schema information for the "channel_health_samples" table.
+	ChannelHealthSamplesTable = &schema.Table{
+		Name:       "channel_health_samples",
+		Columns:    ChannelHealthSamplesColumns,
+		PrimaryKey: []*schema.Column{ChannelHealthSamplesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "channelhealthsample_bucket_ts_account_id_group_id_model",
+				Unique:  true,
+				Columns: []*schema.Column{ChannelHealthSamplesColumns[1], ChannelHealthSamplesColumns[2], ChannelHealthSamplesColumns[3], ChannelHealthSamplesColumns[4]},
+			},
+			{
+				Name:    "channelhealthsample_model_bucket_ts",
+				Unique:  false,
+				Columns: []*schema.Column{ChannelHealthSamplesColumns[4], ChannelHealthSamplesColumns[1]},
+			},
+			{
+				Name:    "channelhealthsample_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ChannelHealthSamplesColumns[11]},
+			},
+		},
+	}
 	// ErrorPassthroughRulesColumns holds the columns for the "error_passthrough_rules" table.
 	ErrorPassthroughRulesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1132,6 +1170,7 @@ var (
 		AccountGroupsTable,
 		AnnouncementsTable,
 		AnnouncementReadsTable,
+		ChannelHealthSamplesTable,
 		ErrorPassthroughRulesTable,
 		GroupsTable,
 		IdempotencyRecordsTable,
@@ -1174,6 +1213,9 @@ func init() {
 	AnnouncementReadsTable.ForeignKeys[1].RefTable = UsersTable
 	AnnouncementReadsTable.Annotation = &entsql.Annotation{
 		Table: "announcement_reads",
+	}
+	ChannelHealthSamplesTable.Annotation = &entsql.Annotation{
+		Table: "channel_health_samples",
 	}
 	ErrorPassthroughRulesTable.Annotation = &entsql.Annotation{
 		Table: "error_passthrough_rules",

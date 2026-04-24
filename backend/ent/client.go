@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -56,6 +57,8 @@ type Client struct {
 	Announcement *AnnouncementClient
 	// AnnouncementRead is the client for interacting with the AnnouncementRead builders.
 	AnnouncementRead *AnnouncementReadClient
+	// ChannelHealthSample is the client for interacting with the ChannelHealthSample builders.
+	ChannelHealthSample *ChannelHealthSampleClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// Group is the client for interacting with the Group builders.
@@ -106,6 +109,7 @@ func (c *Client) init() {
 	c.AccountGroup = NewAccountGroupClient(c.config)
 	c.Announcement = NewAnnouncementClient(c.config)
 	c.AnnouncementRead = NewAnnouncementReadClient(c.config)
+	c.ChannelHealthSample = NewChannelHealthSampleClient(c.config)
 	c.ErrorPassthroughRule = NewErrorPassthroughRuleClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.IdempotencyRecord = NewIdempotencyRecordClient(c.config)
@@ -220,6 +224,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AccountGroup:            NewAccountGroupClient(cfg),
 		Announcement:            NewAnnouncementClient(cfg),
 		AnnouncementRead:        NewAnnouncementReadClient(cfg),
+		ChannelHealthSample:     NewChannelHealthSampleClient(cfg),
 		ErrorPassthroughRule:    NewErrorPassthroughRuleClient(cfg),
 		Group:                   NewGroupClient(cfg),
 		IdempotencyRecord:       NewIdempotencyRecordClient(cfg),
@@ -261,6 +266,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AccountGroup:            NewAccountGroupClient(cfg),
 		Announcement:            NewAnnouncementClient(cfg),
 		AnnouncementRead:        NewAnnouncementReadClient(cfg),
+		ChannelHealthSample:     NewChannelHealthSampleClient(cfg),
 		ErrorPassthroughRule:    NewErrorPassthroughRuleClient(cfg),
 		Group:                   NewGroupClient(cfg),
 		IdempotencyRecord:       NewIdempotencyRecordClient(cfg),
@@ -308,9 +314,9 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
-		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.ChannelHealthSample, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.PromoCode, c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret,
+		c.Setting, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
 		c.UserSubscription,
 	} {
@@ -323,9 +329,9 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
-		c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.ChannelHealthSample, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.PromoCode, c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret,
+		c.Setting, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog, c.User,
 		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
 		c.UserSubscription,
 	} {
@@ -346,6 +352,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Announcement.mutate(ctx, m)
 	case *AnnouncementReadMutation:
 		return c.AnnouncementRead.mutate(ctx, m)
+	case *ChannelHealthSampleMutation:
+		return c.ChannelHealthSample.mutate(ctx, m)
 	case *ErrorPassthroughRuleMutation:
 		return c.ErrorPassthroughRule.mutate(ctx, m)
 	case *GroupMutation:
@@ -1194,6 +1202,139 @@ func (c *AnnouncementReadClient) mutate(ctx context.Context, m *AnnouncementRead
 		return (&AnnouncementReadDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AnnouncementRead mutation op: %q", m.Op())
+	}
+}
+
+// ChannelHealthSampleClient is a client for the ChannelHealthSample schema.
+type ChannelHealthSampleClient struct {
+	config
+}
+
+// NewChannelHealthSampleClient returns a client for the ChannelHealthSample from the given config.
+func NewChannelHealthSampleClient(c config) *ChannelHealthSampleClient {
+	return &ChannelHealthSampleClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `channelhealthsample.Hooks(f(g(h())))`.
+func (c *ChannelHealthSampleClient) Use(hooks ...Hook) {
+	c.hooks.ChannelHealthSample = append(c.hooks.ChannelHealthSample, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `channelhealthsample.Intercept(f(g(h())))`.
+func (c *ChannelHealthSampleClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ChannelHealthSample = append(c.inters.ChannelHealthSample, interceptors...)
+}
+
+// Create returns a builder for creating a ChannelHealthSample entity.
+func (c *ChannelHealthSampleClient) Create() *ChannelHealthSampleCreate {
+	mutation := newChannelHealthSampleMutation(c.config, OpCreate)
+	return &ChannelHealthSampleCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ChannelHealthSample entities.
+func (c *ChannelHealthSampleClient) CreateBulk(builders ...*ChannelHealthSampleCreate) *ChannelHealthSampleCreateBulk {
+	return &ChannelHealthSampleCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ChannelHealthSampleClient) MapCreateBulk(slice any, setFunc func(*ChannelHealthSampleCreate, int)) *ChannelHealthSampleCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ChannelHealthSampleCreateBulk{err: fmt.Errorf("calling to ChannelHealthSampleClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ChannelHealthSampleCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ChannelHealthSampleCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ChannelHealthSample.
+func (c *ChannelHealthSampleClient) Update() *ChannelHealthSampleUpdate {
+	mutation := newChannelHealthSampleMutation(c.config, OpUpdate)
+	return &ChannelHealthSampleUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ChannelHealthSampleClient) UpdateOne(_m *ChannelHealthSample) *ChannelHealthSampleUpdateOne {
+	mutation := newChannelHealthSampleMutation(c.config, OpUpdateOne, withChannelHealthSample(_m))
+	return &ChannelHealthSampleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ChannelHealthSampleClient) UpdateOneID(id int64) *ChannelHealthSampleUpdateOne {
+	mutation := newChannelHealthSampleMutation(c.config, OpUpdateOne, withChannelHealthSampleID(id))
+	return &ChannelHealthSampleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ChannelHealthSample.
+func (c *ChannelHealthSampleClient) Delete() *ChannelHealthSampleDelete {
+	mutation := newChannelHealthSampleMutation(c.config, OpDelete)
+	return &ChannelHealthSampleDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ChannelHealthSampleClient) DeleteOne(_m *ChannelHealthSample) *ChannelHealthSampleDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ChannelHealthSampleClient) DeleteOneID(id int64) *ChannelHealthSampleDeleteOne {
+	builder := c.Delete().Where(channelhealthsample.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ChannelHealthSampleDeleteOne{builder}
+}
+
+// Query returns a query builder for ChannelHealthSample.
+func (c *ChannelHealthSampleClient) Query() *ChannelHealthSampleQuery {
+	return &ChannelHealthSampleQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeChannelHealthSample},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ChannelHealthSample entity by its id.
+func (c *ChannelHealthSampleClient) Get(ctx context.Context, id int64) (*ChannelHealthSample, error) {
+	return c.Query().Where(channelhealthsample.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ChannelHealthSampleClient) GetX(ctx context.Context, id int64) *ChannelHealthSample {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ChannelHealthSampleClient) Hooks() []Hook {
+	return c.hooks.ChannelHealthSample
+}
+
+// Interceptors returns the client interceptors.
+func (c *ChannelHealthSampleClient) Interceptors() []Interceptor {
+	return c.inters.ChannelHealthSample
+}
+
+func (c *ChannelHealthSampleClient) mutate(ctx context.Context, m *ChannelHealthSampleMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ChannelHealthSampleCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ChannelHealthSampleUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ChannelHealthSampleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ChannelHealthSampleDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ChannelHealthSample mutation op: %q", m.Op())
 	}
 }
 
@@ -4031,17 +4172,17 @@ func (c *UserSubscriptionClient) mutate(ctx context.Context, m *UserSubscription
 type (
 	hooks struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead,
-		ErrorPassthroughRule, Group, IdempotencyRecord, PromoCode, PromoCodeUsage,
-		Proxy, RedeemCode, SecuritySecret, Setting, TLSFingerprintProfile,
-		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
-		UserAttributeValue, UserSubscription []ent.Hook
+		ChannelHealthSample, ErrorPassthroughRule, Group, IdempotencyRecord, PromoCode,
+		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
+		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserSubscription []ent.Hook
 	}
 	inters struct {
 		APIKey, Account, AccountGroup, Announcement, AnnouncementRead,
-		ErrorPassthroughRule, Group, IdempotencyRecord, PromoCode, PromoCodeUsage,
-		Proxy, RedeemCode, SecuritySecret, Setting, TLSFingerprintProfile,
-		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
-		UserAttributeValue, UserSubscription []ent.Interceptor
+		ChannelHealthSample, ErrorPassthroughRule, Group, IdempotencyRecord, PromoCode,
+		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
+		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
+		UserAttributeDefinition, UserAttributeValue, UserSubscription []ent.Interceptor
 	}
 )
 

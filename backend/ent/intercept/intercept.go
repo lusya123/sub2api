@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -222,6 +223,33 @@ func (f TraverseAnnouncementRead) Traverse(ctx context.Context, q ent.Query) err
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.AnnouncementReadQuery", q)
+}
+
+// The ChannelHealthSampleFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ChannelHealthSampleFunc func(context.Context, *ent.ChannelHealthSampleQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ChannelHealthSampleFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ChannelHealthSampleQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ChannelHealthSampleQuery", q)
+}
+
+// The TraverseChannelHealthSample type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseChannelHealthSample func(context.Context, *ent.ChannelHealthSampleQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseChannelHealthSample) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseChannelHealthSample) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ChannelHealthSampleQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ChannelHealthSampleQuery", q)
 }
 
 // The ErrorPassthroughRuleFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -696,6 +724,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.AnnouncementQuery, predicate.Announcement, announcement.OrderOption]{typ: ent.TypeAnnouncement, tq: q}, nil
 	case *ent.AnnouncementReadQuery:
 		return &query[*ent.AnnouncementReadQuery, predicate.AnnouncementRead, announcementread.OrderOption]{typ: ent.TypeAnnouncementRead, tq: q}, nil
+	case *ent.ChannelHealthSampleQuery:
+		return &query[*ent.ChannelHealthSampleQuery, predicate.ChannelHealthSample, channelhealthsample.OrderOption]{typ: ent.TypeChannelHealthSample, tq: q}, nil
 	case *ent.ErrorPassthroughRuleQuery:
 		return &query[*ent.ErrorPassthroughRuleQuery, predicate.ErrorPassthroughRule, errorpassthroughrule.OrderOption]{typ: ent.TypeErrorPassthroughRule, tq: q}, nil
 	case *ent.GroupQuery:
