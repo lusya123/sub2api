@@ -22,6 +22,31 @@ export interface FetchOptions {
   signal?: AbortSignal
 }
 
+export interface ModelMarketplacePrice {
+  input_price_per_token: number | null
+  output_price_per_token: number | null
+  input_price_per_mtok: number | null
+  output_price_per_mtok: number | null
+  total_price_per_mtok: number | null
+  source_model_id?: string
+  available: boolean
+}
+
+export interface ModelMarketplaceItem {
+  model_id: string
+  display_name: string
+  platforms: string[]
+  account_count: number
+  upstream_names?: string[]
+  price: ModelMarketplacePrice
+}
+
+export interface ModelMarketplaceResponse {
+  models: ModelMarketplaceItem[]
+  total_models: number
+  total_accounts: number
+}
+
 // ==================== User & Auth Types ====================
 
 export interface User {
@@ -1649,4 +1674,48 @@ export interface UpdateScheduledTestPlanRequest {
   enabled?: boolean
   max_results?: number
   auto_recover?: boolean
+}
+
+// ==================== Public Status Page Types ====================
+// 1:1 alignment with backend DTOs in
+// backend/internal/service/status_page_service.go
+// (StatusBeat / StatusPricing / StatusChannel / StatusGroup / StatusModel).
+// Field names MUST stay snake_case to match the Go `json:"..."` tags.
+
+export type StatusBeatStatus = 'ok' | 'degraded' | 'down' | 'unknown'
+
+export interface StatusBeat {
+  ts: string
+  status: StatusBeatStatus
+}
+
+export interface StatusPricing {
+  input_per_mtok: number
+  output_per_mtok: number
+  cache_write: number
+  cache_read: number
+}
+
+export interface StatusChannel {
+  name: string
+  availability_pct: number
+  heartbeats: StatusBeat[]
+}
+
+export interface StatusGroup {
+  name: string
+  load_pct: number
+  channels: StatusChannel[]
+}
+
+export interface StatusModel {
+  name: string
+  provider: string
+  release_date?: string
+  prompt_caching: boolean
+  note?: string
+  pricing: StatusPricing
+  availability_pct: number
+  heartbeats: StatusBeat[]
+  groups: StatusGroup[]
 }
