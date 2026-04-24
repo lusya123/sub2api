@@ -104,30 +104,29 @@ type modelMetadata struct {
 var modelCatalog = map[string]modelMetadata{
 	"claude-opus-4-7": {
 		Provider:      "ANTHROPIC",
-		ReleaseDate:   "2026-01-15",
+		ReleaseDate:   "2026-04-16",
 		PromptCaching: true,
-		Note:          "Flagship reasoning model",
-		Pricing:       StatusPricing{InputPerMTok: 15, OutputPerMTok: 75, CacheWrite: 18.75, CacheRead: 1.5},
+		Note:          "Max分组暂不支持1M上下文",
+		Pricing:       StatusPricing{InputPerMTok: 5, OutputPerMTok: 25, CacheWrite: 6.25, CacheRead: 0.5},
 	},
 	"claude-sonnet-4-6": {
 		Provider:      "ANTHROPIC",
-		ReleaseDate:   "2025-09-29",
+		ReleaseDate:   "2026-02-17",
 		PromptCaching: true,
-		Note:          "Balanced model for everyday coding",
+		Note:          "仅AWS-Q支持1M上下文",
 		Pricing:       StatusPricing{InputPerMTok: 3, OutputPerMTok: 15, CacheWrite: 3.75, CacheRead: 0.3},
 	},
 	"claude-opus-4-6": {
 		Provider:      "ANTHROPIC",
-		ReleaseDate:   "2025-08-05",
+		ReleaseDate:   "2026-02-05",
 		PromptCaching: true,
-		Note:          "Previous-generation flagship",
+		Note:          "仅AWS-Q支持1M上下文",
 		Pricing:       StatusPricing{InputPerMTok: 5, OutputPerMTok: 25, CacheWrite: 6.25, CacheRead: 0.5},
 	},
 	"claude-haiku-4-5-20251001": {
 		Provider:      "ANTHROPIC",
-		ReleaseDate:   "2025-10-01",
+		ReleaseDate:   "2025-10-15",
 		PromptCaching: true,
-		Note:          "Fastest, cheapest tier",
 		Pricing:       StatusPricing{InputPerMTok: 1, OutputPerMTok: 5, CacheWrite: 1.25, CacheRead: 0.1},
 	},
 }
