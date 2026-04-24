@@ -30,6 +30,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -37,6 +38,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // channelNameWhitelist defines the allowed characters for an operator-supplied
@@ -54,6 +57,11 @@ const (
 	// for Group.LoadPct. 5 minutes matches the prober cadence so newly-warm
 	// channels count as loaded.
 	statusLoadWindow = 5 * time.Minute
+	// statusCacheTTL is how long we cache ListModels / GetModelDetail results
+	// in process memory. 30s is short enough that a failing model clears fast
+	// and long enough that a DoS-level burst of anonymous polls collapses to
+	// one DB query per 30s regardless of QPS.
+	statusCacheTTL = 30 * time.Second
 )
 
 // StatusBeat is one minute bucket's worth of heartbeat state.
@@ -158,20 +166,53 @@ func lookupMetadata(name string) modelMetadata {
 	return modelMetadata{Provider: provider, PromptCaching: false}
 }
 
+// listModelsCache holds the cached ListModels result with a monotonic expiry.
+// Access is guarded by StatusPageService.listMu.
+type listModelsCache struct {
+	data     []StatusModel
+	modelSet map[string]struct{} // for Fix 1 fast-path: known model names
+	expireAt time.Time
+}
+
+// modelDetailCacheEntry is a per-model cached detail. map access is guarded by
+// StatusPageService.detailMu; the entry itself is immutable once published.
+type modelDetailCacheEntry struct {
+	data     *StatusModel
+	expireAt time.Time
+}
+
 // StatusPageService aggregates channel_health_samples into the public status
 // page shape. All reads go through *dbent.Client — same DI style as the
 // recorder/prober upstream of it.
+//
+// Caching: ListModels / GetModelDetail / isKnownModel share two in-process
+// caches with a 30s TTL. singleflight collapses concurrent misses onto a
+// single DB round-trip so a burst of anonymous /status hits never fans out.
+// Errors are NOT cached — next call retries immediately.
 type StatusPageService struct {
 	entClient *dbent.Client
 	// nowFn is overridable for tests.
 	nowFn func() time.Time
+
+	// listMu guards listCache. RWMutex because the steady-state is "many
+	// readers hit a fresh cache; one writer every 30s refreshes it".
+	listMu    sync.RWMutex
+	listCache *listModelsCache
+
+	// detailMu guards detailCache. Per-model keys.
+	detailMu    sync.RWMutex
+	detailCache map[string]*modelDetailCacheEntry
+
+	// sf collapses concurrent cache misses. Keyed by "list" or "detail:<name>".
+	sf singleflight.Group
 }
 
 // NewStatusPageService wires the service.
 func NewStatusPageService(entClient *dbent.Client) *StatusPageService {
 	return &StatusPageService{
-		entClient: entClient,
-		nowFn:     func() time.Time { return time.Now().UTC() },
+		entClient:   entClient,
+		nowFn:       func() time.Time { return time.Now().UTC() },
+		detailCache: make(map[string]*modelDetailCacheEntry),
 	}
 }
 
@@ -188,10 +229,56 @@ func (s *StatusPageService) WithNowFn(fn func() time.Time) *StatusPageService {
 // non-deleted group's model_routing, excluding wildcard patterns). Heartbeats
 // and Groups are left empty — the frontend calls GetModelDetail for a
 // specific card.
+//
+// Cached for statusCacheTTL. singleflight collapses concurrent misses.
 func (s *StatusPageService) ListModels(ctx context.Context) ([]StatusModel, error) {
 	if s == nil || s.entClient == nil {
 		return nil, errors.New("status_page_service: entClient is nil")
 	}
+
+	// Fast path: fresh cache.
+	if c := s.cachedList(); c != nil {
+		return c.data, nil
+	}
+
+	// Miss: collapse concurrent callers onto one DB round-trip.
+	v, err, _ := s.sf.Do("list", func() (interface{}, error) {
+		// Re-check under the writer lock path: another goroutine may have
+		// filled the cache while we were queued behind singleflight.
+		if c := s.cachedList(); c != nil {
+			return c, nil
+		}
+		fresh, err := s.loadListFromDB(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.listMu.Lock()
+		s.listCache = fresh
+		s.listMu.Unlock()
+		return fresh, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*listModelsCache).data, nil
+}
+
+// cachedList returns the current cache entry if it's still fresh, else nil.
+func (s *StatusPageService) cachedList() *listModelsCache {
+	s.listMu.RLock()
+	defer s.listMu.RUnlock()
+	if s.listCache == nil {
+		return nil
+	}
+	if s.nowFn().After(s.listCache.expireAt) {
+		return nil
+	}
+	return s.listCache
+}
+
+// loadListFromDB does the actual Group.Query + catalog join. Callers are
+// responsible for caching the result.
+func (s *StatusPageService) loadListFromDB(ctx context.Context) (*listModelsCache, error) {
 	groups, err := s.entClient.Group.Query().Where(group.DeletedAtIsNil()).All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("status_page_service: list groups: %w", err)
@@ -226,13 +313,20 @@ func (s *StatusPageService) ListModels(ctx context.Context) ([]StatusModel, erro
 			AvailabilityPct: 0,
 		})
 	}
-	return out, nil
+	return &listModelsCache{
+		data:     out,
+		modelSet: modelSet,
+		expireAt: s.nowFn().Add(statusCacheTTL),
+	}, nil
 }
 
 // GetModelDetail returns the fully-populated status payload for one model.
 // The 90-minute window is fixed and not configurable via the public API
 // (callers must not get to control cost). The returned *StatusModel is
 // ready to be JSON-marshalled for the /api/public/status/model/:name endpoint.
+//
+// Cached for statusCacheTTL per-model. singleflight collapses concurrent
+// misses on the same model name.
 func (s *StatusPageService) GetModelDetail(ctx context.Context, modelName string) (*StatusModel, error) {
 	if s == nil || s.entClient == nil {
 		return nil, errors.New("status_page_service: entClient is nil")
@@ -241,6 +335,50 @@ func (s *StatusPageService) GetModelDetail(ctx context.Context, modelName string
 		return nil, errors.New("status_page_service: model name required")
 	}
 
+	// Fresh cache hit?
+	if d := s.cachedDetail(modelName); d != nil {
+		return d, nil
+	}
+
+	// Miss: collapse duplicate callers.
+	v, err, _ := s.sf.Do("detail:"+modelName, func() (interface{}, error) {
+		if d := s.cachedDetail(modelName); d != nil {
+			return d, nil
+		}
+		fresh, err := s.loadDetailFromDB(ctx, modelName)
+		if err != nil {
+			return nil, err
+		}
+		s.detailMu.Lock()
+		s.detailCache[modelName] = &modelDetailCacheEntry{
+			data:     fresh,
+			expireAt: s.nowFn().Add(statusCacheTTL),
+		}
+		s.detailMu.Unlock()
+		return fresh, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*StatusModel), nil
+}
+
+// cachedDetail returns a fresh cached *StatusModel for modelName, else nil.
+func (s *StatusPageService) cachedDetail(modelName string) *StatusModel {
+	s.detailMu.RLock()
+	defer s.detailMu.RUnlock()
+	entry, ok := s.detailCache[modelName]
+	if !ok || entry == nil {
+		return nil
+	}
+	if s.nowFn().After(entry.expireAt) {
+		return nil
+	}
+	return entry.data
+}
+
+// loadDetailFromDB does the full 4-query aggregation. Callers cache the result.
+func (s *StatusPageService) loadDetailFromDB(ctx context.Context, modelName string) (*StatusModel, error) {
 	md := lookupMetadata(modelName)
 	now := s.nowFn().UTC()
 	windowStart := floorToMinute(now.Add(-time.Duration(statusWindowMinutes) * time.Minute))

@@ -16,6 +16,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// statusCacheControl is the response header used for both list and detail
+// endpoints. 30s matches StatusPageService.statusCacheTTL so anything served
+// from a CDN / reverse proxy expires at the same cadence as our internal
+// cache.
+const statusCacheControl = "public, max-age=30"
+
 // PublicStatusHandler serves /api/public/status/* endpoints. It holds no state
 // of its own — all aggregation is done inside StatusPageService.
 type PublicStatusHandler struct {
@@ -46,6 +52,11 @@ func (h *PublicStatusHandler) ListModels(c *gin.Context) {
 	if models == nil {
 		models = []service.StatusModel{}
 	}
+	// 30s cache — matches the in-process StatusPageService TTL. Vary on
+	// Accept-Language so future i18n of the `note` field doesn't serve
+	// stale translations across users.
+	c.Header("Cache-Control", statusCacheControl)
+	c.Header("Vary", "Accept-Language")
 	c.JSON(http.StatusOK, gin.H{"models": models})
 }
 
@@ -69,5 +80,7 @@ func (h *PublicStatusHandler) GetModelDetail(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	c.Header("Cache-Control", statusCacheControl)
+	c.Header("Vary", "Accept-Language")
 	c.JSON(http.StatusOK, detail)
 }

@@ -241,6 +241,88 @@ func TestStatusPage_ChannelNameFallbackToID(t *testing.T) {
 	require.Contains(t, detail.Groups[0].Channels[0].Name, strconv.FormatInt(aid, 10))
 }
 
+// TestStatusPage_CacheHits: two back-to-back ListModels calls share one DB
+// Group.Query. We verify by creating a new group between the two calls and
+// confirming the cached response is returned unchanged. A real miss would
+// surface the new group.
+func TestStatusPage_CacheHits(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	_ = seedGroup(t, client, "g-initial", map[string][]int64{
+		"claude-opus-4-7": nil,
+	})
+
+	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	first, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	// Mutate the DB in a way a non-cached call would observe immediately.
+	_ = seedGroup(t, client, "g-added-after-cache", map[string][]int64{
+		"claude-sonnet-4-6": nil,
+	})
+
+	// Second call at the same fixed time hits cache; the new group is NOT
+	// reflected.
+	second, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, second, 1, "cache hit should not reflect post-cache DB mutation")
+	require.Equal(t, first[0].Name, second[0].Name)
+}
+
+// TestStatusPage_CacheExpires: advancing the clock past the TTL forces a
+// fresh DB read. The newly-seeded model surfaces.
+func TestStatusPage_CacheExpires(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	_ = seedGroup(t, client, "g-initial", map[string][]int64{
+		"claude-opus-4-7": nil,
+	})
+
+	now := fixedNow
+	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return now })
+	first, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+
+	_ = seedGroup(t, client, "g-post-expiry", map[string][]int64{
+		"claude-sonnet-4-6": nil,
+	})
+
+	// Jump well past the 30s TTL.
+	now = fixedNow.Add(statusCacheTTL + 5*time.Second)
+	second, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, second, 2, "expired cache must re-read DB")
+}
+
+// TestStatusPage_DetailCacheHits: repeated GetModelDetail within the TTL
+// reuses the cached aggregation. Seed a sample between the two calls and
+// verify the Heartbeats snapshot does NOT update.
+func TestStatusPage_DetailCacheHits(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	model := "claude-opus-4-7"
+	aid, gid := seedStatusFixture(t, client, model)
+
+	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+
+	// First call: empty window, all unknown.
+	first, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	for _, b := range first.Heartbeats {
+		require.Equal(t, "unknown", b.Status)
+	}
+
+	// Add a sample — without cache this would flip at least one bucket to "ok".
+	seedSample(t, client, floorToMinute(fixedNow.Add(-1*time.Minute)), aid, gid, model, 5, 0, 0, 0)
+
+	// Second call (within TTL) must be served from cache → still all-unknown.
+	second, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	for _, b := range second.Heartbeats {
+		require.Equal(t, "unknown", b.Status, "detail cache hit must not reflect post-cache sample")
+	}
+}
+
 func TestStatusPage_ListModels(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	// Two groups routing three total models — one duplicate across groups.

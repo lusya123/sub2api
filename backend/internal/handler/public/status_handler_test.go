@@ -81,6 +81,42 @@ func TestListModels_ResponseShape(t *testing.T) {
 	require.GreaterOrEqual(t, len(models), 2)
 }
 
+// TestListAndDetail_CacheControlHeaders: both public endpoints must emit the
+// 30s Cache-Control header so reverse proxies / CDN layers can ride along.
+func TestListAndDetail_CacheControlHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client := newTestEntClient(t)
+	_, err := client.Group.Create().
+		SetName("handler-cc-test-group").
+		SetRateMultiplier(1.0).
+		SetModelRouting(map[string][]int64{"claude-opus-4-7": nil}).
+		Save(context.Background())
+	require.NoError(t, err)
+
+	svc := service.NewStatusPageService(client)
+	h := NewPublicStatusHandler(svc)
+
+	r := gin.New()
+	r.GET("/api/public/status/models", h.ListModels)
+	r.GET("/api/public/status/model/:name", h.GetModelDetail)
+
+	// list
+	req := httptest.NewRequest(http.MethodGet, "/api/public/status/models", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "public, max-age=30", w.Header().Get("Cache-Control"))
+	require.Equal(t, "Accept-Language", w.Header().Get("Vary"))
+
+	// detail
+	req = httptest.NewRequest(http.MethodGet, "/api/public/status/model/claude-opus-4-7", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "public, max-age=30", w.Header().Get("Cache-Control"))
+	require.Equal(t, "Accept-Language", w.Header().Get("Vary"))
+}
+
 // TestListModels_EmptyStillWrapsObject: zero models must still serialise as
 // `{"models": []}`, not `null` or a bare `[]`.
 func TestListModels_EmptyStillWrapsObject(t *testing.T) {
