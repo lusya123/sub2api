@@ -142,20 +142,20 @@ func buildUpsertSQL(
 	bucket time.Time,
 	e ChannelHealthEvent,
 	sc, ec, rc, oc int,
-) (string, []interface{}) {
+) (string, []any) {
 	// Column order MUST match the placeholders below.
-	args := []interface{}{
-		bucket,            // $1 bucket_ts
-		e.AccountID,       // $2 account_id
-		e.GroupID,         // $3 group_id
-		e.Model,           // $4 model
-		sc,                // $5 success_count
-		ec,                // $6 error_count
-		rc,                // $7 rate_limited_count
-		oc,                // $8 overloaded_count
-		e.LatencyMs,       // $9 latency_p50_ms
-		string(e.Source),  // $10 source
-		time.Now().UTC(),  // $11 created_at (immutable; only used on INSERT)
+	args := []any{
+		bucket,           // $1 bucket_ts
+		e.AccountID,      // $2 account_id
+		e.GroupID,        // $3 group_id
+		e.Model,          // $4 model
+		sc,               // $5 success_count
+		ec,               // $6 error_count
+		rc,               // $7 rate_limited_count
+		oc,               // $8 overloaded_count
+		e.LatencyMs,      // $9 latency_p50_ms
+		string(e.Source), // $10 source
+		time.Now().UTC(), // $11 created_at (immutable; only used on INSERT)
 	}
 
 	// Latency expression differs per dialect: Postgres has GREATEST, SQLite

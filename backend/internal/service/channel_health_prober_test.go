@@ -20,8 +20,8 @@ func seedAccount(t *testing.T, client *dbent.Client, name string) int64 {
 		SetName(name).
 		SetPlatform("anthropic").
 		SetType("oauth").
-		SetCredentials(map[string]interface{}{}).
-		SetExtra(map[string]interface{}{}).
+		SetCredentials(map[string]any{}).
+		SetExtra(map[string]any{}).
 		SetConcurrency(1).
 		SetPriority(50).
 		SetRateMultiplier(1.0).

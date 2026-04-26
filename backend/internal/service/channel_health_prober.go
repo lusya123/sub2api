@@ -459,8 +459,8 @@ func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candid
 func groupModelKey(groupID int64, model string) string {
 	var b strings.Builder
 	b.Grow(len(model) + 16)
-	b.WriteString(strconv.FormatInt(groupID, 10))
-	b.WriteByte('|')
-	b.WriteString(model)
+	_, _ = b.WriteString(strconv.FormatInt(groupID, 10))
+	_ = b.WriteByte('|')
+	_, _ = b.WriteString(model)
 	return b.String()
 }

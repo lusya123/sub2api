@@ -208,4 +208,3 @@ func TestAsyncRecorder_DroppedCounterIsLocal(t *testing.T) {
 	close(br1.gate)
 	close(br2.gate)
 }
-

@@ -798,12 +798,12 @@ func publicStatusProbeLineID(name string, idx int) string {
 	for _, r := range name {
 		switch {
 		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
+			_, _ = b.WriteRune(r)
 		case r >= '0' && r <= '9':
-			b.WriteRune(r)
+			_, _ = b.WriteRune(r)
 		default:
 			if b.Len() > 0 && b.String()[b.Len()-1] != '-' {
-				b.WriteByte('-')
+				_ = b.WriteByte('-')
 			}
 		}
 	}

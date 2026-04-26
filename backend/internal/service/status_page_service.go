@@ -251,7 +251,7 @@ func (s *StatusPageService) ListModels(ctx context.Context) ([]StatusModel, erro
 	}
 
 	// Miss: collapse concurrent callers onto one DB round-trip.
-	v, err, _ := s.sf.Do("list", func() (interface{}, error) {
+	v, err, _ := s.sf.Do("list", func() (any, error) {
 		// Re-check under the writer lock path: another goroutine may have
 		// filled the cache while we were queued behind singleflight.
 		if c := s.cachedList(); c != nil {
@@ -269,7 +269,11 @@ func (s *StatusPageService) ListModels(ctx context.Context) ([]StatusModel, erro
 	if err != nil {
 		return nil, err
 	}
-	return v.(*listModelsCache).data, nil
+	cache, ok := v.(*listModelsCache)
+	if !ok || cache == nil {
+		return nil, fmt.Errorf("status page list cache returned unexpected type %T", v)
+	}
+	return cache.data, nil
 }
 
 // cachedList returns the current cache entry if it's still fresh, else nil.
@@ -437,7 +441,7 @@ func (s *StatusPageService) GetModelDetail(ctx context.Context, modelName string
 	}
 
 	// Miss: collapse duplicate callers.
-	v, err, _ := s.sf.Do("detail:"+modelName, func() (interface{}, error) {
+	v, err, _ := s.sf.Do("detail:"+modelName, func() (any, error) {
 		if d := s.cachedDetail(modelName); d != nil {
 			return d, nil
 		}
@@ -456,7 +460,11 @@ func (s *StatusPageService) GetModelDetail(ctx context.Context, modelName string
 	if err != nil {
 		return nil, err
 	}
-	return v.(*StatusModel), nil
+	model, ok := v.(*StatusModel)
+	if !ok || model == nil {
+		return nil, fmt.Errorf("status page detail cache returned unexpected type %T", v)
+	}
+	return model, nil
 }
 
 // cachedDetail returns a fresh cached *StatusModel for modelName, else nil.
