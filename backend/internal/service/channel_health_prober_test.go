@@ -72,6 +72,54 @@ type fakeProbeCall struct {
 	model   string
 }
 
+type fakeProberSettingRepo struct {
+	values map[string]string
+}
+
+func (f fakeProberSettingRepo) Get(_ context.Context, key string) (*Setting, error) {
+	if v, ok := f.values[key]; ok {
+		return &Setting{Key: key, Value: v}, nil
+	}
+	return nil, ErrSettingNotFound
+}
+
+func (f fakeProberSettingRepo) GetValue(_ context.Context, key string) (string, error) {
+	if v, ok := f.values[key]; ok {
+		return v, nil
+	}
+	return "", ErrSettingNotFound
+}
+
+func (f fakeProberSettingRepo) Set(context.Context, string, string) error {
+	return nil
+}
+
+func (f fakeProberSettingRepo) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	out := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if v, ok := f.values[key]; ok {
+			out[key] = v
+		}
+	}
+	return out, nil
+}
+
+func (f fakeProberSettingRepo) SetMultiple(context.Context, map[string]string) error {
+	return nil
+}
+
+func (f fakeProberSettingRepo) GetAll(context.Context) (map[string]string, error) {
+	out := make(map[string]string, len(f.values))
+	for key, value := range f.values {
+		out[key] = value
+	}
+	return out, nil
+}
+
+func (f fakeProberSettingRepo) Delete(context.Context, string) error {
+	return nil
+}
+
 func (f *fakeExecutor) ProbeOnce(_ context.Context, groupID int64, model string) (int64, int, int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -103,6 +151,60 @@ func TestProber_UsesPublicStatusConfig(t *testing.T) {
 	require.Equal(t, 1, probed)
 	require.Len(t, fe.calls, 1)
 	require.Equal(t, "claude-opus-4-7", fe.calls[0].model)
+}
+
+func TestProber_SkipsWhenModelHealthPageDisabled(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	rec := NewChannelHealthRecorder(client)
+	fe := &fakeExecutor{status: 200, latency: 42}
+	settings := fakeProberSettingRepo{values: map[string]string{SettingKeyModelHealthPageEnabled: " FALSE "}}
+
+	accID := seedAccount(t, client, "acc-disabled-page")
+	gID := seedGroup(t, client, "grp-disabled-page", map[string][]int64{})
+	seedAccountGroup(t, client, accID, gID)
+
+	p := NewChannelHealthProber(client, rec, nil).
+		WithSettingRepo(settings).
+		WithProbeExecutor(fe).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gID))
+	probed, err := p.RunTick(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, probed)
+	require.Len(t, fe.calls, 0)
+}
+
+func TestProber_SkipsWhenNoEnabledModelsOrGroups(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	rec := NewChannelHealthRecorder(client)
+	fe := &fakeExecutor{status: 200, latency: 42}
+
+	accID := seedAccount(t, client, "acc-disabled-config")
+	gID := seedGroup(t, client, "grp-disabled-config", map[string][]int64{})
+	seedAccountGroup(t, client, accID, gID)
+
+	disabledModelConfig := PublicStatusConfig{
+		Models: []PublicStatusModelConfig{{Name: "claude-opus-4-7", Enabled: false}},
+		Groups: []PublicStatusGroupConfig{{GroupID: gID, Enabled: true}},
+	}
+	p := NewChannelHealthProber(client, rec, nil).
+		WithProbeExecutor(fe).
+		WithPublicStatusConfig(disabledModelConfig)
+	probed, err := p.RunTick(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, probed)
+	require.Len(t, fe.calls, 0)
+
+	disabledGroupConfig := PublicStatusConfig{
+		Models: []PublicStatusModelConfig{{Name: "claude-opus-4-7", Enabled: true}},
+		Groups: []PublicStatusGroupConfig{{GroupID: gID, Enabled: false}},
+	}
+	p = NewChannelHealthProber(client, rec, nil).
+		WithProbeExecutor(fe).
+		WithPublicStatusConfig(disabledGroupConfig)
+	probed, err = p.RunTick(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, probed)
+	require.Len(t, fe.calls, 0)
 }
 
 func TestProber_SkipsConfiguredInactiveGroup(t *testing.T) {

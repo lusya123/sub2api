@@ -246,6 +246,14 @@ func (p *ChannelHealthProber) RunTick(ctx context.Context) (int, error) {
 	tickCtx, cancel := context.WithTimeout(ctx, proberTickBudget)
 	defer cancel()
 
+	enabled, err := p.modelHealthPageEnabled(tickCtx)
+	if err != nil {
+		return 0, err
+	}
+	if !enabled {
+		return 0, nil
+	}
+
 	candidates, err := p.enumerateCandidates(tickCtx)
 	if err != nil {
 		return 0, err
@@ -314,6 +322,20 @@ func (p *ChannelHealthProber) RunTick(ctx context.Context) (int, error) {
 	}
 
 	return probed, nil
+}
+
+func (p *ChannelHealthProber) modelHealthPageEnabled(ctx context.Context) (bool, error) {
+	if p == nil || p.settingRepo == nil {
+		return true, nil
+	}
+	raw, err := p.settingRepo.GetValue(ctx, SettingKeyModelHealthPageEnabled)
+	if err != nil {
+		if isSettingNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	return !strings.EqualFold(strings.TrimSpace(raw), "false"), nil
 }
 
 // enumerateCandidates builds the cold-combo list from the public status config.
