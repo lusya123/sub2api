@@ -166,6 +166,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyPurchaseSubscriptionEmbeddedURL,
 		SettingKeyPurchaseSubscriptionRedirectURL,
 		SettingKeySoraClientEnabled,
+		SettingKeyModelHealthPageEnabled,
 		SettingKeyCustomMenuItems,
 		SettingKeyCustomEndpoints,
 		SettingKeyLinuxDoConnectEnabled,
@@ -221,6 +222,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
 		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		SoraClientEnabled:                settings[SettingKeySoraClientEnabled] == "true",
+		ModelHealthPageEnabled:           settings[SettingKeyModelHealthPageEnabled] != "false",
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
 		LinuxDoOAuthEnabled:              linuxDoEnabled,
@@ -277,6 +279,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		PurchaseSubscriptionRedirectURL  string          `json:"purchase_subscription_redirect_url,omitempty"`
 		PurchaseSubscriptionURL          string          `json:"purchase_subscription_url,omitempty"`
 		SoraClientEnabled                bool            `json:"sora_client_enabled"`
+		ModelHealthPageEnabled           bool            `json:"model_health_page_enabled"`
 		CustomMenuItems                  json.RawMessage `json:"custom_menu_items"`
 		CustomEndpoints                  json.RawMessage `json:"custom_endpoints"`
 		LinuxDoOAuthEnabled              bool            `json:"linuxdo_oauth_enabled"`
@@ -306,6 +309,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		PurchaseSubscriptionRedirectURL:  settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:          settings.PurchaseSubscriptionURL,
 		SoraClientEnabled:                settings.SoraClientEnabled,
+		ModelHealthPageEnabled:           settings.ModelHealthPageEnabled,
 		CustomMenuItems:                  filterUserVisibleMenuItems(settings.CustomMenuItems),
 		CustomEndpoints:                  safeRawJSONArray(settings.CustomEndpoints),
 		LinuxDoOAuthEnabled:              settings.LinuxDoOAuthEnabled,
@@ -505,6 +509,7 @@ func (s *SettingService) UpdateSettings(ctx context.Context, settings *SystemSet
 	updates[SettingKeyPurchaseSubscriptionRedirectURL] = strings.TrimSpace(settings.PurchaseSubscriptionRedirectURL)
 	updates[SettingKeyPurchaseSubscriptionURL] = strings.TrimSpace(settings.PurchaseSubscriptionEmbeddedURL)
 	updates[SettingKeySoraClientEnabled] = strconv.FormatBool(settings.SoraClientEnabled)
+	updates[SettingKeyModelHealthPageEnabled] = strconv.FormatBool(settings.ModelHealthPageEnabled)
 	updates[SettingKeyCustomMenuItems] = settings.CustomMenuItems
 	updates[SettingKeyCustomEndpoints] = settings.CustomEndpoints
 
@@ -856,6 +861,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyPurchaseSubscriptionEmbeddedURL:  "",
 		SettingKeyPurchaseSubscriptionRedirectURL:  "",
 		SettingKeySoraClientEnabled:                "false",
+		SettingKeyModelHealthPageEnabled:           "true",
 		SettingKeyCustomMenuItems:                  "[]",
 		SettingKeyCustomEndpoints:                  "[]",
 		SettingKeyDefaultConcurrency:               strconv.Itoa(s.cfg.Default.UserConcurrency),
@@ -931,6 +937,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
 		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		SoraClientEnabled:                settings[SettingKeySoraClientEnabled] == "true",
+		ModelHealthPageEnabled:           settings[SettingKeyModelHealthPageEnabled] != "false",
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
 		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",

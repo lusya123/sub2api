@@ -419,15 +419,17 @@ func ProvideChannelHealthWiring(
 // ProvideChannelHealthProber builds the prober with the tester adapter.
 func ProvideChannelHealthProber(
 	entClient *dbent.Client,
+	settingRepo SettingRepository,
 	recorder *ChannelHealthRecorder,
 	tester *AccountTestService,
+	gateway *GatewayService,
 ) *ChannelHealthProber {
-	return NewChannelHealthProber(entClient, recorder, tester)
+	return NewChannelHealthProber(entClient, recorder, tester).WithGatewayService(gateway).WithSettingRepo(settingRepo)
 }
 
 // ProvideStatusPageService wires the public status page aggregator.
-func ProvideStatusPageService(entClient *dbent.Client) *StatusPageService {
-	return NewStatusPageService(entClient)
+func ProvideStatusPageService(entClient *dbent.Client, settingRepo SettingRepository) *StatusPageService {
+	return NewStatusPageService(entClient).WithSettingRepo(settingRepo)
 }
 
 // ProvideOpsScheduledReportService creates and starts OpsScheduledReportService.

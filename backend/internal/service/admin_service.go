@@ -617,6 +617,10 @@ func (s *adminServiceImpl) assignDefaultSubscriptions(ctx context.Context, userI
 }
 
 func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *UpdateUserInput) (*User, error) {
+	if err := validateUserGroupRates(input.GroupRates); err != nil {
+		return nil, err
+	}
+
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -671,6 +675,10 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if input.GroupRates != nil && s.userGroupRateRepo != nil {
 		if err := s.userGroupRateRepo.SyncUserGroupRates(ctx, user.ID, input.GroupRates); err != nil {
 			logger.LegacyPrintf("service.admin", "failed to sync user group rates: user_id=%d err=%v", user.ID, err)
+		} else if rates, err := s.userGroupRateRepo.GetByUserID(ctx, user.ID); err != nil {
+			logger.LegacyPrintf("service.admin", "failed to reload user group rates: user_id=%d err=%v", user.ID, err)
+		} else {
+			user.GroupRates = rates
 		}
 	}
 
@@ -702,6 +710,18 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	}
 
 	return user, nil
+}
+
+func validateUserGroupRates(rates map[int64]*float64) error {
+	for groupID, rate := range rates {
+		if groupID <= 0 {
+			return infraerrors.BadRequest("INVALID_GROUP_RATE", "group_id must be > 0")
+		}
+		if rate != nil && *rate < 0 {
+			return infraerrors.BadRequest("INVALID_GROUP_RATE", "rate_multiplier must be >= 0")
+		}
+	}
+	return nil
 }
 
 func (s *adminServiceImpl) UpdateUserRole(ctx context.Context, id int64, role string) (*User, error) {

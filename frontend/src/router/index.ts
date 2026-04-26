@@ -166,10 +166,11 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/models',
     name: 'ModelMarketplace',
-    component: () => import('@/views/admin/ModelMarketplaceView.vue'),
+    redirect: '/admin/model-health',
     meta: {
       requiresAuth: true,
-      requiresAdmin: false,
+      requiresAdmin: true,
+      requiresSuperAdmin: true,
       title: 'Model Marketplace',
       titleKey: 'admin.modelMarketplace.title',
       descriptionKey: 'admin.modelMarketplace.description'
@@ -339,11 +340,25 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/model-marketplace',
-    redirect: '/models',
+    path: '/admin/model-health',
+    name: 'AdminModelHealth',
+    component: () => import('@/views/admin/ModelMarketplaceView.vue'),
     meta: {
       requiresAuth: true,
-      requiresAdmin: false,
+      requiresAdmin: true,
+      requiresSuperAdmin: true,
+      title: 'Model Health Config',
+      titleKey: 'admin.modelMarketplace.title',
+      descriptionKey: 'admin.modelMarketplace.description'
+    }
+  },
+  {
+    path: '/admin/model-marketplace',
+    redirect: '/admin/model-health',
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      requiresSuperAdmin: true,
       title: 'Model Marketplace',
       titleKey: 'admin.modelMarketplace.title',
       descriptionKey: 'admin.modelMarketplace.description'

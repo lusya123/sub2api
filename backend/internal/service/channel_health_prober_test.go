@@ -34,8 +34,8 @@ func seedAccount(t *testing.T, client *dbent.Client, name string) int64 {
 }
 
 // seedGroup creates a group with the given model_routing map, no soft-delete.
-// model_routing_enabled is irrelevant to the prober (it enumerates regardless
-// — the prober's job is to cover cold combos the routing intends to use).
+// The prober no longer enumerates model_routing; tests still accept this field
+// so we can prove routing contents do not drive public status probing.
 func seedGroup(t *testing.T, client *dbent.Client, name string, routing map[string][]int64) int64 {
 	t.Helper()
 	g, err := client.Group.Create().
@@ -68,116 +68,130 @@ type fakeExecutor struct {
 }
 
 type fakeProbeCall struct {
-	accountID int64
-	model     string
+	groupID int64
+	model   string
 }
 
-func (f *fakeExecutor) ProbeOnce(_ context.Context, accountID int64, model string) (int, int, error) {
+func (f *fakeExecutor) ProbeOnce(_ context.Context, groupID int64, model string) (int64, int, int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, fakeProbeCall{accountID: accountID, model: model})
+	f.calls = append(f.calls, fakeProbeCall{groupID: groupID, model: model})
 	if f.errAfter > 0 && len(f.calls) > f.errAfter {
-		return 0, 0, errors.New("forced failure")
+		return 0, 0, 0, errors.New("forced failure")
 	}
-	return f.status, f.latency, nil
+	return groupID * 1000, f.status, f.latency, nil
 }
 
-// TestProber_SkipsWildcardPatterns: routing has one concrete key and one
-// wildcard key — the prober must enumerate only the concrete one.
-func TestProber_SkipsWildcardPatterns(t *testing.T) {
+// TestProber_UsesPublicStatusConfig: model_routing can be empty or misleading;
+// public status probes are driven only by the admin-managed status config.
+func TestProber_UsesPublicStatusConfig(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	rec := NewChannelHealthRecorder(client)
 	fe := &fakeExecutor{status: 200, latency: 42}
 
 	accID := seedAccount(t, client, "acc1")
-	// One group maps both a wildcard and a concrete model.
 	gID := seedGroup(t, client, "g1", map[string][]int64{
 		"claude-opus-*": {accID},
-		"gpt-4o":        {accID},
 	})
 	seedAccountGroup(t, client, accID, gID)
 
-	p := NewChannelHealthProber(client, rec, nil).WithProbeExecutor(fe)
+	p := NewChannelHealthProber(client, rec, nil).
+		WithProbeExecutor(fe).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gID))
 	probed, err := p.RunTick(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, 1, probed, "only the non-wildcard model should be probed")
+	require.Equal(t, 1, probed)
 	require.Len(t, fe.calls, 1)
-	require.Equal(t, "gpt-4o", fe.calls[0].model)
+	require.Equal(t, "claude-opus-4-7", fe.calls[0].model)
 }
 
-// TestProber_ExcludesRecentlySampledCombos: combo A has a passive sample in
-// the last 2 minutes (< coldFreshness); combo B has no recent sample. Only B
-// should be probed.
-func TestProber_ExcludesRecentlySampledCombos(t *testing.T) {
+func TestProber_SkipsConfiguredInactiveGroup(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	rec := NewChannelHealthRecorder(client)
+	fe := &fakeExecutor{status: 200, latency: 42}
+
+	accID := seedAccount(t, client, "inactive-group-account")
+	gID := seedGroup(t, client, "inactive-public-group", map[string][]int64{})
+	_, err := client.Group.UpdateOneID(gID).SetStatus("inactive").Save(context.Background())
+	require.NoError(t, err)
+	seedAccountGroup(t, client, accID, gID)
+
+	p := NewChannelHealthProber(client, rec, nil).
+		WithProbeExecutor(fe).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gID))
+	probed, err := p.RunTick(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, probed)
+	require.Len(t, fe.calls, 0)
+}
+
+// TestProber_ExcludesRecentlySampledGroups: the public probe unit is the
+// group. A recent sample for the configured group/model suppresses another
+// active probe, regardless of how many accounts hang behind that group.
+func TestProber_ExcludesRecentlySampledGroups(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	rec := NewChannelHealthRecorder(client)
 	fe := &fakeExecutor{status: 200, latency: 15}
 
-	accA := seedAccount(t, client, "warm-acc")
-	accB := seedAccount(t, client, "cold-acc")
-	gID := seedGroup(t, client, "grp", map[string][]int64{
-		"gpt-4o": {accA, accB},
-	})
+	accA := seedAccount(t, client, "representative-acc")
+	accB := seedAccount(t, client, "other-acc")
+	gID := seedGroup(t, client, "grp", map[string][]int64{})
 	seedAccountGroup(t, client, accA, gID)
 	seedAccountGroup(t, client, accB, gID)
 
 	// Pin "now" so we can assert the freshness window precisely.
 	now := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
 
-	// A has a recent passive sample; B has none.
 	require.NoError(t, rec.Record(context.Background(), ChannelHealthEvent{
-		AccountID: accA, GroupID: gID, Model: "gpt-4o",
+		AccountID: accB, GroupID: gID, Model: "claude-opus-4-7",
 		Outcome: OutcomeSuccess, LatencyMs: 10, Source: SourcePassive,
 		At: now.Add(-30 * time.Second), // well inside 5-min window
 	}))
 
 	p := NewChannelHealthProber(client, rec, nil).
 		WithProbeExecutor(fe).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gID)).
 		WithNowFn(func() time.Time { return now })
 
 	probed, err := p.RunTick(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, 1, probed, "only the cold combo should be probed")
-	require.Len(t, fe.calls, 1)
-	require.Equal(t, accB, fe.calls[0].accountID)
+	require.Equal(t, 0, probed, "recent group/model sample must suppress the group-level probe")
+	require.Len(t, fe.calls, 0)
 }
 
-// TestProber_RespectsBudget: 5 cold combos + budget=2 → exactly 2 probes.
-// Also asserts the ordering preference: combos with no prior sample go first.
+// TestProber_RespectsBudget: 5 cold groups + budget=2 -> exactly 2 probes.
+// Also asserts the ordering preference: groups with no prior sample go first.
 func TestProber_RespectsBudget(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	rec := NewChannelHealthRecorder(client)
 	fe := &fakeExecutor{status: 200, latency: 20}
 
-	// 5 accounts, each in the same group that routes a single concrete model.
-	ids := make([]int64, 5)
-	for i := range ids {
-		ids[i] = seedAccount(t, client, "acc")
-	}
-	gID := seedGroup(t, client, "grp", map[string][]int64{
-		"gpt-4o": ids,
-	})
-	for _, id := range ids {
-		seedAccountGroup(t, client, id, gID)
+	groupIDs := make([]int64, 5)
+	accountIDs := make([]int64, 5)
+	for i := range groupIDs {
+		accountIDs[i] = seedAccount(t, client, "acc")
+		groupIDs[i] = seedGroup(t, client, "grp", map[string][]int64{})
+		seedAccountGroup(t, client, accountIDs[i], groupIDs[i])
 	}
 
-	// Give accounts ids[2] and ids[4] older stale samples (outside
+	// Give groups ids[2] and ids[4] older stale samples (outside
 	// coldFreshness) so that ids[0], ids[1], ids[3] have no samples at all
 	// and must sort first. Per our ordering (NULLS FIRST, tie-break by
-	// accountID ASC), the first two probed must be ids[0] and ids[1].
+	// groupID ASC), the first two probed must be ids[0] and ids[1].
 	now := time.Date(2026, 4, 24, 15, 0, 0, 0, time.UTC)
 	oldTs := now.Add(-30 * time.Minute) // way older than coldFreshness=5m
 	require.NoError(t, rec.Record(context.Background(), ChannelHealthEvent{
-		AccountID: ids[2], GroupID: gID, Model: "gpt-4o",
+		AccountID: accountIDs[2], GroupID: groupIDs[2], Model: "claude-opus-4-7",
 		Outcome: OutcomeSuccess, Source: SourcePassive, At: oldTs,
 	}))
 	require.NoError(t, rec.Record(context.Background(), ChannelHealthEvent{
-		AccountID: ids[4], GroupID: gID, Model: "gpt-4o",
+		AccountID: accountIDs[4], GroupID: groupIDs[4], Model: "claude-opus-4-7",
 		Outcome: OutcomeSuccess, Source: SourcePassive, At: oldTs,
 	}))
 
 	p := NewChannelHealthProber(client, rec, nil).
 		WithProbeExecutor(fe).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, groupIDs...)).
 		WithBudget(2).
 		WithNowFn(func() time.Time { return now })
 
@@ -185,9 +199,9 @@ func TestProber_RespectsBudget(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, probed)
 	require.Len(t, fe.calls, 2)
-	// Expected order: both no-sample combos first, tie-broken by accountID ASC.
-	require.Equal(t, ids[0], fe.calls[0].accountID)
-	require.Equal(t, ids[1], fe.calls[1].accountID)
+	// Expected order: both no-sample groups first, tie-broken by groupID ASC.
+	require.Equal(t, groupIDs[0], fe.calls[0].groupID)
+	require.Equal(t, groupIDs[1], fe.calls[1].groupID)
 }
 
 // TestProber_QueryOnlyRecentSamples locks in the time-bounded scan fix:
@@ -207,27 +221,26 @@ func TestProber_QueryOnlyRecentSamples(t *testing.T) {
 	fe := &fakeExecutor{status: 200, latency: 1}
 
 	accID := seedAccount(t, client, "acc")
-	gID := seedGroup(t, client, "grp", map[string][]int64{
-		"gpt-4o": {accID},
-	})
+	gID := seedGroup(t, client, "grp", map[string][]int64{})
 	seedAccountGroup(t, client, accID, gID)
 
 	now := time.Date(2026, 4, 24, 16, 0, 0, 0, time.UTC)
 	// Ancient sample — beyond 2x coldFreshness window (= 10 min with default 5min).
 	require.NoError(t, rec.Record(context.Background(), ChannelHealthEvent{
-		AccountID: accID, GroupID: gID, Model: "gpt-4o",
+		AccountID: accID, GroupID: gID, Model: "claude-opus-4-7",
 		Outcome: OutcomeSuccess, Source: SourcePassive,
 		At: now.Add(-20 * time.Minute),
 	}))
 	// Recent sample — inside coldFreshness.
 	require.NoError(t, rec.Record(context.Background(), ChannelHealthEvent{
-		AccountID: accID, GroupID: gID, Model: "gpt-4o",
+		AccountID: accID, GroupID: gID, Model: "claude-opus-4-7",
 		Outcome: OutcomeSuccess, Source: SourcePassive,
 		At: now.Add(-2 * time.Minute),
 	}))
 
 	p := NewChannelHealthProber(client, rec, nil).
 		WithProbeExecutor(fe).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gID)).
 		WithNowFn(func() time.Time { return now })
 
 	probed, err := p.RunTick(context.Background())
@@ -244,17 +257,16 @@ func TestProber_QueryOnlyRecentSamples(t *testing.T) {
 	rec2 := NewChannelHealthRecorder(client2)
 	fe2 := &fakeExecutor{status: 200, latency: 1}
 	accID2 := seedAccount(t, client2, "acc")
-	gID2 := seedGroup(t, client2, "grp", map[string][]int64{
-		"gpt-4o": {accID2},
-	})
+	gID2 := seedGroup(t, client2, "grp", map[string][]int64{})
 	seedAccountGroup(t, client2, accID2, gID2)
 	require.NoError(t, rec2.Record(context.Background(), ChannelHealthEvent{
-		AccountID: accID2, GroupID: gID2, Model: "gpt-4o",
+		AccountID: accID2, GroupID: gID2, Model: "claude-opus-4-7",
 		Outcome: OutcomeSuccess, Source: SourcePassive,
 		At: now.Add(-20 * time.Minute),
 	}))
 	p2 := NewChannelHealthProber(client2, rec2, nil).
 		WithProbeExecutor(fe2).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gID2)).
 		WithNowFn(func() time.Time { return now })
 	probed2, err := p2.RunTick(context.Background())
 	require.NoError(t, err)
@@ -269,12 +281,12 @@ func TestProber_RecordsActiveProbeSource(t *testing.T) {
 	fe := &fakeExecutor{status: 200, latency: 77}
 
 	accID := seedAccount(t, client, "acc")
-	gID := seedGroup(t, client, "grp", map[string][]int64{
-		"gpt-4o": {accID},
-	})
+	gID := seedGroup(t, client, "grp", map[string][]int64{})
 	seedAccountGroup(t, client, accID, gID)
 
-	p := NewChannelHealthProber(client, rec, nil).WithProbeExecutor(fe)
+	p := NewChannelHealthProber(client, rec, nil).
+		WithProbeExecutor(fe).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gID))
 	probed, err := p.RunTick(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 1, probed)
@@ -284,9 +296,9 @@ func TestProber_RecordsActiveProbeSource(t *testing.T) {
 		All(context.Background())
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "must persist exactly one active_probe sample")
-	require.Equal(t, accID, rows[0].AccountID)
+	require.Equal(t, gID*1000, rows[0].AccountID)
 	require.Equal(t, gID, rows[0].GroupID)
-	require.Equal(t, "gpt-4o", rows[0].Model)
+	require.Equal(t, "claude-opus-4-7", rows[0].Model)
 	require.Equal(t, 1, rows[0].SuccessCount, "200 status maps to OutcomeSuccess")
 	require.Equal(t, 77, rows[0].LatencyP50Ms)
 }

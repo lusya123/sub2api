@@ -266,6 +266,34 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:         false,
 	}
 	s.fallbackPrices["gpt-5.3-codex"] = s.fallbackPrices["gpt-5.1-codex"]
+
+	// Z.AI GLM-5（海外版官方价）
+	// TODO: 厂商当前 cache write 限时免费，促销结束后需把 CacheCreationPricePerToken 调回 1.0e-6
+	s.fallbackPrices["glm-5"] = &ModelPricing{
+		InputPricePerToken:         1.0e-6, // $1.0 per MTok
+		OutputPricePerToken:        3.2e-6, // $3.2 per MTok
+		CacheCreationPricePerToken: 0,      // 限时免费（厂商促销）
+		CacheReadPricePerToken:     0.2e-6, // $0.2 per MTok
+		SupportsCacheBreakdown:     false,
+	}
+
+	// MiniMax-M2.5（标准）
+	s.fallbackPrices["minimax-m2.5"] = &ModelPricing{
+		InputPricePerToken:         0.3e-6,   // $0.3 per MTok
+		OutputPricePerToken:        1.2e-6,   // $1.2 per MTok
+		CacheCreationPricePerToken: 0.375e-6, // $0.375 per MTok
+		CacheReadPricePerToken:     0.03e-6,  // $0.03 per MTok
+		SupportsCacheBreakdown:     false,
+	}
+
+	// MiniMax-M2.5-highspeed
+	s.fallbackPrices["minimax-m2.5-highspeed"] = &ModelPricing{
+		InputPricePerToken:         0.6e-6,   // $0.6 per MTok
+		OutputPricePerToken:        2.4e-6,   // $2.4 per MTok
+		CacheCreationPricePerToken: 0.375e-6, // $0.375 per MTok
+		CacheReadPricePerToken:     0.03e-6,  // $0.03 per MTok
+		SupportsCacheBreakdown:     false,
+	}
 }
 
 // getFallbackPricing 根据模型系列获取回退价格
@@ -300,6 +328,30 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
 		return s.fallbackPrices["gemini-3.1-pro"]
+	}
+
+	// Z.AI GLM 族
+	if strings.HasPrefix(modelLower, "glm") {
+		if pricing, ok := s.fallbackPrices[modelLower]; ok {
+			return pricing
+		}
+		log.Printf("[Billing] Unknown GLM variant %q, falling back to glm-5 pricing", modelLower)
+		return s.fallbackPrices["glm-5"]
+	}
+
+	// MiniMax 族
+	// 计费安全原则：精确名命中 > 包含 "highspeed" 走高速价 > 其他走标准价
+	// 这样未来出现 minimax-m2.5-highspeed-2026 这类衍生型号不会被低估为标准价
+	if strings.HasPrefix(modelLower, "minimax") {
+		if pricing, ok := s.fallbackPrices[modelLower]; ok {
+			return pricing
+		}
+		if strings.Contains(modelLower, "highspeed") {
+			log.Printf("[Billing] Unknown MiniMax highspeed variant %q, falling back to minimax-m2.5-highspeed pricing", modelLower)
+			return s.fallbackPrices["minimax-m2.5-highspeed"]
+		}
+		log.Printf("[Billing] Unknown MiniMax variant %q, falling back to minimax-m2.5 pricing", modelLower)
+		return s.fallbackPrices["minimax-m2.5"]
 	}
 
 	// OpenAI 仅匹配已知 GPT-5/Codex 族，避免未知 OpenAI 型号误计价。

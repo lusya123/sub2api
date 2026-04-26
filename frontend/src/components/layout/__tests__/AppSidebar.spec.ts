@@ -46,6 +46,7 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
     custom_endpoints: [],
     linuxdo_oauth_enabled: false,
     sora_client_enabled: false,
+    model_health_page_enabled: true,
     backend_mode_enabled: false,
     version: '',
     ...overrides,
@@ -75,6 +76,7 @@ function createTestRouter() {
       { path: '/dashboard', component: { template: '<div />' } },
       { path: '/keys', component: { template: '<div />' } },
       { path: '/client-install', component: { template: '<div />' } },
+      { path: '/status', component: { template: '<div />' } },
       { path: '/usage', component: { template: '<div />' } },
       { path: '/subscriptions', component: { template: '<div />' } },
       { path: '/purchase', component: { template: '<div />' } },
@@ -137,5 +139,65 @@ describe('AppSidebar', () => {
     expect(purchaseLink?.attributes('target')).toBe('_blank')
     expect(purchaseLink?.attributes('rel')).toBe('noopener noreferrer')
     expect(wrapper.findAll('a').some((link) => link.attributes('href') === '/purchase')).toBe(false)
+  })
+
+  it('shows model health but not model marketplace for regular users', async () => {
+    const appStore = useAppStore()
+    const authStore = useAuthStore()
+    const router = createTestRouter()
+
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = createPublicSettings()
+    authStore.user = createUser()
+
+    await router.push('/dashboard')
+    await router.isReady()
+
+    const wrapper = mount(AppSidebar, {
+      global: {
+        plugins: [router],
+        stubs: {
+          VersionBadge: true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'))
+
+    expect(hrefs).toContain('/status')
+    expect(hrefs).not.toContain('/models')
+  })
+
+  it('hides model health for regular users when disabled in public settings', async () => {
+    const appStore = useAppStore()
+    const authStore = useAuthStore()
+    const router = createTestRouter()
+
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = createPublicSettings({
+      model_health_page_enabled: false,
+    })
+    authStore.user = createUser()
+
+    await router.push('/dashboard')
+    await router.isReady()
+
+    const wrapper = mount(AppSidebar, {
+      global: {
+        plugins: [router],
+        stubs: {
+          VersionBadge: true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'))
+
+    expect(hrefs).not.toContain('/status')
+    expect(hrefs).not.toContain('/models')
   })
 })

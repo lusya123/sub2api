@@ -65,6 +65,7 @@ type SystemSettings struct {
 	PurchaseSubscriptionRedirectURL string           `json:"purchase_subscription_redirect_url"`
 	PurchaseSubscriptionURL         string           `json:"purchase_subscription_url"`
 	SoraClientEnabled               bool             `json:"sora_client_enabled"`
+	ModelHealthPageEnabled          bool             `json:"model_health_page_enabled"`
 	CustomMenuItems                 []CustomMenuItem `json:"custom_menu_items"`
 	CustomEndpoints                 []CustomEndpoint `json:"custom_endpoints"`
 
@@ -135,6 +136,7 @@ type PublicSettings struct {
 	CustomEndpoints                  []CustomEndpoint `json:"custom_endpoints"`
 	LinuxDoOAuthEnabled              bool             `json:"linuxdo_oauth_enabled"`
 	SoraClientEnabled                bool             `json:"sora_client_enabled"`
+	ModelHealthPageEnabled           bool             `json:"model_health_page_enabled"`
 	BackendModeEnabled               bool             `json:"backend_mode_enabled"`
 	Version                          string           `json:"version"`
 }

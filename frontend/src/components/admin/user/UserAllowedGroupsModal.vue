@@ -227,9 +227,9 @@ watch(
 const load = async () => {
   loading.value = true
   try {
-    const res = await adminAPI.groups.list(1, 1000)
-    // 只显示标准类型且活跃的分组
-    groups.value = res.items.filter((g) => g.subscription_type === 'standard' && g.status === 'active')
+    const allActiveGroups = await adminAPI.groups.getAll()
+    // 显示当前系统所有活跃分组，便于管理员为任意分组配置用户专属倍率。
+    groups.value = allActiveGroups.filter((g) => g.status === 'active')
 
     // 初始化配置
     const userAllowedGroups = props.user?.allowed_groups || []
@@ -277,6 +277,13 @@ const updateCustomRate = (groupId: number, value: string) => {
 
 const handleSave = async () => {
   if (!props.user) return
+
+  const invalidRateConfig = groupConfigs.value.find((c) => c.customRate !== null && c.customRate < 0)
+  if (invalidRateConfig) {
+    appStore.showError(t('admin.users.customRateInvalid'))
+    return
+  }
+
   submitting.value = true
 
   try {
@@ -307,7 +314,8 @@ const handleSave = async () => {
     appStore.showSuccess(t('admin.users.groupConfigUpdated'))
     emit('success')
     emit('close')
-  } catch (error) {
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.message || error.response?.data?.detail || error.message || t('admin.users.failedToUpdateAllowedGroups'))
     console.error('Failed to update user group config:', error)
   } finally {
     submitting.value = false

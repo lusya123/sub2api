@@ -1,14 +1,11 @@
 <template>
-  <div class="flex gap-[2px] h-4 items-stretch">
+  <div :class="['heartbeat-bar', { 'is-compact': compact }]">
     <div
       v-for="(b, i) in normalizedBeats"
       :key="i"
       data-beat
       :data-status="b.status"
-      :class="[
-        'flex-1 min-w-[2px] rounded-[1px] transition-opacity hover:opacity-80',
-        colorOf(b.status)
-      ]"
+      :class="['heartbeat-beat', colorOf(b.status)]"
       :title="`${formatTs(b.ts)} · ${statusLabel(b.status)}`"
     />
   </div>
@@ -20,6 +17,7 @@ import type { StatusBeat, StatusBeatStatus } from '@/types'
 
 interface Props {
   beats: StatusBeat[]
+  compact?: boolean
 }
 
 const props = defineProps<Props>()
@@ -43,14 +41,14 @@ const normalizedBeats = computed<StatusBeat[]>(() => {
 function colorOf(status: StatusBeatStatus): string {
   switch (status) {
     case 'ok':
-      return 'bg-green-500'
+      return 'is-ok'
     case 'degraded':
-      return 'bg-orange-500'
+      return 'is-degraded'
     case 'down':
-      return 'bg-red-500'
+      return 'is-down'
     case 'unknown':
     default:
-      return 'bg-neutral-700'
+      return 'is-unknown'
   }
 }
 
@@ -77,3 +75,48 @@ function formatTs(ts: string): string {
   return `${hh}:${mm}`
 }
 </script>
+
+<style scoped>
+.heartbeat-bar {
+  display: grid;
+  grid-template-columns: repeat(90, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 1px;
+  width: 100%;
+  max-width: 100%;
+  height: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.heartbeat-bar.is-compact {
+  height: 20px;
+}
+
+.heartbeat-beat {
+  min-width: 0;
+  width: 100%;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.heartbeat-beat:hover {
+  opacity: 0.78;
+  transform: translateY(-1px);
+}
+
+.heartbeat-beat.is-ok {
+  background: #22c55e;
+}
+
+.heartbeat-beat.is-degraded {
+  background: #f5c542;
+}
+
+.heartbeat-beat.is-down {
+  background: #ef4444;
+}
+
+.heartbeat-beat.is-unknown {
+  background: rgba(244, 231, 200, 0.1);
+}
+</style>

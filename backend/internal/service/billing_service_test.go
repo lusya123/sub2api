@@ -241,6 +241,15 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "openai codex mini latest alias", model: "codex-mini-latest", expectedInput: 1.5e-6},
 		{name: "openai unknown no fallback", model: "gpt-unknown-model", expectNilPricing: true},
 		{name: "non supported family", model: "qwen-max", expectNilPricing: true},
+		{name: "glm-5 exact", model: "glm-5", expectedInput: 1.0e-6},
+		{name: "glm uppercase normalized", model: "GLM-5", expectedInput: 1.0e-6},
+		{name: "glm unknown variant fallback to glm-5", model: "glm-4.6", expectedInput: 1.0e-6},
+		{name: "minimax m2.5 standard", model: "minimax-m2.5", expectedInput: 0.3e-6},
+		{name: "minimax m2.5 highspeed exact", model: "minimax-m2.5-highspeed", expectedInput: 0.6e-6},
+		{name: "minimax unknown fallback to standard", model: "minimax-m3", expectedInput: 0.3e-6},
+		// 计费安全：未知 highspeed 衍生型号必须走高速价（避免少收 50%）
+		{name: "minimax highspeed suffix variant uses highspeed price", model: "minimax-m2.5-highspeed-2026", expectedInput: 0.6e-6},
+		{name: "minimax m3 highspeed uses highspeed price", model: "minimax-m3-highspeed", expectedInput: 0.6e-6},
 	}
 
 	for _, tt := range tests {
@@ -255,6 +264,72 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		})
 	}
 }
+func TestCalculateCost_GLM5_OfficialPricing(t *testing.T) {
+	svc := newTestBillingService()
+
+	// GLM-5 官方价：input $1.0, output $3.2, cache_read $0.2, cache_create 0（限时免费）
+	tokens := UsageTokens{
+		InputTokens:         100000,
+		OutputTokens:        50000,
+		CacheCreationTokens: 200000,
+		CacheReadTokens:     300000,
+	}
+	cost, err := svc.CalculateCost("glm-5", tokens, 1.0)
+	require.NoError(t, err)
+
+	require.InDelta(t, 100000*1.0e-6, cost.InputCost, 1e-10)        // $0.10
+	require.InDelta(t, 50000*3.2e-6, cost.OutputCost, 1e-10)        // $0.16
+	require.InDelta(t, 0.0, cost.CacheCreationCost, 1e-10)          // 限时免费
+	require.InDelta(t, 300000*0.2e-6, cost.CacheReadCost, 1e-10)    // $0.06
+	require.InDelta(t, 0.10+0.16+0.0+0.06, cost.TotalCost, 1e-10)   // $0.32
+	require.InDelta(t, cost.TotalCost, cost.ActualCost, 1e-10)
+}
+
+func TestCalculateCost_MiniMaxM25_StandardVsHighspeed(t *testing.T) {
+	svc := newTestBillingService()
+
+	tokens := UsageTokens{
+		InputTokens:         1000000, // 1M tokens 简化美元换算
+		OutputTokens:        1000000,
+		CacheCreationTokens: 1000000,
+		CacheReadTokens:     1000000,
+	}
+
+	// 标准版：input $0.3, output $1.2, cache_create $0.375, cache_read $0.03
+	std, err := svc.CalculateCost("minimax-m2.5", tokens, 1.0)
+	require.NoError(t, err)
+	require.InDelta(t, 0.30, std.InputCost, 1e-10)
+	require.InDelta(t, 1.20, std.OutputCost, 1e-10)
+	require.InDelta(t, 0.375, std.CacheCreationCost, 1e-10)
+	require.InDelta(t, 0.03, std.CacheReadCost, 1e-10)
+	require.InDelta(t, 0.30+1.20+0.375+0.03, std.TotalCost, 1e-10) // $1.905
+
+	// 高速版：input $0.6, output $2.4，缓存价同标准
+	hs, err := svc.CalculateCost("minimax-m2.5-highspeed", tokens, 1.0)
+	require.NoError(t, err)
+	require.InDelta(t, 0.60, hs.InputCost, 1e-10)
+	require.InDelta(t, 2.40, hs.OutputCost, 1e-10)
+	require.InDelta(t, 0.375, hs.CacheCreationCost, 1e-10)
+	require.InDelta(t, 0.03, hs.CacheReadCost, 1e-10)
+
+	// 高速版 input/output 严格是标准版的 2 倍
+	require.InDelta(t, std.InputCost*2, hs.InputCost, 1e-10)
+	require.InDelta(t, std.OutputCost*2, hs.OutputCost, 1e-10)
+}
+
+func TestCalculateCost_GLMMinimax_RateMultiplierApplied(t *testing.T) {
+	svc := newTestBillingService()
+
+	// 模拟 Group 36 "GLM系列" 的 rate_multiplier=0.3
+	tokens := UsageTokens{InputTokens: 1000000, OutputTokens: 1000000}
+	cost, err := svc.CalculateCost("glm-5", tokens, 0.3)
+	require.NoError(t, err)
+
+	// TotalCost 是按原价的（统计用），ActualCost 才是按倍率扣的（计费用）
+	require.InDelta(t, 1.0+3.2, cost.TotalCost, 1e-10)
+	require.InDelta(t, (1.0+3.2)*0.3, cost.ActualCost, 1e-10)
+}
+
 func TestCalculateCostWithLongContext_BelowThreshold(t *testing.T) {
 	svc := newTestBillingService()
 

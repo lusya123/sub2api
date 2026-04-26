@@ -9,8 +9,6 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/account"
-	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -36,33 +34,78 @@ const (
 // accountTestProbeExecutor below); in tests a fake is injected via
 // WithProbeExecutor.
 type channelProbeExecutor interface {
-	// ProbeOnce issues a minimal upstream call for (accountID, model) and
-	// returns the HTTP status code equivalent + observed latency.
-	ProbeOnce(ctx context.Context, accountID int64, model string) (statusCode int, latencyMs int, err error)
+	// ProbeOnce issues a minimal upstream call for (groupID, model) through the
+	// normal scheduler/failover path and returns the selected account id, HTTP
+	// status code equivalent, and observed latency.
+	ProbeOnce(ctx context.Context, groupID int64, model string) (accountID int64, statusCode int, latencyMs int, err error)
 }
 
 // accountTestProbeExecutor adapts *AccountTestService to channelProbeExecutor
 // by invoking RunTestBackground and mapping the coarse "success/failed" result
 // back into a status code that recorderOutcome can bucket.
 type accountTestProbeExecutor struct {
-	tester *AccountTestService
+	tester  *AccountTestService
+	gateway *GatewayService
 }
 
-// ProbeOnce runs the service's background test path (no real http writer,
-// cheap SSE buffer) and translates the result into a status code the recorder
-// can map. RunTestBackground already reuses the same code paths as the manual
-// test UI (which is what operators trust), so we lean on it instead of
-// duplicating upstream call plumbing.
-func (a *accountTestProbeExecutor) ProbeOnce(ctx context.Context, accountID int64, model string) (int, int, error) {
+// ProbeOnce runs a group-level probe: it asks the normal scheduler for an
+// account inside the target group, tests it with the same background path used
+// by the manual account-test UI, and if it fails excludes that account and asks
+// the scheduler again. This avoids false negatives from one bad upstream
+// account while still exercising the real group routing pool.
+func (a *accountTestProbeExecutor) ProbeOnce(ctx context.Context, groupID int64, model string) (int64, int, int, error) {
 	if a == nil || a.tester == nil {
-		return 0, 0, errors.New("channel_health_prober: tester is nil")
+		return 0, 0, 0, errors.New("channel_health_prober: tester is nil")
 	}
-	res, err := a.tester.RunTestBackground(ctx, accountID, model)
+	if a.gateway == nil {
+		return 0, 0, 0, errors.New("channel_health_prober: gateway is nil")
+	}
+	excluded := map[int64]struct{}{}
+	var lastAccountID int64
+	var lastStatus int
+	var lastLatency int
+	var lastErr error
+	for {
+		gid := groupID
+		selection, err := a.gateway.SelectAccountWithLoadAwareness(ctx, &gid, "", model, excluded, "")
+		if err != nil {
+			if lastErr != nil {
+				return lastAccountID, lastStatus, lastLatency, lastErr
+			}
+			return 0, 503, 0, err
+		}
+		if selection == nil || selection.Account == nil {
+			if lastErr != nil {
+				return lastAccountID, lastStatus, lastLatency, lastErr
+			}
+			return 0, 503, 0, errors.New("channel_health_prober: no account selected")
+		}
+		accountID := selection.Account.ID
+		res, err := a.tester.RunTestBackground(ctx, accountID, model)
+		if selection.Acquired && selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+		status, latency, mappedErr := accountTestResultToProbeStatus(res, err)
+		if mappedErr == nil && status >= 200 && status < 300 {
+			return accountID, status, latency, nil
+		}
+		lastAccountID = accountID
+		lastStatus = status
+		lastLatency = latency
+		lastErr = mappedErr
+		if lastErr == nil {
+			lastErr = errors.New("probe failed")
+		}
+		excluded[accountID] = struct{}{}
+	}
+}
+
+func accountTestResultToProbeStatus(res *ScheduledTestResult, err error) (int, int, error) {
 	if err != nil {
-		return 0, 0, err
+		return 500, 0, err
 	}
 	if res == nil {
-		return 0, 0, errors.New("channel_health_prober: nil result")
+		return 500, 0, errors.New("channel_health_prober: nil result")
 	}
 	latency := int(res.LatencyMs)
 	if res.Status == "success" {
@@ -80,20 +123,22 @@ func (a *accountTestProbeExecutor) ProbeOnce(ctx context.Context, accountID int6
 	lower := strings.ToLower(msg)
 	switch {
 	case strings.Contains(lower, " 429") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "rate-limit"):
-		return 429, latency, nil
+		return 429, latency, errors.New(msg)
 	case strings.Contains(lower, " 529") || strings.Contains(lower, "overload"):
-		return 529, latency, nil
+		return 529, latency, errors.New(msg)
 	default:
-		return 500, latency, nil
+		return 500, latency, errors.New(msg)
 	}
 }
 
 // ChannelHealthProber is a sparse active prober. On each tick it enumerates
-// cold (account × group × model) combos (no wildcard model patterns, no
-// recent passive sample) and runs up to `budget` minimum-cost probes. Results
+// cold (group × model) combos (no wildcard model patterns, no recent passive
+// sample) and runs up to `budget` minimum-cost probes. Results
 // are recorded via ChannelHealthRecorder with Source=SourceActiveProbe.
 type ChannelHealthProber struct {
 	entClient     *dbent.Client
+	settingRepo   SettingRepository
+	fixedConfig   *PublicStatusConfig
 	recorder      *ChannelHealthRecorder
 	executor      channelProbeExecutor
 	budget        int
@@ -115,6 +160,16 @@ func NewChannelHealthProber(entClient *dbent.Client, recorder *ChannelHealthReco
 	}
 	if tester != nil {
 		p.executor = &accountTestProbeExecutor{tester: tester}
+	}
+	return p
+}
+
+func (p *ChannelHealthProber) WithGatewayService(gateway *GatewayService) *ChannelHealthProber {
+	if p == nil {
+		return p
+	}
+	if exec, ok := p.executor.(*accountTestProbeExecutor); ok {
+		exec.gateway = gateway
 	}
 	return p
 }
@@ -162,7 +217,6 @@ func (p *ChannelHealthProber) WithNowFn(fn func() time.Time) *ChannelHealthProbe
 // zero-value if none exist — zero-valued combos get probed first (NULLS FIRST).
 type candidate struct {
 	groupID      int64
-	accountID    int64
 	model        string
 	lastSampleTs time.Time
 	hasSample    bool
@@ -172,12 +226,10 @@ type candidate struct {
 // number of probes actually fired so callers can log/monitor pressure.
 //
 // Steps:
-//  1. Enumerate (ag.group_id, ag.account_id, model_key) from account_groups ×
-//     groups.model_routing, filtering out soft-deleted groups/accounts, non-
-//     schedulable accounts, and any model_key containing '*' (wildcard).
+//  1. Enumerate configured public status groups × configured models.
 //  2. Exclude combos with a sample in the last `coldFreshness`.
 //  3. Sort by lastSampleTs ASC NULLS FIRST; take top `budget`.
-//  4. For each candidate, run ProbeOnce with a per-probe timeout and record
+//  4. For each candidate, run a group-level probe with a per-probe timeout and record
 //     the outcome via the shared recorder under SourceActiveProbe.
 //
 // A tick-level deadline (proberTickBudget) guards against pathological slow
@@ -210,9 +262,6 @@ func (p *ChannelHealthProber) RunTick(ctx context.Context) (int, error) {
 		}
 		if !a.hasSample && !b.hasSample {
 			// stable tie-breaker for determinism
-			if a.accountID != b.accountID {
-				return a.accountID < b.accountID
-			}
 			if a.groupID != b.groupID {
 				return a.groupID < b.groupID
 			}
@@ -231,14 +280,14 @@ func (p *ChannelHealthProber) RunTick(ctx context.Context) (int, error) {
 			break
 		}
 		probeCtx, probeCancel := context.WithTimeout(tickCtx, proberPerProbeTimeout)
-		statusCode, latencyMs, probeErr := p.executor.ProbeOnce(probeCtx, c.accountID, c.model)
+		accountID, statusCode, latencyMs, probeErr := p.executor.ProbeOnce(probeCtx, c.groupID, c.model)
 		probeCancel()
 
 		// Never panic out of a tick; log and move on.
 		if probeErr != nil {
 			logger.LegacyPrintf("service.channel_health_prober",
 				"[ChannelHealthProber] probe failed account=%d group=%d model=%s: %v",
-				c.accountID, c.groupID, c.model, probeErr)
+				accountID, c.groupID, c.model, probeErr)
 			// Even when the executor errors out, if we have a non-zero status
 			// we still want to record it (e.g. upstream returned 429 but the
 			// adapter surfaces it as err). If statusCode == 0 treat as error.
@@ -248,7 +297,7 @@ func (p *ChannelHealthProber) RunTick(ctx context.Context) (int, error) {
 		}
 		outcome := mapStatusToOutcome(statusCode)
 		evt := ChannelHealthEvent{
-			AccountID: c.accountID,
+			AccountID: accountID,
 			GroupID:   c.groupID,
 			Model:     c.model,
 			Outcome:   outcome,
@@ -259,7 +308,7 @@ func (p *ChannelHealthProber) RunTick(ctx context.Context) (int, error) {
 		if err := p.recorder.Record(tickCtx, evt); err != nil {
 			logger.LegacyPrintf("service.channel_health_prober",
 				"[ChannelHealthProber] record failed account=%d group=%d model=%s: %v",
-				c.accountID, c.groupID, c.model, err)
+				accountID, c.groupID, c.model, err)
 		}
 		probed++
 	}
@@ -267,122 +316,87 @@ func (p *ChannelHealthProber) RunTick(ctx context.Context) (int, error) {
 	return probed, nil
 }
 
-// enumerateCandidates builds the cold-combo list.
-//
-// We deliberately do this in Go (multiple small ent queries + in-memory
-// cross-product) instead of raw Postgres `jsonb_object_keys(...)` SQL for two
-// reasons:
-//  1. Tests run on SQLite — jsonb_object_keys is Postgres-only.
-//  2. Sub2api has "hundreds of accounts × a few groups × a few non-wildcard
-//     models"; the in-memory cross-product is tiny (worst-case low thousands
-//     of combos) and trivially bounded.
-//
-// The logical SQL this mirrors (see commit body / task notes) is:
-//
-//	SELECT ag.group_id, ag.account_id, key
-//	  FROM account_groups ag
-//	  JOIN groups   g ON g.id = ag.group_id AND g.deleted_at IS NULL
-//	  JOIN accounts a ON a.id = ag.account_id AND a.deleted_at IS NULL AND a.schedulable = true,
-//	       jsonb_object_keys(g.model_routing) AS key
-//	 WHERE position('*' IN key) = 0
-//	   AND NOT EXISTS (
-//	     SELECT 1 FROM channel_health_samples s
-//	      WHERE s.account_id = ag.account_id
-//	        AND s.group_id   = ag.group_id
-//	        AND s.model      = key
-//	        AND s.bucket_ts  > NOW() - :coldFreshness
-//	   )
-//	 ORDER BY <max(s.bucket_ts) per (account,group,model)> ASC NULLS FIRST
-//	 LIMIT :budget;
+// enumerateCandidates builds the cold-combo list from the public status config.
+// The active probe unit is currently the configured public group/model; probe
+// line labels are presentation/config metadata until separate probe agents feed
+// line-scoped samples.
 func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candidate, error) {
-	// 1) Groups (not deleted) with a populated model_routing map.
+	cfg, err := p.loadPublicStatusConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	enabledModels := enabledPublicStatusModels(cfg)
+	groupConfigByID := enabledPublicStatusGroups(cfg)
+	if len(enabledModels) == 0 || len(groupConfigByID) == 0 {
+		return nil, nil
+	}
+
+	groupIDs := make([]int64, 0, len(groupConfigByID))
+	for id := range groupConfigByID {
+		groupIDs = append(groupIDs, id)
+	}
+
+	// 1) Configured groups only.
 	groups, err := p.entClient.Group.Query().
-		Where(group.DeletedAtIsNil()).
+		Where(group.DeletedAtIsNil(), group.IDIn(groupIDs...), group.StatusEQ(StatusActive)).
 		All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// group_id -> set of non-wildcard model keys.
+	// group_id -> configured models supported by that group.
 	modelsByGroup := make(map[int64][]string, len(groups))
 	for _, g := range groups {
-		if len(g.ModelRouting) == 0 {
-			continue
-		}
-		keys := make([]string, 0, len(g.ModelRouting))
-		for k := range g.ModelRouting {
-			// Wildcard patterns are not probable targets — we can only probe
-			// a concrete model name. matchModelPattern uses trailing "*"
-			// today but a literal containing "*" anywhere isn't safe either.
-			if strings.Contains(k, "*") {
+		gc := groupConfigByID[g.ID]
+		for _, m := range enabledModels {
+			if !publicStatusGroupConfigSupportsModel(gc, m.Name) {
 				continue
 			}
-			if k == "" {
+			if !groupSupportsStatusModel(g, m.Name) {
 				continue
 			}
-			keys = append(keys, k)
-		}
-		if len(keys) > 0 {
-			modelsByGroup[g.ID] = keys
+			probeName := normalizeProbeModelName(m.Name)
+			if probeName != "" {
+				modelsByGroup[g.ID] = append(modelsByGroup[g.ID], probeName)
+			}
 		}
 	}
 	if len(modelsByGroup) == 0 {
 		return nil, nil
 	}
 
-	// 2) AccountGroup rows joined with schedulable, non-deleted accounts.
-	// Collect group ids we actually need to join against.
-	groupIDs := make([]int64, 0, len(modelsByGroup))
+	// 2) Build raw candidate list. The active probe unit is a configured public
+	// group/model. The executor will run through the normal group scheduler and
+	// fail over across accounts if the first selected upstream fails.
+	cands := make([]candidate, 0, len(modelsByGroup)*2)
+	combos := make(map[string]*candidate, len(modelsByGroup)*2)
 	for gid := range modelsByGroup {
-		groupIDs = append(groupIDs, gid)
-	}
-	agRows, err := p.entClient.AccountGroup.Query().
-		Where(accountgroup.GroupIDIn(groupIDs...)).
-		Where(accountgroup.HasAccountWith(
-			account.DeletedAtIsNil(),
-			account.SchedulableEQ(true),
-		)).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(agRows) == 0 {
-		return nil, nil
-	}
-
-	// 3) Build raw candidate list.
-	cands := make([]candidate, 0, len(agRows)*2)
-	combos := make(map[string]*candidate, len(agRows)*2)
-	for _, ag := range agRows {
-		models := modelsByGroup[ag.GroupID]
+		models := modelsByGroup[gid]
 		for _, m := range models {
-			c := candidate{groupID: ag.GroupID, accountID: ag.AccountID, model: m}
+			key := groupModelKey(gid, m)
+			if _, exists := combos[key]; exists {
+				continue
+			}
+			c := candidate{groupID: gid, model: m}
 			cands = append(cands, c)
-			combos[comboKey(ag.AccountID, ag.GroupID, m)] = &cands[len(cands)-1]
+			combos[key] = &cands[len(cands)-1]
 		}
 	}
 	if len(cands) == 0 {
 		return nil, nil
 	}
 
-	// 4) Fetch samples inside coldFreshness — any match disqualifies the
-	// combo. Same query also feeds lastSampleTs for ordering (any sample,
-	// not just recent ones). We scope the query to (account_id, group_id,
-	// model) triples we care about via the model-in list for cheapness.
+	// 3) Fetch samples inside coldFreshness. Any fresh sample for a group/model
+	// suppresses another active probe because the public health unit is the
+	// group pool, not a specific account.
 	modelSet := map[string]struct{}{}
-	accountSet := map[int64]struct{}{}
 	groupSet := map[int64]struct{}{}
 	for _, c := range cands {
 		modelSet[c.model] = struct{}{}
-		accountSet[c.accountID] = struct{}{}
 		groupSet[c.groupID] = struct{}{}
 	}
-	models := make([]string, 0, len(modelSet))
+	probeModels := make([]string, 0, len(modelSet))
 	for m := range modelSet {
-		models = append(models, m)
-	}
-	accIDs := make([]int64, 0, len(accountSet))
-	for a := range accountSet {
-		accIDs = append(accIDs, a)
+		probeModels = append(probeModels, m)
 	}
 	gIDs := make([]int64, 0, len(groupSet))
 	for g := range groupSet {
@@ -399,9 +413,8 @@ func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candid
 
 	samples, err := p.entClient.ChannelHealthSample.Query().
 		Where(
-			channelhealthsample.AccountIDIn(accIDs...),
 			channelhealthsample.GroupIDIn(gIDs...),
-			channelhealthsample.ModelIn(models...),
+			channelhealthsample.ModelIn(probeModels...),
 			channelhealthsample.BucketTsGTE(scanCutoff),
 		).
 		All(ctx)
@@ -413,7 +426,7 @@ func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candid
 	// stash max(bucket_ts) for ordering.
 	excluded := map[string]bool{}
 	for _, s := range samples {
-		key := comboKey(s.AccountID, s.GroupID, s.Model)
+		key := groupModelKey(s.GroupID, s.Model)
 		c, ok := combos[key]
 		if !ok {
 			continue
@@ -428,10 +441,10 @@ func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candid
 		}
 	}
 
-	// 5) Collect survivors.
+	// 4) Collect survivors.
 	out := make([]candidate, 0, len(cands))
 	for i := range cands {
-		key := comboKey(cands[i].accountID, cands[i].groupID, cands[i].model)
+		key := groupModelKey(cands[i].groupID, cands[i].model)
 		if excluded[key] {
 			continue
 		}
@@ -443,15 +456,11 @@ func (p *ChannelHealthProber) enumerateCandidates(ctx context.Context) ([]candid
 	return out, nil
 }
 
-// comboKey builds the map key used to match samples back to candidates.
-func comboKey(accountID, groupID int64, model string) string {
+func groupModelKey(groupID int64, model string) string {
 	var b strings.Builder
-	b.Grow(len(model) + 24)
-	b.WriteString(strconv.FormatInt(accountID, 10))
-	b.WriteByte('|')
+	b.Grow(len(model) + 16)
 	b.WriteString(strconv.FormatInt(groupID, 10))
 	b.WriteByte('|')
 	b.WriteString(model)
 	return b.String()
 }
-

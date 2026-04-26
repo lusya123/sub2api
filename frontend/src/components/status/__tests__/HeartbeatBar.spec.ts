@@ -14,9 +14,9 @@ describe('HeartbeatBar', () => {
     const items = wrapper.findAll('[data-beat]')
     // 组件会补齐到 90,这里取最后 4 个验证颜色
     expect(items.length).toBeGreaterThanOrEqual(4)
-    expect(items[items.length - 4].classes()).toContain('bg-green-500')
-    expect(items[items.length - 3].classes()).toContain('bg-orange-500')
-    expect(items[items.length - 2].classes()).toContain('bg-red-500')
-    expect(items[items.length - 1].classes()).toContain('bg-neutral-700')
+    expect(items[items.length - 4].classes()).toContain('is-ok')
+    expect(items[items.length - 3].classes()).toContain('is-degraded')
+    expect(items[items.length - 2].classes()).toContain('is-down')
+    expect(items[items.length - 1].classes()).toContain('is-unknown')
   })
 })

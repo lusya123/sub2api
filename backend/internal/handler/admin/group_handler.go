@@ -215,6 +215,15 @@ func (h *GroupHandler) GetAll(c *gin.Context) {
 		return
 	}
 
+	if isOperatorRequest(c) {
+		outGroups := make([]dto.Group, 0, len(groups))
+		for i := range groups {
+			outGroups = append(outGroups, *dto.GroupFromService(&groups[i]))
+		}
+		response.Success(c, outGroups)
+		return
+	}
+
 	outGroups := make([]dto.AdminGroup, 0, len(groups))
 	for i := range groups {
 		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))

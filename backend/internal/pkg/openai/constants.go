@@ -15,6 +15,8 @@ type Model struct {
 
 // DefaultModels OpenAI models list
 var DefaultModels = []Model{
+	{ID: "glm-5", Object: "model", Created: 1764547200, OwnedBy: "z.ai", Type: "model", DisplayName: "GLM-5"},
+	{ID: "minimax-m2.5", Object: "model", Created: 1764547200, OwnedBy: "minimax", Type: "model", DisplayName: "MiniMax M2.5"},
 	{ID: "gpt-5.4", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4"},
 	{ID: "gpt-5.4-mini", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Mini"},
 	{ID: "gpt-5.4-nano", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Nano"},

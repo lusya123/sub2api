@@ -45,6 +45,7 @@ type SystemSettings struct {
 	PurchaseSubscriptionRedirectURL string
 	PurchaseSubscriptionURL         string
 	SoraClientEnabled               bool
+	ModelHealthPageEnabled          bool
 	CustomMenuItems                 string // JSON array of custom menu items
 	CustomEndpoints                 string // JSON array of custom endpoints
 
@@ -114,6 +115,7 @@ type PublicSettings struct {
 	PurchaseSubscriptionRedirectURL string
 	PurchaseSubscriptionURL         string
 	SoraClientEnabled               bool
+	ModelHealthPageEnabled          bool
 	CustomMenuItems                 string // JSON array of custom menu items
 	CustomEndpoints                 string // JSON array of custom endpoints
 

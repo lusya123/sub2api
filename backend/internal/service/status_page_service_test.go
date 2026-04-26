@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -51,6 +50,45 @@ func seedStatusFixture(t *testing.T, client *dbent.Client, model string) (accoun
 	return accountID, groupID
 }
 
+func testPublicStatusConfig(models []string, groupIDs ...int64) PublicStatusConfig {
+	cfg := PublicStatusConfig{Models: make([]PublicStatusModelConfig, 0, len(models))}
+	for _, model := range models {
+		cfg.Models = append(cfg.Models, modelConfigFromCatalog(model))
+	}
+	for _, gid := range groupIDs {
+		cfg.Groups = append(cfg.Groups, PublicStatusGroupConfig{
+			GroupID: gid,
+			Enabled: true,
+		})
+	}
+	return cfg
+}
+
+func hasStatusModel(models []StatusModel, name string) bool {
+	for _, model := range models {
+		if model.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func statusGroupNames(groups []StatusGroup) []string {
+	out := make([]string, 0, len(groups))
+	for _, group := range groups {
+		out = append(out, group.Name)
+	}
+	return out
+}
+
+func statusChannelNames(channels []StatusChannel) []string {
+	out := make([]string, 0, len(channels))
+	for _, channel := range channels {
+		out = append(out, channel.Name)
+	}
+	return out
+}
+
 func TestStatusPage_AllGreen(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	model := "claude-sonnet-4-6"
@@ -62,7 +100,9 @@ func TestStatusPage_AllGreen(t *testing.T) {
 		seedSample(t, client, base.Add(time.Duration(i)*time.Minute), aid, gid, model, 1, 0, 0, 0)
 	}
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{model}, gid)).
+		WithNowFn(func() time.Time { return fixedNow })
 	detail, err := svc.GetModelDetail(context.Background(), model)
 	require.NoError(t, err)
 	require.NotNil(t, detail)
@@ -94,7 +134,9 @@ func TestStatusPage_PartiallyDegraded(t *testing.T) {
 		}
 	}
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{model}, gid)).
+		WithNowFn(func() time.Time { return fixedNow })
 	detail, err := svc.GetModelDetail(context.Background(), model)
 	require.NoError(t, err)
 
@@ -117,9 +159,11 @@ func TestStatusPage_PartiallyDegraded(t *testing.T) {
 func TestStatusPage_NoSamples(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	model := "claude-haiku-4-5-20251001"
-	_, _ = seedStatusFixture(t, client, model)
+	_, gid := seedStatusFixture(t, client, model)
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{model}, gid)).
+		WithNowFn(func() time.Time { return fixedNow })
 	detail, err := svc.GetModelDetail(context.Background(), model)
 	require.NoError(t, err)
 	require.Len(t, detail.Heartbeats, statusWindowMinutes)
@@ -131,114 +175,258 @@ func TestStatusPage_NoSamples(t *testing.T) {
 	require.InDelta(t, 100.0, detail.AvailabilityPct, 0.001)
 }
 
-func TestStatusPage_ChannelNameMasked(t *testing.T) {
+func TestStatusPage_ConfiguredGroupDisplayName(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	model := "claude-opus-4-7"
+	_, gid := seedStatusFixture(t, client, model)
+	cfg := testPublicStatusConfig([]string{model}, gid)
+	cfg.Groups[0].DisplayName = "Pro"
 
-	// Account deliberately has a leaky name + email-in-notes. The schema
-	// doesn't carry email as a first-class field, but notes frequently hold
-	// "ops@example.com" and ops.IP — masking must ignore all of that.
-	acc, err := client.Account.Create().
-		SetName("ops@example.com").
-		SetPlatform("anthropic").
-		SetType("oauth").
-		SetCredentials(map[string]interface{}{"api_key": "sk-secret"}).
-		SetExtra(map[string]interface{}{"region": "HK"}).
-		SetConcurrency(1).
-		SetPriority(50).
-		SetRateMultiplier(1.0).
-		SetStatus("active").
-		SetAutoPauseOnExpired(false).
-		SetSchedulable(true).
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
+	detail, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	require.Len(t, detail.Groups, 1)
+	require.Len(t, detail.Groups[0].Channels, 1)
+	require.Equal(t, "Pro", detail.Groups[0].Name)
+	require.Equal(t, "Pro", detail.Groups[0].Channels[0].Name)
+}
+
+func TestStatusPage_ConfiguredProbeLinesBecomeChannels(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	model := "claude-sonnet-4-6"
+	aid, gid := seedStatusFixture(t, client, model)
+	seedSample(t, client, floorToMinute(fixedNow.Add(-1*time.Minute)), aid, gid, model, 1, 0, 0, 0)
+
+	cfg := testPublicStatusConfig([]string{model}, gid)
+	cfg.Groups[0].DisplayName = "AWS"
+	cfg.Groups[0].ProbeLines = []PublicStatusProbeLineConfig{
+		{ID: "us", Name: "US", Region: "Virginia", Enabled: true, SortOrder: 2},
+		{ID: "asia", Name: "Asia", Region: "Singapore", Enabled: true, SortOrder: 1},
+		{ID: "disabled", Name: "Disabled", Enabled: false, SortOrder: 3},
+	}
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
+	detail, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	require.Len(t, detail.Groups, 1)
+	require.Len(t, detail.Groups[0].Channels, 2)
+	require.Equal(t, "Asia · Singapore", detail.Groups[0].Channels[0].Name)
+	require.Equal(t, "US · Virginia", detail.Groups[0].Channels[1].Name)
+	require.InDelta(t, 100.0, detail.Groups[0].Channels[0].AvailabilityPct, 0.01)
+	require.InDelta(t, 100.0, detail.Groups[0].Channels[1].AvailabilityPct, 0.01)
+}
+
+func TestStatusPage_DerivesConfigFromLiveGroupsWhenNoSavedConfig(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	model := "claude-sonnet-4-6"
+
+	accID := seedAccount(t, client, "live-claude-account")
+	liteID := seedGroup(t, client, "lite-claude", map[string][]int64{})
+	awsID := seedGroup(t, client, "aws", map[string][]int64{})
+	monthlyID := seedGroup(t, client, "标准版 | 50美金/天 | 月卡", map[string][]int64{})
+	noiseID := seedGroup(t, client, "内部压测", map[string][]int64{})
+	_, err := client.Group.UpdateOneID(monthlyID).
+		SetSubscriptionType(SubscriptionTypeSubscription).
 		Save(context.Background())
 	require.NoError(t, err)
-	gid := seedGroup(t, client, "status-masked-group", map[string][]int64{model: {acc.ID}})
-	seedAccountGroup(t, client, acc.ID, gid)
+
+	for _, gid := range []int64{liteID, awsID, monthlyID, noiseID} {
+		seedAccountGroup(t, client, accID, gid)
+	}
+	seedSample(t, client, floorToMinute(fixedNow.Add(-1*time.Minute)), accID, liteID, model, 1, 0, 0, 0)
+	seedSample(t, client, floorToMinute(fixedNow.Add(-1*time.Minute)), accID, awsID, model, 1, 0, 0, 0)
+	seedSample(t, client, floorToMinute(fixedNow.Add(-1*time.Minute)), accID, monthlyID, model, 1, 0, 0, 0)
 
 	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	list, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, list)
+	require.True(t, hasStatusModel(list, model))
+
 	detail, err := svc.GetModelDetail(context.Background(), model)
 	require.NoError(t, err)
-	require.Len(t, detail.Groups, 1)
-	require.Len(t, detail.Groups[0].Channels, 1)
-	got := detail.Groups[0].Channels[0].Name
-	require.Equal(t, "HK", got)
-	require.NotContains(t, got, "@")
-	require.NotContains(t, got, "ops@example.com")
+	require.Equal(t, []string{"AWS", "lite", "月卡"}, statusGroupNames(detail.Groups))
+	require.Equal(t, []string{"US · Virginia", "EU · Frankfurt", "Asia · Singapore"}, statusChannelNames(detail.Groups[0].Channels))
 }
 
-// TestStatusPage_ChannelNameWhitelist locks in the whitelist behaviour: even
-// though extra.region is operator-editable free-form text, anything that
-// doesn't match ^[A-Za-z0-9 .-]{1,32}$ must fall back to "Channel #<id>" so
-// we can't leak ops@example.com / 1.2.3.4 / CJK notes to the public page.
-func TestStatusPage_ChannelNameWhitelist(t *testing.T) {
-	cases := []struct {
-		name   string
-		region string
-		// wantPass means the region value itself is echoed verbatim.
-		wantPass bool
-		// wantExact is the expected output when wantPass=true.
-		wantExact string
-	}{
-		{name: "email leaks blocked", region: "ops@example.com", wantPass: false},
-		{name: "simple region kept", region: "HK", wantPass: true, wantExact: "HK"},
-		{name: "mixed cjk blocked", region: "South 中国", wantPass: false},
-		{name: "dashed ascii kept", region: "US-East-1", wantPass: true, wantExact: "US-East-1"},
-		{name: "ip leaks blocked", region: "1.2.3.4:443", wantPass: false},
-		{name: "long region blocked", region: strings.Repeat("A", 33), wantPass: false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			client := newChannelHealthTestClient(t)
-			model := "claude-opus-4-7"
-			acc, err := client.Account.Create().
-				SetName("test-acct").
-				SetPlatform("anthropic").
-				SetType("oauth").
-				SetCredentials(map[string]interface{}{}).
-				SetExtra(map[string]interface{}{"region": tc.region}).
-				SetConcurrency(1).
-				SetPriority(50).
-				SetRateMultiplier(1.0).
-				SetStatus("active").
-				SetAutoPauseOnExpired(false).
-				SetSchedulable(true).
-				Save(context.Background())
-			require.NoError(t, err)
-			gid := seedGroup(t, client, "g-wl", map[string][]int64{model: {acc.ID}})
-			seedAccountGroup(t, client, acc.ID, gid)
-
-			svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
-			detail, err := svc.GetModelDetail(context.Background(), model)
-			require.NoError(t, err)
-			require.Len(t, detail.Groups, 1)
-			require.Len(t, detail.Groups[0].Channels, 1)
-			got := detail.Groups[0].Channels[0].Name
-
-			if tc.wantPass {
-				require.Equal(t, tc.wantExact, got)
-			} else {
-				require.Contains(t, got, "Channel #",
-					"non-whitelisted region %q must fall back to Channel #<id>, got %q",
-					tc.region, got)
-				require.NotContains(t, got, "@")
-				require.NotContains(t, got, tc.region)
-			}
-		})
-	}
-}
-
-func TestStatusPage_ChannelNameFallbackToID(t *testing.T) {
+func TestStatusPage_MonthlyGroupsAggregate(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	model := "claude-opus-4-7"
-	aid, _ := seedStatusFixture(t, client, model)
+	aid1 := seedAccount(t, client, "monthly-a")
+	aid2 := seedAccount(t, client, "monthly-b")
+	g1 := seedGroup(t, client, "入门版 | 15美金/天 | 月卡", map[string][]int64{model: {aid1}})
+	g2 := seedGroup(t, client, "团队版 | 200美金/天 | 月卡", map[string][]int64{model: {aid2}})
+	seedAccountGroup(t, client, aid1, g1)
+	seedAccountGroup(t, client, aid2, g2)
+	seedSample(t, client, floorToMinute(fixedNow.Add(-1*time.Minute)), aid1, g1, model, 1, 0, 0, 0)
+	seedSample(t, client, floorToMinute(fixedNow.Add(-2*time.Minute)), aid2, g2, model, 0, 0, 1, 0)
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	cfg := testPublicStatusConfig([]string{model}, g1, g2)
+	cfg.Groups[0].DisplayName = "月卡"
+	cfg.Groups[0].AggregateKey = publicStatusAggregateMonthly
+	cfg.Groups[1].DisplayName = "月卡"
+	cfg.Groups[1].AggregateKey = publicStatusAggregateMonthly
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
 	detail, err := svc.GetModelDetail(context.Background(), model)
 	require.NoError(t, err)
 	require.Len(t, detail.Groups, 1)
 	require.Len(t, detail.Groups[0].Channels, 1)
-	require.Contains(t, detail.Groups[0].Channels[0].Name, "Channel #")
-	require.Contains(t, detail.Groups[0].Channels[0].Name, strconv.FormatInt(aid, 10))
+	require.Equal(t, "月卡", detail.Groups[0].Name)
+	require.Equal(t, "月卡", detail.Groups[0].Channels[0].Name)
+	require.InDelta(t, 50.0, detail.Groups[0].Channels[0].AvailabilityPct, 0.01)
+	require.InDelta(t, 100.0, detail.Groups[0].LoadPct, 0.01)
+}
+
+func TestStatusPage_GroupDisplayOrder(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	model := "claude-sonnet-4-6"
+	aid := seedAccount(t, client, "status-order-account")
+
+	pro := seedGroup(t, client, "pro-claude", map[string][]int64{model: {aid}})
+	monthly := seedGroup(t, client, "入门版 | 月卡", map[string][]int64{model: {aid}})
+	aws := seedGroup(t, client, "aws", map[string][]int64{model: {aid}})
+	light := seedGroup(t, client, "lite-claude", map[string][]int64{model: {aid}})
+	special := seedGroup(t, client, "特惠-claude", map[string][]int64{model: {aid}})
+	maxPure := seedGroup(t, client, "纯血MAX官转", map[string][]int64{model: {aid}})
+	for _, gid := range []int64{pro, monthly, aws, light, special, maxPure} {
+		seedAccountGroup(t, client, aid, gid)
+	}
+
+	cfg := testPublicStatusConfig([]string{model}, pro, monthly, aws, light, special, maxPure)
+	for i := range cfg.Groups {
+		switch cfg.Groups[i].GroupID {
+		case maxPure:
+			cfg.Groups[i].DisplayName = "MAX 纯血"
+			cfg.Groups[i].AggregateKey = publicStatusAggregateMaxPure
+		case aws:
+			cfg.Groups[i].DisplayName = "AWS"
+			cfg.Groups[i].AggregateKey = publicStatusAggregateAWS
+		case light:
+			cfg.Groups[i].DisplayName = "lite"
+			cfg.Groups[i].AggregateKey = publicStatusAggregateLite
+		case special:
+			cfg.Groups[i].DisplayName = "特惠"
+			cfg.Groups[i].AggregateKey = publicStatusAggregateSpecial
+		case pro:
+			cfg.Groups[i].DisplayName = "PRO"
+			cfg.Groups[i].AggregateKey = publicStatusAggregatePro
+		case monthly:
+			cfg.Groups[i].DisplayName = "月卡"
+			cfg.Groups[i].AggregateKey = publicStatusAggregateMonthly
+		}
+	}
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
+	detail, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	require.Len(t, detail.Groups, 6)
+	require.Equal(t, []string{"MAX 纯血", "AWS", "lite", "特惠", "PRO", "月卡"}, []string{
+		detail.Groups[0].Name,
+		detail.Groups[1].Name,
+		detail.Groups[2].Name,
+		detail.Groups[3].Name,
+		detail.Groups[4].Name,
+		detail.Groups[5].Name,
+	})
+}
+
+func TestStatusPage_GroupConfigModelFilter(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	allowedModel := "claude-sonnet-4-6"
+	blockedModel := "claude-opus-4-7"
+	aid := seedAccount(t, client, "status-model-filter-account")
+	common := seedGroup(t, client, "aws", map[string][]int64{blockedModel: {aid}})
+	special := seedGroup(t, client, "特惠-claude", map[string][]int64{
+		allowedModel: {aid},
+		blockedModel: {aid},
+	})
+	seedAccountGroup(t, client, aid, common)
+	seedAccountGroup(t, client, aid, special)
+
+	cfg := testPublicStatusConfig([]string{allowedModel, blockedModel}, common, special)
+	cfg.Groups[0].DisplayName = "AWS"
+	cfg.Groups[0].AggregateKey = publicStatusAggregateAWS
+	cfg.Groups[1].DisplayName = "特惠"
+	cfg.Groups[1].AggregateKey = publicStatusAggregateSpecial
+	cfg.Groups[1].Models = []string{allowedModel}
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
+	allowed, err := svc.GetModelDetail(context.Background(), allowedModel)
+	require.NoError(t, err)
+	require.Len(t, allowed.Groups, 2)
+	require.Equal(t, "AWS", allowed.Groups[0].Name)
+	require.Equal(t, "特惠", allowed.Groups[1].Name)
+
+	blocked, err := svc.GetModelDetail(context.Background(), blockedModel)
+	require.NoError(t, err)
+	require.Len(t, blocked.Groups, 1)
+	require.Equal(t, "AWS", blocked.Groups[0].Name)
+}
+
+func TestStatusPage_ConfiguredGeminiDoesNotLeakIntoLegacyClaudeGroups(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	claudeModel := "claude-sonnet-4-6"
+	geminiModel := "gemini-2.5-pro"
+	aid, gid := seedStatusFixture(t, client, claudeModel)
+	_, err := client.Group.UpdateOneID(gid).SetSupportedModelScopes([]string{}).Save(context.Background())
+	require.NoError(t, err)
+	seedSample(t, client, floorToMinute(fixedNow.Add(-1*time.Minute)), aid, gid, claudeModel, 1, 0, 0, 0)
+
+	cfg := testPublicStatusConfig([]string{claudeModel, geminiModel}, gid)
+	cfg.Models[1].Provider = "GOOGLE"
+	cfg.Groups[0].DisplayName = "lite"
+	cfg.Groups[0].AggregateKey = publicStatusAggregateLite
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
+
+	models, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	require.Equal(t, claudeModel, models[0].Name)
+
+	_, err = svc.GetModelDetail(context.Background(), geminiModel)
+	require.ErrorIs(t, err, ErrStatusModelUnknown)
+}
+
+func TestPublicStatusGroupSuggestions(t *testing.T) {
+	cases := []struct {
+		name             string
+		subscriptionType string
+		wantName         string
+		wantKey          string
+	}{
+		{name: "Claude Lite", subscriptionType: SubscriptionTypeStandard, wantName: "lite", wantKey: publicStatusAggregateLite},
+		{name: "Claude Pro", subscriptionType: SubscriptionTypeStandard, wantName: "PRO", wantKey: publicStatusAggregatePro},
+		{name: "月卡 Pro A", subscriptionType: SubscriptionTypeSubscription, wantName: "月卡", wantKey: publicStatusAggregateMonthly},
+		{name: "特惠-claude", subscriptionType: SubscriptionTypeStandard, wantName: "特惠", wantKey: publicStatusAggregateSpecial},
+		{name: "Max 主力", subscriptionType: SubscriptionTypeStandard, wantName: "MAX", wantKey: publicStatusAggregateMax},
+		{name: "纯血MAX官转", subscriptionType: SubscriptionTypeStandard, wantName: "MAX 纯血", wantKey: publicStatusAggregateMaxPure},
+		{name: "aws", subscriptionType: SubscriptionTypeStandard, wantName: "AWS", wantKey: publicStatusAggregateAWS},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotName, gotKey := suggestedPublicStatusGroup(&dbent.Group{
+				Name:             tc.name,
+				SubscriptionType: tc.subscriptionType,
+			})
+			require.Equal(t, tc.wantName, gotName)
+			require.Equal(t, tc.wantKey, gotKey)
+		})
+	}
 }
 
 // TestStatusPage_UnknownModelReturnsSentinel: GetModelDetail on a model that
@@ -247,11 +435,13 @@ func TestStatusPage_ChannelNameFallbackToID(t *testing.T) {
 // the DoS fast-path.
 func TestStatusPage_UnknownModelReturnsSentinel(t *testing.T) {
 	client := newChannelHealthTestClient(t)
-	_ = seedGroup(t, client, "g-known", map[string][]int64{
+	gid := seedGroup(t, client, "g-known", map[string][]int64{
 		"claude-opus-4-7": nil,
 	})
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gid)).
+		WithNowFn(func() time.Time { return fixedNow })
 	detail, err := svc.GetModelDetail(context.Background(), "totally-made-up-model-that-does-not-exist")
 	require.ErrorIs(t, err, ErrStatusModelUnknown)
 	require.Nil(t, detail)
@@ -263,11 +453,13 @@ func TestStatusPage_UnknownModelReturnsSentinel(t *testing.T) {
 // before the detail cache is consulted.
 func TestStatusPage_UnknownModelDoesNotCachePoison(t *testing.T) {
 	client := newChannelHealthTestClient(t)
-	_ = seedGroup(t, client, "g-known", map[string][]int64{
+	gid := seedGroup(t, client, "g-known", map[string][]int64{
 		"claude-opus-4-7": nil,
 	})
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gid)).
+		WithNowFn(func() time.Time { return fixedNow })
 
 	for i := 0; i < 50; i++ {
 		name := "bogus-" + strconv.Itoa(i)
@@ -286,19 +478,21 @@ func TestStatusPage_UnknownModelDoesNotCachePoison(t *testing.T) {
 // surface the new group.
 func TestStatusPage_CacheHits(t *testing.T) {
 	client := newChannelHealthTestClient(t)
-	_ = seedGroup(t, client, "g-initial", map[string][]int64{
+	aid := seedAccount(t, client, "cache-hit-account")
+	gid := seedGroup(t, client, "g-initial", map[string][]int64{
 		"claude-opus-4-7": nil,
 	})
+	seedAccountGroup(t, client, aid, gid)
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gid)).
+		WithNowFn(func() time.Time { return fixedNow })
 	first, err := svc.ListModels(context.Background())
 	require.NoError(t, err)
 	require.Len(t, first, 1)
 
-	// Mutate the DB in a way a non-cached call would observe immediately.
-	_ = seedGroup(t, client, "g-added-after-cache", map[string][]int64{
-		"claude-sonnet-4-6": nil,
-	})
+	// Mutate config in a way a non-cached call would observe immediately.
+	svc.WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7", "claude-sonnet-4-6"}, gid))
 
 	// Second call at the same fixed time hits cache; the new group is NOT
 	// reflected.
@@ -312,19 +506,21 @@ func TestStatusPage_CacheHits(t *testing.T) {
 // fresh DB read. The newly-seeded model surfaces.
 func TestStatusPage_CacheExpires(t *testing.T) {
 	client := newChannelHealthTestClient(t)
-	_ = seedGroup(t, client, "g-initial", map[string][]int64{
+	aid := seedAccount(t, client, "cache-expire-account")
+	gid := seedGroup(t, client, "g-initial", map[string][]int64{
 		"claude-opus-4-7": nil,
 	})
+	seedAccountGroup(t, client, aid, gid)
 
 	now := fixedNow
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return now })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, gid)).
+		WithNowFn(func() time.Time { return now })
 	first, err := svc.ListModels(context.Background())
 	require.NoError(t, err)
 	require.Len(t, first, 1)
 
-	_ = seedGroup(t, client, "g-post-expiry", map[string][]int64{
-		"claude-sonnet-4-6": nil,
-	})
+	svc.WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7", "claude-sonnet-4-6"}, gid))
 
 	// Jump well past the 30s TTL.
 	now = fixedNow.Add(statusCacheTTL + 5*time.Second)
@@ -341,7 +537,9 @@ func TestStatusPage_DetailCacheHits(t *testing.T) {
 	model := "claude-opus-4-7"
 	aid, gid := seedStatusFixture(t, client, model)
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{model}, gid)).
+		WithNowFn(func() time.Time { return fixedNow })
 
 	// First call: empty window, all unknown.
 	first, err := svc.GetModelDetail(context.Background(), model)
@@ -365,17 +563,23 @@ func TestStatusPage_DetailCacheHits(t *testing.T) {
 func TestStatusPage_ListModels(t *testing.T) {
 	client := newChannelHealthTestClient(t)
 	// Two groups routing three total models — one duplicate across groups.
-	_ = seedGroup(t, client, "g-a", map[string][]int64{
-		"claude-opus-4-7":  nil,
-		"claude-opus-4-6":  nil,
+	aid1 := seedAccount(t, client, "list-models-a")
+	aid2 := seedAccount(t, client, "list-models-b")
+	g1 := seedGroup(t, client, "g-a", map[string][]int64{
+		"claude-opus-4-7":   nil,
+		"claude-opus-4-6":   nil,
 		"claude-*-wildcard": nil, // must be filtered out
 	})
-	_ = seedGroup(t, client, "g-b", map[string][]int64{
-		"claude-opus-4-7":    nil,
-		"claude-sonnet-4-6":  nil,
+	g2 := seedGroup(t, client, "g-b", map[string][]int64{
+		"claude-opus-4-7":   nil,
+		"claude-sonnet-4-6": nil,
 	})
+	seedAccountGroup(t, client, aid1, g1)
+	seedAccountGroup(t, client, aid2, g2)
 
-	svc := NewStatusPageService(client).WithNowFn(func() time.Time { return fixedNow })
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"}, g1, g2)).
+		WithNowFn(func() time.Time { return fixedNow })
 	models, err := svc.ListModels(context.Background())
 	require.NoError(t, err)
 	names := make([]string, 0, len(models))
@@ -394,4 +598,77 @@ func TestStatusPage_ListModels(t *testing.T) {
 			require.Greater(t, m.Pricing.InputPerMTok, 0.0)
 		}
 	}
+}
+
+func TestDefaultPublicStatusModelsIncludeGLMAndMiniMax(t *testing.T) {
+	cfg := defaultPublicStatusConfig()
+	names := make([]string, 0, len(cfg.Models))
+	byName := make(map[string]PublicStatusModelConfig, len(cfg.Models))
+	for _, model := range cfg.Models {
+		names = append(names, model.Name)
+		byName[model.Name] = model
+	}
+
+	require.Contains(t, names, "glm-5")
+	require.Contains(t, names, "minimax-m2.5")
+	require.Equal(t, "Z.AI", byName["glm-5"].Provider)
+	require.Equal(t, "MINIMAX", byName["minimax-m2.5"].Provider)
+	require.InDelta(t, 1.0, byName["glm-5"].Pricing.InputPerMTok, 1e-12)
+	require.InDelta(t, 0.3, byName["minimax-m2.5"].Pricing.InputPerMTok, 1e-12)
+}
+
+func TestStatusPage_ExcludesConfiguredGroupWithoutSchedulableAccount(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	model := "claude-sonnet-4-6"
+	aid, monitorableGroupID := seedStatusFixture(t, client, model)
+	unmonitorableGroupID := seedGroup(t, client, "configured-without-account", map[string][]int64{model: {aid}})
+
+	cfg := testPublicStatusConfig([]string{model}, monitorableGroupID, unmonitorableGroupID)
+	cfg.Groups[0].DisplayName = "Monitorable"
+	cfg.Groups[1].DisplayName = "NoAccount"
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
+
+	models, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+
+	detail, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	require.Len(t, detail.Groups, 1)
+	require.Equal(t, "Monitorable", detail.Groups[0].Name)
+}
+
+func TestStatusPage_ConfiguredInactiveGroupIsHidden(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	model := "claude-sonnet-4-6"
+
+	activeAccountID := seedAccount(t, client, "active-group-account")
+	activeGroupID := seedGroup(t, client, "active-public-group", map[string][]int64{model: {activeAccountID}})
+	seedAccountGroup(t, client, activeAccountID, activeGroupID)
+
+	inactiveAccountID := seedAccount(t, client, "inactive-group-account")
+	inactiveGroupID := seedGroup(t, client, "inactive-public-group", map[string][]int64{model: {inactiveAccountID}})
+	_, err := client.Group.UpdateOneID(inactiveGroupID).SetStatus("inactive").Save(context.Background())
+	require.NoError(t, err)
+	seedAccountGroup(t, client, inactiveAccountID, inactiveGroupID)
+
+	cfg := testPublicStatusConfig([]string{model}, activeGroupID, inactiveGroupID)
+	cfg.Groups[0].DisplayName = "ACTIVE"
+	cfg.Groups[1].DisplayName = "INACTIVE"
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(cfg).
+		WithNowFn(func() time.Time { return fixedNow })
+
+	models, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+
+	detail, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	require.Len(t, detail.Groups, 1)
+	require.Equal(t, "ACTIVE", detail.Groups[0].Name)
 }

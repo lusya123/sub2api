@@ -7,20 +7,14 @@
  *   - No 401 refresh/redirect logic (public pages should never bounce to /login).
  *   - No ApiResponse unwrapping — status endpoints return raw DTOs.
  *
- * baseURL matches the main client so both respect VITE_API_BASE_URL. When the
- * default `/api/v1` is in effect we still hit `/api/public/...` paths correctly
- * because callers pass absolute `/api/public/...` URLs (axios treats a URL
- * starting with `/` as overriding the baseURL's path portion only when baseURL
- * itself is a full origin; for same-origin deployments we use an empty origin
- * so an absolute path hits the server root regardless of baseURL).
+ * VITE_PUBLIC_API_BASE_URL can point the public status page at another origin
+ * such as the production cloud server. The default empty baseURL keeps same-
+ * origin deployments hitting `/api/public/...` on the current host.
  */
 
 import axios, { AxiosInstance } from 'axios'
 
-// Public endpoints live at an absolute server path, not under /api/v1. Using
-// an empty baseURL means callers supply the full `/api/public/...` path and it
-// is sent as-is relative to the current origin.
-const PUBLIC_API_BASE_URL = ''
+const PUBLIC_API_BASE_URL = import.meta.env.VITE_PUBLIC_API_BASE_URL || ''
 
 export const publicClient: AxiosInstance = axios.create({
   baseURL: PUBLIC_API_BASE_URL,

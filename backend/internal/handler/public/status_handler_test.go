@@ -37,6 +37,59 @@ func newTestEntClient(t *testing.T) *dbent.Client {
 	return client
 }
 
+func testPublicStatusConfig(models []string, groupIDs ...int64) service.PublicStatusConfig {
+	cfg := service.PublicStatusConfig{
+		Models: make([]service.PublicStatusModelConfig, 0, len(models)),
+		Groups: make([]service.PublicStatusGroupConfig, 0, len(groupIDs)),
+	}
+	for _, name := range models {
+		cfg.Models = append(cfg.Models, service.PublicStatusModelConfig{
+			Name:          name,
+			Provider:      "ANTHROPIC",
+			PromptCaching: true,
+			Enabled:       true,
+		})
+	}
+	for _, id := range groupIDs {
+		cfg.Groups = append(cfg.Groups, service.PublicStatusGroupConfig{
+			GroupID:     id,
+			Enabled:     true,
+			DisplayName: "Public Group",
+		})
+	}
+	return cfg
+}
+
+func seedMonitorableStatusGroup(t *testing.T, client *dbent.Client, name string) int64 {
+	t.Helper()
+	account, err := client.Account.Create().
+		SetName(name + "-account").
+		SetPlatform("anthropic").
+		SetType("oauth").
+		SetCredentials(map[string]interface{}{}).
+		SetExtra(map[string]interface{}{}).
+		SetConcurrency(1).
+		SetPriority(50).
+		SetRateMultiplier(1.0).
+		SetStatus("active").
+		SetAutoPauseOnExpired(false).
+		SetSchedulable(true).
+		Save(context.Background())
+	require.NoError(t, err)
+	group, err := client.Group.Create().
+		SetName(name).
+		SetRateMultiplier(1.0).
+		SetModelRouting(map[string][]int64{}).
+		Save(context.Background())
+	require.NoError(t, err)
+	_, err = client.AccountGroup.Create().
+		SetAccountID(account.ID).
+		SetGroupID(group.ID).
+		Save(context.Background())
+	require.NoError(t, err)
+	return group.ID
+}
+
 // TestListModels_ResponseShape guards the public contract: the JSON must be a
 // top-level object with a `models` key whose value is an array. The frontend
 // StatusView reads `res.data.models`; a regression back to a bare array would
@@ -45,18 +98,11 @@ func TestListModels_ResponseShape(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := newTestEntClient(t)
 
-	// Seed one group with two concrete routing keys so ListModels has data.
-	_, err := client.Group.Create().
-		SetName("status-handler-test-group").
-		SetRateMultiplier(1.0).
-		SetModelRouting(map[string][]int64{
-			"claude-opus-4-7":   nil,
-			"claude-sonnet-4-6": nil,
-		}).
-		Save(context.Background())
-	require.NoError(t, err)
+	// Seed one group with a schedulable account so ListModels has monitorable data.
+	groupID := seedMonitorableStatusGroup(t, client, "status-handler-test-group")
 
-	svc := service.NewStatusPageService(client)
+	svc := service.NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7", "claude-sonnet-4-6"}, groupID))
 	h := NewPublicStatusHandler(svc)
 
 	r := gin.New()
@@ -127,14 +173,15 @@ func TestGetModelDetail_InputValidation(t *testing.T) {
 func TestGetModelDetail_UnknownModelIs404(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := newTestEntClient(t)
-	_, err := client.Group.Create().
+	g, err := client.Group.Create().
 		SetName("handler-unknown-test-group").
 		SetRateMultiplier(1.0).
-		SetModelRouting(map[string][]int64{"claude-opus-4-7": nil}).
+		SetModelRouting(map[string][]int64{}).
 		Save(context.Background())
 	require.NoError(t, err)
 
-	svc := service.NewStatusPageService(client)
+	svc := service.NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, g.ID))
 	h := NewPublicStatusHandler(svc)
 
 	r := gin.New()
@@ -164,14 +211,10 @@ func pathEscape(s string) string {
 func TestListAndDetail_CacheControlHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client := newTestEntClient(t)
-	_, err := client.Group.Create().
-		SetName("handler-cc-test-group").
-		SetRateMultiplier(1.0).
-		SetModelRouting(map[string][]int64{"claude-opus-4-7": nil}).
-		Save(context.Background())
-	require.NoError(t, err)
+	groupID := seedMonitorableStatusGroup(t, client, "handler-cc-test-group")
 
-	svc := service.NewStatusPageService(client)
+	svc := service.NewStatusPageService(client).
+		WithPublicStatusConfig(testPublicStatusConfig([]string{"claude-opus-4-7"}, groupID))
 	h := NewPublicStatusHandler(svc)
 
 	r := gin.New()

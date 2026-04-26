@@ -112,6 +112,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PurchaseSubscriptionRedirectURL:      settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:              settings.PurchaseSubscriptionURL,
 		SoraClientEnabled:                    settings.SoraClientEnabled,
+		ModelHealthPageEnabled:               settings.ModelHealthPageEnabled,
 		CustomMenuItems:                      dto.ParseCustomMenuItems(settings.CustomMenuItems),
 		CustomEndpoints:                      dto.ParseCustomEndpoints(settings.CustomEndpoints),
 		DefaultConcurrency:                   settings.DefaultConcurrency,
@@ -184,6 +185,7 @@ type UpdateSettingsRequest struct {
 	PurchaseSubscriptionRedirectURL *string               `json:"purchase_subscription_redirect_url"`
 	PurchaseSubscriptionURL         *string               `json:"purchase_subscription_url"`
 	SoraClientEnabled               bool                  `json:"sora_client_enabled"`
+	ModelHealthPageEnabled          bool                  `json:"model_health_page_enabled"`
 	CustomMenuItems                 *[]dto.CustomMenuItem `json:"custom_menu_items"`
 	CustomEndpoints                 *[]dto.CustomEndpoint `json:"custom_endpoints"`
 
@@ -606,6 +608,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
 		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		SoraClientEnabled:                req.SoraClientEnabled,
+		ModelHealthPageEnabled:           req.ModelHealthPageEnabled,
 		CustomMenuItems:                  customMenuJSON,
 		CustomEndpoints:                  customEndpointsJSON,
 		DefaultConcurrency:               req.DefaultConcurrency,
@@ -719,6 +722,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PurchaseSubscriptionRedirectURL:      updatedSettings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:              updatedSettings.PurchaseSubscriptionURL,
 		SoraClientEnabled:                    updatedSettings.SoraClientEnabled,
+		ModelHealthPageEnabled:               updatedSettings.ModelHealthPageEnabled,
 		CustomMenuItems:                      dto.ParseCustomMenuItems(updatedSettings.CustomMenuItems),
 		CustomEndpoints:                      dto.ParseCustomEndpoints(updatedSettings.CustomEndpoints),
 		DefaultConcurrency:                   updatedSettings.DefaultConcurrency,
@@ -903,6 +907,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.BackendModeEnabled != after.BackendModeEnabled {
 		changed = append(changed, "backend_mode_enabled")
+	}
+	if before.ModelHealthPageEnabled != after.ModelHealthPageEnabled {
+		changed = append(changed, "model_health_page_enabled")
 	}
 	if before.PurchaseSubscriptionEnabled != after.PurchaseSubscriptionEnabled {
 		changed = append(changed, "purchase_subscription_enabled")

@@ -47,6 +47,61 @@ export interface ModelMarketplaceResponse {
   total_accounts: number
 }
 
+export interface PublicStatusModelConfig {
+  name: string
+  provider?: string
+  release_date?: string
+  prompt_caching: boolean
+  note?: string
+  pricing?: StatusPricing
+  enabled: boolean
+}
+
+export interface PublicStatusProbeLineConfig {
+  id?: string
+  name: string
+  region?: string
+  enabled: boolean
+  sort_order?: number
+}
+
+export interface PublicStatusGroupConfig {
+  group_id: number
+  enabled: boolean
+  display_name?: string
+  aggregate_key?: string
+  sort_order?: number
+  models?: string[]
+  probe_lines?: PublicStatusProbeLineConfig[]
+}
+
+export interface PublicStatusConfig {
+  models: PublicStatusModelConfig[]
+  groups: PublicStatusGroupConfig[]
+}
+
+export interface PublicStatusGroupOption {
+  group_id: number
+  name: string
+  platform: string
+  subscription_type: string
+  status: string
+  supported_scopes: string[]
+  account_count: number
+  enabled: boolean
+  display_name?: string
+  aggregate_key?: string
+  sort_order?: number
+  suggested_name: string
+  suggested_key?: string
+  probe_lines?: PublicStatusProbeLineConfig[]
+}
+
+export interface PublicStatusConfigAdminView {
+  config: PublicStatusConfig
+  group_options: PublicStatusGroupOption[]
+}
+
 // ==================== User & Auth Types ====================
 
 export interface User {
@@ -143,6 +198,7 @@ export interface PublicSettings {
   custom_endpoints: CustomEndpoint[]
   linuxdo_oauth_enabled: boolean
   sora_client_enabled: boolean
+  model_health_page_enabled: boolean
   backend_mode_enabled: boolean
   version: string
 }

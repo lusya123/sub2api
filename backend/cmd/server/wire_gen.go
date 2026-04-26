@@ -173,7 +173,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	}
 	billingService := service.NewBillingService(configConfig, pricingService)
 	modelMarketplaceService := service.NewModelMarketplaceService(accountRepository, billingService)
-	modelMarketplaceHandler := admin.NewModelMarketplaceHandler(modelMarketplaceService)
+	statusPageService := service.ProvideStatusPageService(client, settingRepository)
+	modelMarketplaceHandler := admin.NewModelMarketplaceHandler(modelMarketplaceService, statusPageService)
 	identityService := service.NewIdentityService(identityCache)
 	deferredService := service.ProvideDeferredService(accountRepository, timingWheelService)
 	claudeTokenProvider := service.ProvideClaudeTokenProvider(accountRepository, geminiTokenCache, oAuthService, oauthRefreshAPI)
@@ -238,7 +239,6 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	channelHealthRecorder := service.NewChannelHealthRecorder(client)
 	asyncChannelHealthRecorder := service.ProvideAsyncChannelHealthRecorder(channelHealthRecorder)
 	channelHealthWiring := service.ProvideChannelHealthWiring(asyncChannelHealthRecorder, gatewayService, openAIGatewayService, antigravityGatewayService, geminiMessagesCompatService)
-	statusPageService := service.ProvideStatusPageService(client)
 	publicStatusHandler := public.NewPublicStatusHandler(statusPageService)
 	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, soraGatewayHandler, soraClientHandler, handlerSettingHandler, totpHandler, publicStatusHandler, idempotencyCoordinator, idempotencyCleanupService, channelHealthWiring)
 	jwtAuthMiddleware := middleware.NewJWTAuthMiddleware(authService, userService)
@@ -255,7 +255,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	tokenRefreshService := service.ProvideTokenRefreshService(accountRepository, soraAccountRepository, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, compositeTokenCacheInvalidator, schedulerCache, configConfig, tempUnschedCache, privacyClientFactory, proxyRepository, oauthRefreshAPI)
 	accountExpiryService := service.ProvideAccountExpiryService(accountRepository)
 	subscriptionExpiryService := service.ProvideSubscriptionExpiryService(userSubscriptionRepository)
-	channelHealthProber := service.ProvideChannelHealthProber(client, channelHealthRecorder, accountTestService)
+	channelHealthProber := service.ProvideChannelHealthProber(client, settingRepository, channelHealthRecorder, accountTestService, gatewayService)
 	scheduledTestRunnerService := service.ProvideScheduledTestRunnerService(scheduledTestPlanRepository, scheduledTestService, accountTestService, rateLimitService, channelHealthProber, configConfig)
 	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, soraMediaCleanupService, schedulerSnapshotService, tokenRefreshService, accountExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, asyncChannelHealthRecorder)
 	application := &Application{

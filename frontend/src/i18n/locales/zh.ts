@@ -347,6 +347,8 @@ export default {
     subscriptions: '订阅管理',
     accounts: '账号管理',
     modelMarketplace: '模型广场',
+    modelStatus: '模型健康',
+    modelHealthConfig: '模型健康配置',
     proxies: 'IP管理',
     redeemCodes: '兑换码',
     ops: '运维监控',
@@ -1013,8 +1015,8 @@ export default {
   // Admin
   admin: {
     modelMarketplace: {
-      title: '模型广场',
-      description: '展示当前数据库中可调度账号真实支持的模型 ID 与计费价格',
+      title: '模型健康配置',
+      description: '配置公开状态页展示的模型、分组、聚合渠道与探测线路',
       searchPlaceholder: '搜索模型 ID、平台或上游模型',
       allPlatforms: '全部平台',
       totalModels: '模型数量',
@@ -1027,8 +1029,8 @@ export default {
       perMillionTokens: '价格单位：美元 / 100 万 Token',
       pricedBy: '按 {model} 计价',
       priceMissing: '价格未配置',
-      empty: '暂无可展示模型',
-      loadFailed: '加载模型广场失败',
+      empty: '暂无可配置模型',
+      loadFailed: '加载模型健康配置失败',
       platforms: {
         openai: 'OpenAI',
         anthropic: 'Claude',
@@ -1549,6 +1551,7 @@ export default {
       publicGroups: '公开分组（默认可用）',
       defaultRate: '默认倍率',
       customRate: '专属倍率',
+      customRateInvalid: '专属倍率不能小于 0',
       useDefaultRate: '使用默认',
       customRatePlaceholder: '留空使用默认',
       groupConfigUpdated: '分组配置更新成功',
@@ -4690,6 +4693,12 @@ export default {
         description: '控制是否在侧边栏展示 Sora 客户端入口',
         enabled: '启用 Sora 客户端',
         enabledHint: '开启后，侧边栏将显示 Sora 入口，用户可访问 Sora 功能'
+      },
+      modelHealthPage: {
+        title: '模型健康页面',
+        description: '控制普通用户和公开访客是否可以看到模型健康状态看板',
+        enabled: '显示模型健康入口',
+        enabledHint: '开启后普通用户侧边栏会显示“模型健康状态”，关闭后直接访问该页面会返回首页或控制台'
       },
       customMenu: {
         title: '自定义菜单页面',

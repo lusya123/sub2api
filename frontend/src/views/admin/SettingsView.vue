@@ -1607,6 +1607,31 @@
           </div>
         </div>
 
+        <!-- Model Health Page Toggle -->
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.modelHealthPage.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.modelHealthPage.description') }}
+            </p>
+          </div>
+          <div class="space-y-6 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="font-medium text-gray-900 dark:text-white">{{
+                  t('admin.settings.modelHealthPage.enabled')
+                }}</label>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.modelHealthPage.enabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.model_health_page_enabled" />
+            </div>
+          </div>
+        </div>
+
         <!-- Sora Client Toggle -->
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
@@ -2166,6 +2191,7 @@ const form = reactive<SettingsForm>({
   purchase_subscription_redirect_url: '',
   purchase_subscription_url: '',
   sora_client_enabled: false,
+  model_health_page_enabled: true,
   custom_menu_items: [] as Array<{id: string; label: string; icon_svg: string; url: string; visibility: 'user' | 'admin'; sort_order: number}>,
   custom_endpoints: [] as Array<{name: string; endpoint: string; description: string}>,
   frontend_url: '',
@@ -2360,6 +2386,7 @@ async function loadSettings() {
       settings.purchase_subscription_embedded_url || settings.purchase_subscription_url || ''
     form.purchase_subscription_redirect_url = settings.purchase_subscription_redirect_url || ''
     form.backend_mode_enabled = settings.backend_mode_enabled
+    form.model_health_page_enabled = settings.model_health_page_enabled ?? true
     form.default_subscriptions = Array.isArray(settings.default_subscriptions)
       ? settings.default_subscriptions
           .filter((item) => item.group_id > 0 && item.validity_days > 0)
@@ -2511,6 +2538,7 @@ async function saveSettings() {
       purchase_subscription_redirect_url: form.purchase_subscription_redirect_url,
       purchase_subscription_url: form.purchase_subscription_embedded_url,
       sora_client_enabled: form.sora_client_enabled,
+      model_health_page_enabled: form.model_health_page_enabled,
       custom_menu_items: form.custom_menu_items,
       custom_endpoints: form.custom_endpoints,
       frontend_url: form.frontend_url,

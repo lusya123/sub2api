@@ -33,6 +33,9 @@ func RegisterAdminRoutes(
 		// 账号管理
 		registerAccountRoutes(admin, h)
 
+		// 模型广场
+		registerModelMarketplaceRoutes(admin, h)
+
 		// 公告管理
 		registerAnnouncementRoutes(admin, h)
 
@@ -98,6 +101,12 @@ func RegisterAdminRoutes(
 		// 外部退款核算只读接口
 		registerRefundInspectionRoutes(admin, h)
 	}
+}
+
+func registerModelMarketplaceRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	admin.GET("/model-marketplace", h.Admin.ModelMarketplace.List)
+	admin.GET("/model-marketplace/status-config", h.Admin.ModelMarketplace.GetPublicStatusConfig)
+	admin.PUT("/model-marketplace/status-config", h.Admin.ModelMarketplace.UpdatePublicStatusConfig)
 }
 
 func registerRefundInspectionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

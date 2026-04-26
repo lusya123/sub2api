@@ -347,6 +347,8 @@ export default {
     subscriptions: 'Subscriptions',
     accounts: 'Accounts',
     modelMarketplace: 'Model Marketplace',
+    modelStatus: 'Model Health',
+    modelHealthConfig: 'Model Health Config',
     proxies: 'Proxies',
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
@@ -1008,8 +1010,8 @@ export default {
   // Admin
   admin: {
     modelMarketplace: {
-      title: 'Model Marketplace',
-      description: 'Models currently supported by schedulable accounts in the database, with billing prices',
+      title: 'Model Health Config',
+      description: 'Configure the public status models, groups, aggregated channels, and probe lines',
       searchPlaceholder: 'Search model ID, platform, or upstream model',
       allPlatforms: 'All platforms',
       totalModels: 'Models',
@@ -1022,8 +1024,8 @@ export default {
       perMillionTokens: 'Prices are USD per 1M tokens',
       pricedBy: 'Priced by {model}',
       priceMissing: 'Price not configured',
-      empty: 'No models to display',
-      loadFailed: 'Failed to load model marketplace',
+      empty: 'No configurable models',
+      loadFailed: 'Failed to load model health config',
       platforms: {
         openai: 'OpenAI',
         anthropic: 'Claude',
@@ -1485,6 +1487,7 @@ export default {
       publicGroups: 'Public Groups (Default Available)',
       defaultRate: 'Default Rate',
       customRate: 'Custom Rate',
+      customRateInvalid: 'Custom rate cannot be less than 0',
       useDefaultRate: 'Use Default',
       customRatePlaceholder: 'Leave empty for default',
       groupConfigUpdated: 'Group configuration updated successfully',
@@ -4526,6 +4529,12 @@ export default {
         description: 'Control whether to show the Sora client entry in the sidebar',
         enabled: 'Enable Sora Client',
         enabledHint: 'When enabled, the Sora entry will be shown in the sidebar for users to access Sora features'
+      },
+      modelHealthPage: {
+        title: 'Model Health Page',
+        description: 'Control whether regular users and public visitors can see the model health dashboard',
+        enabled: 'Show Model Health Entry',
+        enabledHint: 'When enabled, regular users see Model Status in the sidebar. When disabled, direct visits are returned to Home or Dashboard.'
       },
       customMenu: {
         title: 'Custom Menu Pages',

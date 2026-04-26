@@ -71,6 +71,12 @@ func operatorRouteAllowed(method, fullPath, rawPath string) bool {
 			return method == "POST"
 		}
 	}
+	if method == "GET" {
+		switch path {
+		case "/api/v1/admin/groups/all":
+			return true
+		}
+	}
 	if method == "GET" && strings.HasPrefix(path, "/api/v1/admin/groups/") && strings.HasSuffix(path, "/subscriptions") {
 		return true
 	}

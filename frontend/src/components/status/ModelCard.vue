@@ -1,34 +1,22 @@
 <template>
-  <article
-    class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-5 text-neutral-100"
-  >
-    <!-- 头部 -->
-    <header class="flex items-start gap-3">
-      <!-- 8 尖星图标 -->
-      <svg
-        class="h-6 w-6 text-orange-400 flex-shrink-0 mt-0.5"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path
-          d="M12 2 L13.5 8.5 L19.5 5.5 L16.5 11.5 L22 12 L16.5 12.5 L19.5 18.5 L13.5 15.5 L12 22 L10.5 15.5 L4.5 18.5 L7.5 12.5 L2 12 L7.5 11.5 L4.5 5.5 L10.5 8.5 Z"
-        />
-      </svg>
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 flex-wrap">
-          <h3 class="text-base font-bold text-neutral-100 truncate">
-            {{ model.name }}
-          </h3>
+  <article class="model-card">
+    <header class="model-head">
+      <div class="model-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48">
+          <path d="M24 3l2.7 14.2L38 8.1l-8.1 12.7L45 18l-14.2 6L45 30l-15.1-2.8L38 39.9l-11.3-9.1L24 45l-2.7-14.2L10 39.9l8.1-12.7L3 30l14.2-6L3 18l15.1 2.8L10 8.1l11.3 9.1L24 3z" />
+        </svg>
+      </div>
+      <div class="model-title">
+        <div class="model-name-row">
+          <h2>{{ model.name }}</h2>
           <button
             type="button"
-            class="inline-flex items-center justify-center h-5 w-5 rounded text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition"
+            class="copy-btn"
             :title="copied ? '已复制' : '复制模型名'"
             @click="copyName"
           >
             <svg
               v-if="!copied"
-              class="h-3.5 w-3.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -42,7 +30,6 @@
             </svg>
             <svg
               v-else
-              class="h-3.5 w-3.5 text-green-400"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -54,113 +41,71 @@
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </button>
-          <span v-if="copied" class="text-[10px] text-green-400">已复制</span>
         </div>
-        <div class="mt-0.5 flex items-center gap-2 text-[10px] text-neutral-500">
-          <span class="uppercase tracking-widest">{{ model.provider }}</span>
-          <span v-if="model.release_date" class="text-neutral-600">·</span>
+        <div class="model-meta">
+          <span>{{ model.provider }}</span>
           <span v-if="model.release_date">{{ model.release_date }}</span>
         </div>
       </div>
     </header>
 
-    <!-- Prompt Caching 徽章 -->
-    <div v-if="model.prompt_caching" class="mt-3">
-      <span
-        class="inline-flex items-center gap-1 rounded-full bg-green-500/15 text-green-400 px-2.5 py-0.5 text-[11px] font-medium"
-      >
-        <span aria-hidden="true">⚡</span>
+    <div class="model-badges">
+      <span v-if="model.prompt_caching" class="cache-badge">
+        <span class="cache-bolt" aria-hidden="true"></span>
         Prompt Caching
       </span>
     </div>
 
-    <!-- 备注框 -->
-    <div
-      v-if="model.note"
-      class="mt-3 rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-400"
-    >
-      {{ model.note }}
-    </div>
+    <div v-if="model.note" class="model-note">{{ model.note }}</div>
 
-    <!-- 定价 2x2 -->
-    <div class="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
-      <div class="flex items-center justify-between">
-        <span class="text-xs text-neutral-500">
-          <span aria-hidden="true" class="mr-1">↓</span>输入
-        </span>
-        <span class="text-sm font-semibold text-neutral-100">
-          ${{ formatPrice(model.pricing.input_per_mtok) }}
-        </span>
+    <div class="price-grid">
+      <div>
+        <span>输入</span>
+        <strong>${{ formatPrice(model.pricing.input_per_mtok) }}</strong>
       </div>
-      <div class="flex items-center justify-between">
-        <span class="text-xs text-neutral-500">
-          <span aria-hidden="true" class="mr-1">↑</span>输出
-        </span>
-        <span class="text-sm font-semibold text-neutral-100">
-          ${{ formatPrice(model.pricing.output_per_mtok) }}
-        </span>
+      <div>
+        <span>输出</span>
+        <strong>${{ formatPrice(model.pricing.output_per_mtok) }}</strong>
       </div>
-      <div class="flex items-center justify-between">
-        <span class="text-xs text-neutral-500">
-          <span aria-hidden="true" class="mr-1">📝</span>缓存写入
-        </span>
-        <span class="text-sm font-semibold text-neutral-100">
-          ${{ formatPrice(model.pricing.cache_write) }}
-        </span>
+      <div>
+        <span>缓存写入</span>
+        <strong>${{ formatPrice(model.pricing.cache_write) }}</strong>
       </div>
-      <div class="flex items-center justify-between">
-        <span class="text-xs text-neutral-500">
-          <span aria-hidden="true" class="mr-1">📖</span>缓存读取
-        </span>
-        <span class="text-sm font-semibold text-neutral-100">
-          ${{ formatPrice(model.pricing.cache_read) }}
-        </span>
+      <div>
+        <span>缓存读取</span>
+        <strong>${{ formatPrice(model.pricing.cache_read) }}</strong>
       </div>
     </div>
-    <div class="mt-1 text-right text-[10px] uppercase tracking-wide text-neutral-600">
-      USD 每百万 TOKENS
-    </div>
+    <div class="price-unit">USD 每百万 TOKENS</div>
 
-    <!-- 总可用率 + 心跳条 -->
-    <div class="mt-5">
-      <div class="flex items-center gap-2">
-        <span
-          class="inline-block h-2 w-2 rounded-full"
-          :class="availabilityDotClass"
-          aria-hidden="true"
-        />
-        <span class="text-2xl font-bold text-neutral-100 font-mono tracking-tight">
-          {{ model.availability_pct.toFixed(2) }}%
-        </span>
-        <span class="text-xs text-neutral-500 ml-1">可用率</span>
+    <section class="availability">
+      <div class="availability-line">
+        <span :class="['availability-dot', availabilityDotClass]" aria-hidden="true"></span>
+        <strong>{{ availabilityDisplay }}</strong>
+        <span>可用率</span>
       </div>
-      <div class="mt-2">
-        <HeartbeatBar :beats="model.heartbeats || []" />
-      </div>
-      <div class="mt-1 flex items-center justify-between text-[10px] text-neutral-500">
+      <HeartbeatBar :beats="model.heartbeats || []" />
+      <div class="time-axis">
         <span>90 min ago</span>
         <span>现在</span>
       </div>
-    </div>
+    </section>
 
-    <!-- 展开/收起 -->
-    <div class="mt-4 border-t border-neutral-800 pt-3">
-      <button
-        type="button"
-        class="w-full flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition"
-        @click="expanded = !expanded"
-      >
-        <span aria-hidden="true">{{ expanded ? '⌄' : '⌃' }}</span>
-        <span>{{ channelCount }} 个渠道</span>
+    <section class="channels">
+      <button type="button" class="channels-toggle" @click="expanded = !expanded">
+        <svg :class="{ 'is-open': expanded }" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 10l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>{{ channelCount }} 个公开渠道</span>
       </button>
-      <div v-if="expanded" class="mt-2 space-y-3">
+      <div v-if="expanded" class="group-list">
         <GroupSection
           v-for="(g, idx) in model.groups"
           :key="`${g.name}-${idx}`"
           :group="g"
         />
       </div>
-    </div>
+    </section>
   </article>
 </template>
 
@@ -184,16 +129,26 @@ const channelCount = computed(() => {
   return groups.reduce((sum, g) => sum + (g.channels?.length ?? 0), 0)
 })
 
+const hasNoData = computed(() => {
+  const beats = props.model.heartbeats ?? []
+  return beats.length === 0 || beats.every((beat) => beat.status === 'unknown')
+})
+
+const availabilityDisplay = computed(() => {
+  if (hasNoData.value) return 'N/A'
+  return `${(props.model.availability_pct ?? 0).toFixed(2)}%`
+})
+
 const availabilityDotClass = computed(() => {
+  if (hasNoData.value) return 'is-empty'
   const pct = props.model.availability_pct ?? 0
-  if (pct >= 99) return 'bg-green-500'
-  if (pct >= 90) return 'bg-orange-500'
-  return 'bg-red-500'
+  if (pct >= 99) return 'is-ok'
+  if (pct >= 90) return 'is-degraded'
+  return 'is-down'
 })
 
 function formatPrice(v: number): string {
   if (v == null || Number.isNaN(v)) return '0'
-  // 去掉多余的小数 0：5 -> "5"，0.5 -> "0.5"，6.25 -> "6.25"
   return Number(v)
     .toFixed(4)
     .replace(/\.?0+$/, '')
@@ -205,7 +160,6 @@ async function copyName() {
     if (navigator?.clipboard?.writeText) {
       await navigator.clipboard.writeText(name)
     } else {
-      // fallback
       const ta = document.createElement('textarea')
       ta.value = name
       document.body.appendChild(ta)
@@ -222,3 +176,265 @@ async function copyName() {
   }
 }
 </script>
+
+<style scoped>
+.model-card {
+  border: 1px solid rgba(244, 231, 200, 0.14);
+  background:
+    linear-gradient(180deg, rgba(245, 197, 66, 0.055), transparent 180px),
+    rgba(12, 10, 7, 0.9);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.3);
+  padding: 22px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.model-head {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.model-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  color: #ff7a2e;
+}
+
+.model-mark svg {
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+  filter: drop-shadow(0 0 18px rgba(255, 122, 46, 0.28));
+}
+
+.model-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.model-name-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.model-name-row h2 {
+  min-width: 0;
+  color: #f4e7c8;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 850;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.copy-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: rgba(244, 231, 200, 0.46);
+  border: 1px solid rgba(244, 231, 200, 0.12);
+  background: rgba(244, 231, 200, 0.035);
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.copy-btn:hover {
+  color: #f5c542;
+  border-color: rgba(245, 197, 66, 0.34);
+  background: rgba(245, 197, 66, 0.08);
+}
+
+.copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.model-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 7px;
+  color: rgba(244, 231, 200, 0.5);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.model-badges {
+  min-height: 30px;
+  margin-top: 18px;
+}
+
+.cache-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.1);
+  color: #4ade80;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cache-bolt {
+  width: 8px;
+  height: 14px;
+  background: currentColor;
+  clip-path: polygon(60% 0, 12% 55%, 46% 55%, 30% 100%, 88% 42%, 54% 42%);
+}
+
+.model-note {
+  margin-top: 10px;
+  padding: 12px 13px;
+  background: rgba(244, 231, 200, 0.045);
+  color: rgba(244, 231, 200, 0.5);
+  font-size: 13px;
+}
+
+.price-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 18px;
+  background: rgba(244, 231, 200, 0.1);
+}
+
+.price-grid > div {
+  min-width: 0;
+  padding: 14px 0;
+  background: #0c0a07;
+}
+
+.price-grid span {
+  display: block;
+  color: rgba(244, 231, 200, 0.52);
+  font-size: 12px;
+}
+
+.price-grid strong {
+  display: block;
+  margin-top: 6px;
+  color: #f4e7c8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.price-unit {
+  margin-top: 11px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(244, 231, 200, 0.12);
+  color: rgba(244, 231, 200, 0.48);
+  text-align: right;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.availability {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(244, 231, 200, 0.12);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.availability-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.availability-line strong {
+  color: #f4e7c8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.availability-line span:last-child {
+  color: rgba(244, 231, 200, 0.55);
+  font-size: 13px;
+}
+
+.availability-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.availability-dot.is-ok {
+  background: #22c55e;
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.48);
+}
+
+.availability-dot.is-empty {
+  background: rgba(244, 231, 200, 0.26);
+}
+
+.availability-dot.is-degraded {
+  background: #f5c542;
+  box-shadow: 0 0 18px rgba(245, 197, 66, 0.4);
+}
+
+.availability-dot.is-down {
+  background: #ef4444;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.42);
+}
+
+.time-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: rgba(244, 231, 200, 0.46);
+  font-size: 11px;
+}
+
+.channels {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(244, 231, 200, 0.12);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.channels-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(244, 231, 200, 0.66);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.channels-toggle:hover {
+  color: #f5c542;
+}
+
+.channels-toggle svg {
+  width: 18px;
+  height: 18px;
+  transform: rotate(-90deg);
+  transition: transform 0.18s ease;
+}
+
+.channels-toggle svg.is-open {
+  transform: rotate(0deg);
+}
+
+.group-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+</style>

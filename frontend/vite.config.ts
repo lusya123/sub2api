@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv, Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import checker from 'vite-plugin-checker'
 import { resolve } from 'path'
 
 /**
@@ -43,10 +42,6 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       vue(),
-      checker({
-        typescript: true,
-        vueTsc: true
-      }),
       injectPublicSettings(backendUrl)
     ],
   resolve: {

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -159,6 +161,48 @@ func TestGroupHandlerEndpoints(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/2/api-keys", nil)
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestGroupHandlerOperatorReadUsesBaseGroupDTO(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adminSvc := newStubAdminService()
+	actualRate := 9.9
+	adminSvc.groups[0].ActualRateMultiplier = &actualRate
+	adminSvc.groups[0].ModelRouting = map[string][]int64{"claude-*": {100, 200}}
+	adminSvc.groups[0].ModelRoutingEnabled = true
+	adminSvc.groups[0].AccountCount = 12
+	adminSvc.groups[0].ActiveAccountCount = 10
+	adminSvc.groups[0].RateLimitedAccountCount = 2
+
+	groupHandler := NewGroupHandler(adminSvc, nil, nil)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUserRole), service.RoleOperator)
+		c.Next()
+	})
+	router.GET("/api/v1/admin/groups/all", groupHandler.GetAll)
+
+	assertNoAdminGroupFields := func(t *testing.T, item map[string]any) {
+		t.Helper()
+		require.NotContains(t, item, "actual_rate_multiplier")
+		require.NotContains(t, item, "model_routing")
+		require.NotContains(t, item, "model_routing_enabled")
+		require.NotContains(t, item, "account_count")
+		require.NotContains(t, item, "active_account_count")
+		require.NotContains(t, item, "rate_limited_account_count")
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/all", nil)
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var body struct {
+		Data []map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Data, 1)
+	assertNoAdminGroupFields(t, body.Data[0])
 }
 
 func TestProxyHandlerEndpoints(t *testing.T) {

@@ -19,6 +19,9 @@ func RegisterUserRoutes(
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
 	{
+		// 模型广场（用户可见）
+		authenticated.GET("/model-marketplace", h.Admin.ModelMarketplace.List)
+
 		// 用户接口
 		user := authenticated.Group("/user")
 		{

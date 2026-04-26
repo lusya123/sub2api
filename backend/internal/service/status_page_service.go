@@ -14,41 +14,28 @@
 //   - availability_pct = ok / (buckets that have samples), or 100.0 when the
 //     whole window is empty (frontend renders the bar all-grey so the 100%
 //     is visually honest).
-//   - Channel names are masked — never leak account.name / email / IP. We
-//     reach into extra.region first; otherwise fall back to "Channel #<id>".
+//   - Public channels are group-level display rows configured by admins. The
+//     status API never exposes account names, emails, IPs, or credentials.
 //
-// Model metadata (pricing, release date, prompt caching, note) is
-// hard-coded for the four flagship Anthropic models the status page showcases
-// today. TODO: move this to a first-class `model_catalog` table so ops can
-// edit pricing without a redeploy.
+// Model metadata can be supplied by the public status config; known Claude
+// defaults are kept in modelCatalog as a fallback for bootstrap and tests.
 package service
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/account"
-	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 
 	"golang.org/x/sync/singleflight"
 )
-
-// channelNameWhitelist defines the allowed characters for an operator-supplied
-// region/location tag that we'll echo back to the public status page. Emails,
-// IP:port tuples, CJK strings, and anything else are rejected so they can't
-// leak operator PII or infrastructure details to anonymous visitors.
-//
-//	Allowed: ASCII letters, digits, space, dot, hyphen. 1-32 chars.
-var channelNameWhitelist = regexp.MustCompile(`^[A-Za-z0-9 .\-]{1,32}$`)
 
 const (
 	// statusWindowMinutes is the rolling window used for heartbeat aggregation.
@@ -140,11 +127,27 @@ var modelCatalog = map[string]modelMetadata{
 		Note:          "仅AWS-Q支持1M上下文",
 		Pricing:       StatusPricing{InputPerMTok: 5, OutputPerMTok: 25, CacheWrite: 6.25, CacheRead: 0.5},
 	},
+	"claude-sonnet-4-5-20250929": {
+		Provider:      "ANTHROPIC",
+		ReleaseDate:   "2025-09-29",
+		PromptCaching: true,
+		Pricing:       StatusPricing{InputPerMTok: 3, OutputPerMTok: 15, CacheWrite: 3.75, CacheRead: 0.3},
+	},
 	"claude-haiku-4-5-20251001": {
 		Provider:      "ANTHROPIC",
 		ReleaseDate:   "2025-10-15",
 		PromptCaching: true,
 		Pricing:       StatusPricing{InputPerMTok: 1, OutputPerMTok: 5, CacheWrite: 1.25, CacheRead: 0.1},
+	},
+	"glm-5": {
+		Provider:      "Z.AI",
+		PromptCaching: true,
+		Pricing:       StatusPricing{InputPerMTok: 1, OutputPerMTok: 3.2, CacheWrite: 0, CacheRead: 0.2},
+	},
+	"minimax-m2.5": {
+		Provider:      "MINIMAX",
+		PromptCaching: true,
+		Pricing:       StatusPricing{InputPerMTok: 0.3, OutputPerMTok: 1.2, CacheWrite: 0.375, CacheRead: 0.03},
 	},
 }
 
@@ -162,6 +165,10 @@ func lookupMetadata(name string) modelMetadata {
 		provider = "OPENAI"
 	case strings.HasPrefix(lower, "gemini-"):
 		provider = "GOOGLE"
+	case strings.HasPrefix(lower, "glm") || strings.HasPrefix(lower, "chatglm"):
+		provider = "Z.AI"
+	case strings.HasPrefix(lower, "minimax") || strings.HasPrefix(lower, "abab"):
+		provider = "MINIMAX"
 	}
 	return modelMetadata{Provider: provider, PromptCaching: false}
 }
@@ -190,7 +197,9 @@ type modelDetailCacheEntry struct {
 // single DB round-trip so a burst of anonymous /status hits never fans out.
 // Errors are NOT cached — next call retries immediately.
 type StatusPageService struct {
-	entClient *dbent.Client
+	entClient   *dbent.Client
+	settingRepo SettingRepository
+	fixedConfig *PublicStatusConfig
 	// nowFn is overridable for tests.
 	nowFn func() time.Time
 
@@ -276,20 +285,66 @@ func (s *StatusPageService) cachedList() *listModelsCache {
 	return s.listCache
 }
 
+func (s *StatusPageService) clearCaches() {
+	if s == nil {
+		return
+	}
+	s.listMu.Lock()
+	s.listCache = nil
+	s.listMu.Unlock()
+	s.detailMu.Lock()
+	s.detailCache = make(map[string]*modelDetailCacheEntry)
+	s.detailMu.Unlock()
+}
+
 // loadListFromDB does the actual Group.Query + catalog join. Callers are
 // responsible for caching the result.
 func (s *StatusPageService) loadListFromDB(ctx context.Context) (*listModelsCache, error) {
-	groups, err := s.entClient.Group.Query().Where(group.DeletedAtIsNil()).All(ctx)
+	cfg, err := s.loadPublicStatusConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	models := enabledPublicStatusModels(cfg)
+	groupConfigByID := enabledPublicStatusGroups(cfg)
+	if len(models) == 0 || len(groupConfigByID) == 0 {
+		return &listModelsCache{
+			data:     []StatusModel{},
+			modelSet: map[string]struct{}{},
+			expireAt: s.nowFn().Add(statusCacheTTL),
+		}, nil
+	}
+
+	groupIDs := make([]int64, 0, len(groupConfigByID))
+	for id := range groupConfigByID {
+		groupIDs = append(groupIDs, id)
+	}
+	groups, err := s.entClient.Group.Query().
+		Where(group.DeletedAtIsNil(), group.IDIn(groupIDs...), group.StatusEQ(StatusActive)).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("status_page_service: list groups: %w", err)
 	}
+	schedulableCounts, err := s.countSchedulableAccountsByGroup(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("status_page_service: count schedulable accounts: %w", err)
+	}
 	modelSet := map[string]struct{}{}
-	for _, g := range groups {
-		for k := range g.ModelRouting {
-			if k == "" || strings.Contains(k, "*") {
+	modelByName := map[string]PublicStatusModelConfig{}
+	for _, m := range models {
+		for _, g := range groups {
+			gc := groupConfigByID[g.ID]
+			if schedulableCounts[g.ID] == 0 {
 				continue
 			}
-			modelSet[k] = struct{}{}
+			if !publicStatusGroupConfigSupportsModel(gc, m.Name) {
+				continue
+			}
+			if !groupSupportsStatusModel(g, m.Name) {
+				continue
+			}
+			modelSet[m.Name] = struct{}{}
+			modelByName[m.Name] = m
+			break
 		}
 	}
 	names := make([]string, 0, len(modelSet))
@@ -300,7 +355,7 @@ func (s *StatusPageService) loadListFromDB(ctx context.Context) (*listModelsCach
 
 	out := make([]StatusModel, 0, len(names))
 	for _, n := range names {
-		md := lookupMetadata(n)
+		md := metadataFromConfig(modelByName[n])
 		out = append(out, StatusModel{
 			Name:          n,
 			Provider:      md.Provider,
@@ -321,18 +376,14 @@ func (s *StatusPageService) loadListFromDB(ctx context.Context) (*listModelsCach
 }
 
 // ErrStatusModelUnknown is returned by GetModelDetail when the requested model
-// is not present in any non-deleted group's model_routing. The handler layer
+// is not present in the public status configuration. The handler layer
 // translates this sentinel into a 404 response so hostile traffic with junk
 // model names doesn't pay the full 4-query aggregation cost.
 var ErrStatusModelUnknown = errors.New("status_page_service: unknown model")
 
-// isKnownModel reports whether `name` appears as a non-wildcard routing key
-// in any non-deleted group. Reuses the ListModels cache so a GetModelDetail
+// isKnownModel reports whether `name` appears in the public status model list.
+// Reuses the ListModels cache so a GetModelDetail
 // call on a junk name costs one cache lookup, not a full DB scan.
-//
-// Intentionally does NOT consider wildcard patterns — the status page and
-// prober both only track concrete model ids, so "claude-*" in a group's
-// routing map doesn't imply coverage of arbitrary names.
 func (s *StatusPageService) isKnownModel(ctx context.Context, name string) (bool, error) {
 	if name == "" {
 		return false, nil
@@ -356,7 +407,7 @@ func (s *StatusPageService) isKnownModel(ctx context.Context, name string) (bool
 // (callers must not get to control cost). The returned *StatusModel is
 // ready to be JSON-marshalled for the /api/public/status/model/:name endpoint.
 //
-// Unknown models (not routed in any non-deleted group) return
+// Unknown models (not configured for public status) return
 // ErrStatusModelUnknown without hitting the samples/accounts/groups tables —
 // this is the DoS fast-path that lets the handler 404 hostile traffic cheaply.
 //
@@ -424,15 +475,41 @@ func (s *StatusPageService) cachedDetail(modelName string) *StatusModel {
 
 // loadDetailFromDB does the full 4-query aggregation. Callers cache the result.
 func (s *StatusPageService) loadDetailFromDB(ctx context.Context, modelName string) (*StatusModel, error) {
-	md := lookupMetadata(modelName)
+	cfg, err := s.loadPublicStatusConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	modelConfigByName := map[string]PublicStatusModelConfig{}
+	for _, m := range enabledPublicStatusModels(cfg) {
+		modelConfigByName[m.Name] = m
+	}
+	modelConfig := modelConfigByName[modelName]
+	md := metadataFromConfig(modelConfig)
 	now := s.nowFn().UTC()
 	windowStart := floorToMinute(now.Add(-time.Duration(statusWindowMinutes) * time.Minute))
 
-	// 1) Find which groups route this model. Only non-deleted groups are in
-	// scope; wildcard routing keys are ignored (the prober ignores them too).
-	groups, err := s.entClient.Group.Query().Where(group.DeletedAtIsNil()).All(ctx)
+	groupConfigByID := enabledPublicStatusGroups(cfg)
+	groupIDs := make([]int64, 0, len(groupConfigByID))
+	for id := range groupConfigByID {
+		groupIDs = append(groupIDs, id)
+	}
+
+	// 1) Find which configured groups support this model. Only non-deleted,
+	// active groups are in scope.
+	var groups []*dbent.Group
+	if len(groupIDs) > 0 {
+		groups, err = s.entClient.Group.Query().
+			Where(group.DeletedAtIsNil(), group.IDIn(groupIDs...), group.StatusEQ(StatusActive)).
+			All(ctx)
+	} else {
+		groups = []*dbent.Group{}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("status_page_service: list groups: %w", err)
+	}
+	schedulableCounts, err := s.countSchedulableAccountsByGroup(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("status_page_service: count schedulable accounts: %w", err)
 	}
 	// ordered iteration for stable output
 	sort.SliceStable(groups, func(i, j int) bool {
@@ -443,18 +520,62 @@ func (s *StatusPageService) loadDetailFromDB(ctx context.Context, modelName stri
 	})
 
 	type scopedGroup struct {
-		id   int64
-		name string
+		id           int64
+		name         string
+		aggregateKey string
+		sortOrder    int
+		rank         int
+		probeLines   []PublicStatusProbeLineConfig
 	}
 	scoped := make([]scopedGroup, 0, len(groups))
-	groupIDs := make([]int64, 0, len(groups))
+	scopedGroupIDs := make([]int64, 0, len(groups))
 	for _, g := range groups {
-		if _, ok := g.ModelRouting[modelName]; !ok {
+		if schedulableCounts[g.ID] == 0 {
 			continue
 		}
-		scoped = append(scoped, scopedGroup{id: g.ID, name: g.Name})
-		groupIDs = append(groupIDs, g.ID)
+		if !groupSupportsStatusModel(g, modelName) {
+			continue
+		}
+		gc := groupConfigByID[g.ID]
+		if !publicStatusGroupConfigSupportsModel(gc, modelName) {
+			continue
+		}
+		displayName := strings.TrimSpace(gc.DisplayName)
+		aggregateKey := strings.TrimSpace(gc.AggregateKey)
+		if displayName == "" {
+			displayName, _ = suggestedPublicStatusGroup(g)
+		}
+		if displayName == "" {
+			displayName = g.Name
+		}
+		scoped = append(scoped, scopedGroup{
+			id:           g.ID,
+			name:         displayName,
+			aggregateKey: aggregateKey,
+			sortOrder:    gc.SortOrder,
+			rank:         publicStatusGroupRank(aggregateKey, displayName),
+			probeLines:   publicStatusGroupProbeLines(gc, displayName),
+		})
+		scopedGroupIDs = append(scopedGroupIDs, g.ID)
 	}
+	sort.SliceStable(scoped, func(i, j int) bool {
+		if scoped[i].sortOrder != scoped[j].sortOrder {
+			if scoped[i].sortOrder == 0 {
+				return false
+			}
+			if scoped[j].sortOrder == 0 {
+				return true
+			}
+			return scoped[i].sortOrder < scoped[j].sortOrder
+		}
+		if scoped[i].rank != scoped[j].rank {
+			return scoped[i].rank < scoped[j].rank
+		}
+		if scoped[i].name != scoped[j].name {
+			return scoped[i].name < scoped[j].name
+		}
+		return scoped[i].id < scoped[j].id
+	})
 
 	result := &StatusModel{
 		Name:          modelName,
@@ -470,12 +591,18 @@ func (s *StatusPageService) loadDetailFromDB(ctx context.Context, modelName stri
 	// 2) Fetch all samples for this model inside the window. One query keeps
 	// this cheap — the table is retained for only ~24h and heavily indexed on
 	// (bucket_ts, account_id, group_id, model).
-	samples, err := s.entClient.ChannelHealthSample.Query().
-		Where(
-			channelhealthsample.ModelEQ(modelName),
-			channelhealthsample.BucketTsGTE(windowStart),
-		).
-		All(ctx)
+	var samples []*dbent.ChannelHealthSample
+	if len(scopedGroupIDs) > 0 {
+		samples, err = s.entClient.ChannelHealthSample.Query().
+			Where(
+				channelhealthsample.ModelEQ(modelName),
+				channelhealthsample.GroupIDIn(scopedGroupIDs...),
+				channelhealthsample.BucketTsGTE(windowStart),
+			).
+			All(ctx)
+	} else {
+		samples = []*dbent.ChannelHealthSample{}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("status_page_service: list samples: %w", err)
 	}
@@ -485,101 +612,155 @@ func (s *StatusPageService) loadDetailFromDB(ctx context.Context, modelName stri
 	result.AvailabilityPct = availabilityFromBeats(result.Heartbeats)
 
 	if len(scoped) == 0 {
-		// No routed group — still return the model shell so the frontend can
+		// No configured group — still return the model shell so the frontend can
 		// show pricing / metadata even during a config gap.
 		return result, nil
 	}
 
-	// 4) Per-channel (account) heartbeats grouped by group.
-	//
-	// Collect the account IDs in scope via account_groups so we emit rows
-	// even for channels with zero samples (they'll read as all-unknown).
-	agRows, err := s.entClient.AccountGroup.Query().
-		Where(accountgroup.GroupIDIn(groupIDs...)).
-		Where(accountgroup.HasAccountWith(account.DeletedAtIsNil())).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("status_page_service: list account_groups: %w", err)
-	}
-	accountIDSet := map[int64]struct{}{}
-	channelsByGroup := map[int64][]int64{}
-	for _, ag := range agRows {
-		channelsByGroup[ag.GroupID] = append(channelsByGroup[ag.GroupID], ag.AccountID)
-		accountIDSet[ag.AccountID] = struct{}{}
-	}
-
-	// Load accounts once for name masking.
-	accountIDs := make([]int64, 0, len(accountIDSet))
-	for id := range accountIDSet {
-		accountIDs = append(accountIDs, id)
-	}
-	var accounts []*dbent.Account
-	if len(accountIDs) > 0 {
-		accounts, err = s.entClient.Account.Query().
-			Where(account.IDIn(accountIDs...)).
-			All(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("status_page_service: list accounts: %w", err)
-		}
-	}
-	accountByID := make(map[int64]*dbent.Account, len(accounts))
-	for _, a := range accounts {
-		accountByID[a.ID] = a
-	}
-
-	// Partition samples by (groupID, accountID) once; O(n) over samples.
-	type key struct {
-		gid, aid int64
-	}
-	samplesBy := map[key][]*dbent.ChannelHealthSample{}
+	// 4) Per-configured-group heartbeats. The public channel is the configured
+	// group or aggregate group (for example all monthly-card backend groups
+	// collapsed into one "月卡" channel). User requests are made by group, so
+	// account-level rows are intentionally not exposed as public channels.
+	samplesByGroup := map[int64][]*dbent.ChannelHealthSample{}
 	for _, s := range samples {
-		k := key{gid: s.GroupID, aid: s.AccountID}
-		samplesBy[k] = append(samplesBy[k], s)
+		samplesByGroup[s.GroupID] = append(samplesByGroup[s.GroupID], s)
 	}
 
 	// Compute LoadPct per group using samples inside the last 5 minutes.
 	loadCutoff := now.Add(-statusLoadWindow)
-	activeAccountsByGroup := map[int64]map[int64]struct{}{}
+	activeGroups := map[int64]struct{}{}
 	for _, s := range samples {
 		if s.BucketTs.Before(loadCutoff) {
 			continue
 		}
-		if _, ok := activeAccountsByGroup[s.GroupID]; !ok {
-			activeAccountsByGroup[s.GroupID] = map[int64]struct{}{}
-		}
-		activeAccountsByGroup[s.GroupID][s.AccountID] = struct{}{}
+		activeGroups[s.GroupID] = struct{}{}
 	}
 
+	type aggregate struct {
+		name     string
+		groupIDs []int64
+		samples  []*dbent.ChannelHealthSample
+		lines    []PublicStatusProbeLineConfig
+		lineSeen map[string]struct{}
+	}
+	aggregates := map[string]*aggregate{}
+	order := []string{}
 	for _, sg := range scoped {
-		ids := channelsByGroup[sg.id]
-		// Stable ordering so UI diffs are small between polls.
-		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		aggKey := sg.aggregateKey
+		if aggKey == "" {
+			aggKey = fmt.Sprintf("group:%d", sg.id)
+		}
+		agg := aggregates[aggKey]
+		if agg == nil {
+			agg = &aggregate{name: sg.name, lineSeen: map[string]struct{}{}}
+			aggregates[aggKey] = agg
+			order = append(order, aggKey)
+		}
+		agg.groupIDs = append(agg.groupIDs, sg.id)
+		agg.samples = append(agg.samples, samplesByGroup[sg.id]...)
+		for _, line := range sg.probeLines {
+			key := publicStatusProbeLineDisplayName(line)
+			if key == "" {
+				continue
+			}
+			seenKey := strings.ToLower(key)
+			if _, ok := agg.lineSeen[seenKey]; ok {
+				continue
+			}
+			agg.lineSeen[seenKey] = struct{}{}
+			agg.lines = append(agg.lines, line)
+		}
+	}
 
-		channels := make([]StatusChannel, 0, len(ids))
-		for _, aid := range ids {
-			ss := samplesBy[key{gid: sg.id, aid: aid}]
-			beats := buildHeartbeats(ss, now)
+	overallBeats := make([][]StatusBeat, 0, len(order))
+	availabilityTotal := 0.0
+	availabilityCount := 0
+	for _, key := range order {
+		agg := aggregates[key]
+		beats := buildHeartbeats(agg.samples, now)
+		overallBeats = append(overallBeats, beats)
+		availability := availabilityFromBeats(beats)
+		availabilityTotal += availability
+		availabilityCount++
+		active := 0
+		for _, gid := range agg.groupIDs {
+			if _, ok := activeGroups[gid]; ok {
+				active++
+			}
+		}
+		loadPct := 0.0
+		if len(agg.groupIDs) > 0 {
+			loadPct = float64(active) / float64(len(agg.groupIDs)) * 100.0
+		}
+		channels := make([]StatusChannel, 0, len(agg.lines))
+		for _, line := range agg.lines {
 			channels = append(channels, StatusChannel{
-				Name:            maskChannelName(accountByID[aid], aid),
-				AvailabilityPct: availabilityFromBeats(beats),
+				Name:            publicStatusProbeLineDisplayName(line),
+				AvailabilityPct: availability,
 				Heartbeats:      beats,
 			})
 		}
-
-		loadPct := 0.0
-		if total := len(ids); total > 0 {
-			active := len(activeAccountsByGroup[sg.id])
-			loadPct = float64(active) / float64(total) * 100.0
+		if len(channels) == 0 {
+			channels = append(channels, StatusChannel{
+				Name:            agg.name,
+				AvailabilityPct: availability,
+				Heartbeats:      beats,
+			})
 		}
-
 		result.Groups = append(result.Groups, StatusGroup{
-			Name:     sg.name,
+			Name:     agg.name,
 			LoadPct:  loadPct,
 			Channels: channels,
 		})
 	}
+	if availabilityCount > 0 {
+		result.AvailabilityPct = availabilityTotal / float64(availabilityCount)
+		result.Heartbeats = mergeOverallBeats(overallBeats)
+	}
 
 	return result, nil
+}
+
+func mergeOverallBeats(series [][]StatusBeat) []StatusBeat {
+	if len(series) == 0 {
+		return []StatusBeat{}
+	}
+	out := make([]StatusBeat, len(series[0]))
+	for i := range out {
+		out[i] = StatusBeat{Ts: series[0][i].Ts, Status: "unknown"}
+		known := 0
+		ok := 0
+		hasProblem := false
+		hasDown := false
+		for _, beats := range series {
+			if i >= len(beats) {
+				continue
+			}
+			switch beats[i].Status {
+			case "ok":
+				known++
+				ok++
+			case "degraded":
+				known++
+				hasProblem = true
+			case "down":
+				known++
+				hasProblem = true
+				hasDown = true
+			}
+		}
+		switch {
+		case known == 0:
+			out[i].Status = "unknown"
+		case ok == known:
+			out[i].Status = "ok"
+		case ok == 0 && hasDown:
+			out[i].Status = "down"
+		case hasProblem:
+			out[i].Status = "degraded"
+		}
+	}
+	return out
 }
 
 // buildHeartbeats projects a pile of samples onto the fixed 90-minute grid.
@@ -669,30 +850,4 @@ func availabilityFromBeats(beats []StatusBeat) float64 {
 		return 100.0
 	}
 	return float64(ok) / float64(total) * 100.0
-}
-
-// maskChannelName turns an account into a safe, public-facing name.
-//
-// Precedence:
-//  1. extra.region      (operator-supplied region tag)
-//  2. extra.location    (alternative tag used by legacy accounts)
-//  3. "Channel #<id>"   (neutral fallback)
-//
-// Intentionally never echoes account.Name / notes / credentials — those
-// frequently contain email addresses, internal host names, or IP:port tuples.
-// Region/location values are operator-editable free-form strings so they must
-// also pass a strict whitelist before we echo them; otherwise
-// `extra.region = "ops@example.com"` would leak straight through. Anything
-// that doesn't match the whitelist falls back to the neutral id form.
-func maskChannelName(a *dbent.Account, id int64) string {
-	if a != nil {
-		for _, k := range []string{"region", "location"} {
-			if v, ok := a.Extra[k]; ok {
-				if s, ok := v.(string); ok && channelNameWhitelist.MatchString(s) {
-					return s
-				}
-			}
-		}
-	}
-	return fmt.Sprintf("Channel #%d", id)
 }

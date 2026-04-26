@@ -48,6 +48,7 @@ export interface SystemSettings {
   purchase_subscription_redirect_url: string
   purchase_subscription_url: string
   sora_client_enabled: boolean
+  model_health_page_enabled: boolean
   backend_mode_enabled: boolean
   custom_menu_items: CustomMenuItem[]
   custom_endpoints: CustomEndpoint[]
@@ -125,6 +126,7 @@ export interface UpdateSettingsRequest {
   purchase_subscription_redirect_url?: string
   purchase_subscription_url?: string
   sora_client_enabled?: boolean
+  model_health_page_enabled?: boolean
   backend_mode_enabled?: boolean
   custom_menu_items?: CustomMenuItem[]
   custom_endpoints?: CustomEndpoint[]
