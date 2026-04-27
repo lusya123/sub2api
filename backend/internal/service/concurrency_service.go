@@ -79,8 +79,12 @@ func (s *ConcurrencyService) CleanupStaleProcessSlots(ctx context.Context) error
 }
 
 const (
-	// Default extra wait slots beyond concurrency limit
-	defaultExtraWaitSlots = 20
+	// DefaultMaxUserWaiting is the default number of per-user requests that may wait
+	// after all active concurrency slots are occupied.
+	DefaultMaxUserWaiting = 20
+	// DefaultUserConcurrencyWaitSeconds must cover the handler-side user slot wait
+	// window so wait counters cannot expire while requests are still queued.
+	DefaultUserConcurrencyWaitSeconds = 30
 )
 
 // ConcurrencyService manages concurrent request limiting for accounts and users
@@ -207,18 +211,19 @@ func (s *ConcurrencyService) AcquireUserSlot(ctx context.Context, userID int64, 
 
 // IncrementWaitCount attempts to increment the wait queue counter for a user.
 // Returns true if successful, false if the wait queue is full.
-// maxWait should be user.Concurrency + defaultExtraWaitSlots
+// maxWait is the absolute number of requests allowed to wait beyond active slots.
 func (s *ConcurrencyService) IncrementWaitCount(ctx context.Context, userID int64, maxWait int) (bool, error) {
 	if s.cache == nil {
-		// Redis not available, allow request
-		return true, nil
+		return false, nil
+	}
+	if maxWait <= 0 {
+		return false, nil
 	}
 
 	result, err := s.cache.IncrementWaitCount(ctx, userID, maxWait)
 	if err != nil {
-		// On error, allow the request to proceed (fail open)
 		logger.LegacyPrintf("service.concurrency", "Warning: increment wait count failed for user %d: %v", userID, err)
-		return true, nil
+		return false, err
 	}
 	return result, nil
 }
@@ -242,13 +247,16 @@ func (s *ConcurrencyService) DecrementWaitCount(ctx context.Context, userID int6
 // IncrementAccountWaitCount increments the wait queue counter for an account.
 func (s *ConcurrencyService) IncrementAccountWaitCount(ctx context.Context, accountID int64, maxWait int) (bool, error) {
 	if s.cache == nil {
-		return true, nil
+		return false, nil
+	}
+	if maxWait <= 0 {
+		return false, nil
 	}
 
 	result, err := s.cache.IncrementAccountWaitCount(ctx, accountID, maxWait)
 	if err != nil {
 		logger.LegacyPrintf("service.concurrency", "Warning: increment wait count failed for account %d: %v", accountID, err)
-		return true, nil
+		return false, err
 	}
 	return result, nil
 }
@@ -275,13 +283,23 @@ func (s *ConcurrencyService) GetAccountWaitingCount(ctx context.Context, account
 	return s.cache.GetAccountWaitingCount(ctx, accountID)
 }
 
-// CalculateMaxWait calculates the maximum wait queue size for a user
-// maxWait = userConcurrency + defaultExtraWaitSlots
+// CalculateMaxWait calculates the default maximum wait queue size for a user.
+// The returned value is an absolute queue size beyond active concurrency slots.
 func CalculateMaxWait(userConcurrency int) int {
+	return CalculateMaxWaitWithLimit(userConcurrency, DefaultMaxUserWaiting)
+}
+
+// CalculateMaxWaitWithLimit calculates the effective wait queue size for a user.
+// maxUserWaiting < 0 is treated as zero. Users with unlimited concurrency do not
+// need a wait queue.
+func CalculateMaxWaitWithLimit(userConcurrency int, maxUserWaiting int) int {
 	if userConcurrency <= 0 {
-		userConcurrency = 1
+		return 0
 	}
-	return userConcurrency + defaultExtraWaitSlots
+	if maxUserWaiting < 0 {
+		return 0
+	}
+	return maxUserWaiting
 }
 
 // GetAccountsLoadBatch returns load info for multiple accounts.

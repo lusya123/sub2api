@@ -141,8 +141,10 @@ var (
 	// decrementWaitScript - same as before
 	decrementWaitScript = redis.NewScript(`
 			local current = redis.call('GET', KEYS[1])
-			if current ~= false and tonumber(current) > 0 then
+			if current ~= false and tonumber(current) > 1 then
 				redis.call('DECR', KEYS[1])
+			elseif current ~= false then
+				redis.call('DEL', KEYS[1])
 			end
 			return 1
 		`)

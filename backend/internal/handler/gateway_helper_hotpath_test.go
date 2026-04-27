@@ -24,6 +24,12 @@ type helperConcurrencyCacheStub struct {
 	userAcquireCalls    int
 	accountReleaseCalls int
 	userReleaseCalls    int
+	waitIncrementCalls  int
+	waitDecrementCalls  int
+	accountWaitAllowed  bool
+	accountWaitErr      error
+	accountWaitIncCalls int
+	accountWaitDecCalls int
 }
 
 func (s *helperConcurrencyCacheStub) AcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error) {
@@ -58,10 +64,22 @@ func (s *helperConcurrencyCacheStub) GetAccountConcurrencyBatch(ctx context.Cont
 }
 
 func (s *helperConcurrencyCacheStub) IncrementAccountWaitCount(ctx context.Context, accountID int64, maxWait int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.accountWaitIncCalls++
+	if s.accountWaitErr != nil {
+		return false, s.accountWaitErr
+	}
+	if !s.accountWaitAllowed {
+		return false, nil
+	}
 	return true, nil
 }
 
 func (s *helperConcurrencyCacheStub) DecrementAccountWaitCount(ctx context.Context, accountID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.accountWaitDecCalls++
 	return nil
 }
 
@@ -93,10 +111,16 @@ func (s *helperConcurrencyCacheStub) GetUserConcurrency(ctx context.Context, use
 }
 
 func (s *helperConcurrencyCacheStub) IncrementWaitCount(ctx context.Context, userID int64, maxWait int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.waitIncrementCalls++
 	return true, nil
 }
 
 func (s *helperConcurrencyCacheStub) DecrementWaitCount(ctx context.Context, userID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.waitDecrementCalls++
 	return nil
 }
 
@@ -249,6 +273,51 @@ func TestWaitForSlotWithPingTimeout_AccountAndUserAcquire(t *testing.T) {
 	})
 }
 
+func TestAcquireUserSlotWithAdmission(t *testing.T) {
+	t.Run("immediate_acquire_does_not_enter_wait_queue", func(t *testing.T) {
+		cache := &helperConcurrencyCacheStub{userSeq: []bool{true}}
+		helper := NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, 5*time.Millisecond)
+		c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+		streamStarted := false
+
+		release, err := helper.AcquireUserSlotWithAdmission(c, 1, 2, false, &streamStarted)
+		require.NoError(t, err)
+		require.NotNil(t, release)
+		require.Equal(t, 0, cache.waitIncrementCalls)
+		release()
+		require.Equal(t, 1, cache.userReleaseCalls)
+	})
+
+	t.Run("queue_disabled_rejects_without_wait_counter", func(t *testing.T) {
+		cache := &helperConcurrencyCacheStub{userSeq: []bool{false}}
+		helper := NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, 5*time.Millisecond)
+		helper.SetMaxUserWaiting(0)
+		c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+		streamStarted := false
+
+		release, err := helper.AcquireUserSlotWithAdmission(c, 1, 2, false, &streamStarted)
+		require.Nil(t, release)
+		var qErr *ConcurrencyQueueFullError
+		require.ErrorAs(t, err, &qErr)
+		require.Equal(t, 0, cache.waitIncrementCalls)
+	})
+
+	t.Run("queued_request_decrements_wait_count_after_acquire", func(t *testing.T) {
+		cache := &helperConcurrencyCacheStub{userSeq: []bool{false, true}}
+		helper := NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, 5*time.Millisecond)
+		c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+		streamStarted := false
+
+		release, err := helper.AcquireUserSlotWithAdmission(c, 1, 2, false, &streamStarted)
+		require.NoError(t, err)
+		require.NotNil(t, release)
+		require.Equal(t, 1, cache.waitIncrementCalls)
+		require.Equal(t, 1, cache.waitDecrementCalls)
+		release()
+		require.Equal(t, 1, cache.userReleaseCalls)
+	})
+}
+
 func TestWaitForSlotWithPingTimeout_TimeoutAndStreamPing(t *testing.T) {
 	cache := &helperConcurrencyCacheStub{
 		accountSeq: []bool{false, false, false},
@@ -309,6 +378,63 @@ func TestAcquireAccountSlotWithWaitTimeout_ImmediateAttemptBeforeBackoff(t *test
 	require.ErrorAs(t, err, &cErr)
 	require.True(t, cErr.IsTimeout)
 	require.GreaterOrEqual(t, cache.accountAcquireCalls, 1)
+}
+
+func TestAcquireAccountSlotWithAdmission_BoundsWaitQueue(t *testing.T) {
+	t.Run("queue full rejects before waiting", func(t *testing.T) {
+		cache := &helperConcurrencyCacheStub{
+			accountSeq:         []bool{false},
+			accountWaitAllowed: false,
+		}
+		concurrency := service.NewConcurrencyService(cache)
+		helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+		c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+		streamStarted := false
+
+		release, err := helper.AcquireAccountSlotWithAdmission(c, 501, 1, 1, 30*time.Millisecond, false, &streamStarted)
+		require.Nil(t, release)
+		var queueErr *ConcurrencyQueueFullError
+		require.ErrorAs(t, err, &queueErr)
+		require.Equal(t, "account", queueErr.SlotType)
+		require.Equal(t, 1, cache.accountWaitIncCalls)
+		require.Equal(t, 0, cache.accountWaitDecCalls)
+	})
+
+	t.Run("wait counter error rejects before waiting", func(t *testing.T) {
+		cache := &helperConcurrencyCacheStub{
+			accountSeq:     []bool{false},
+			accountWaitErr: errors.New("redis unavailable"),
+		}
+		concurrency := service.NewConcurrencyService(cache)
+		helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+		c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+		streamStarted := false
+
+		release, err := helper.AcquireAccountSlotWithAdmission(c, 502, 1, 1, 30*time.Millisecond, false, &streamStarted)
+		require.Nil(t, release)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "redis unavailable")
+		require.Equal(t, 1, cache.accountWaitIncCalls)
+		require.Equal(t, 0, cache.accountWaitDecCalls)
+	})
+
+	t.Run("queued request decrements counter after acquire", func(t *testing.T) {
+		cache := &helperConcurrencyCacheStub{
+			accountSeq:         []bool{false, true},
+			accountWaitAllowed: true,
+		}
+		concurrency := service.NewConcurrencyService(cache)
+		helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+		c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+		streamStarted := false
+
+		release, err := helper.AcquireAccountSlotWithAdmission(c, 503, 1, 1, 100*time.Millisecond, false, &streamStarted)
+		require.NoError(t, err)
+		require.NotNil(t, release)
+		require.Equal(t, 1, cache.accountWaitIncCalls)
+		require.Equal(t, 1, cache.accountWaitDecCalls)
+		release()
+	})
 }
 
 type helperConcurrencyCacheStubWithError struct {

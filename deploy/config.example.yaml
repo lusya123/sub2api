@@ -684,6 +684,10 @@ concurrency:
   # SSE ping interval during concurrency wait (seconds)
   # 并发等待期间的 SSE ping 间隔（秒）
   ping_interval: 10
+  # Maximum per-user requests allowed to wait after active concurrency slots are full.
+  # Set to 0 to reject overflow immediately with 429.
+  # 用户并发槽位满后，每个用户最多允许排队等待的请求数。设为 0 表示超并发立即 429。
+  max_user_waiting: 20
 
 # =============================================================================
 # Database Configuration (PostgreSQL)

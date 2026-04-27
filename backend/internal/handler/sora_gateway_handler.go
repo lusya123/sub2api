@@ -58,8 +58,10 @@ func NewSoraGatewayHandler(
 	soraTLSEnabled := true
 	signKey := ""
 	mediaRoot := "/app/data/sora"
+	maxUserWaiting := service.DefaultMaxUserWaiting
 	if cfg != nil {
 		pingInterval = time.Duration(cfg.Concurrency.PingInterval) * time.Second
+		maxUserWaiting = cfg.Concurrency.MaxUserWaiting
 		if cfg.Gateway.MaxAccountSwitches > 0 {
 			maxAccountSwitches = cfg.Gateway.MaxAccountSwitches
 		}
@@ -72,12 +74,14 @@ func NewSoraGatewayHandler(
 			mediaRoot = root
 		}
 	}
+	concurrencyHelper := NewConcurrencyHelper(concurrencyService, SSEPingFormatComment, pingInterval)
+	concurrencyHelper.SetMaxUserWaiting(maxUserWaiting)
 	return &SoraGatewayHandler{
 		gatewayService:        gatewayService,
 		soraGatewayService:    soraGatewayService,
 		billingCacheService:   billingCacheService,
 		usageRecordWorkerPool: usageRecordWorkerPool,
-		concurrencyHelper:     NewConcurrencyHelper(concurrencyService, SSEPingFormatComment, pingInterval),
+		concurrencyHelper:     concurrencyHelper,
 		maxAccountSwitches:    maxAccountSwitches,
 		streamMode:            strings.ToLower(streamMode),
 		soraTLSEnabled:        soraTLSEnabled,
@@ -175,34 +179,11 @@ func (h *SoraGatewayHandler) ChatCompletions(c *gin.Context) {
 	streamStarted := false
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 
-	maxWait := service.CalculateMaxWait(subject.Concurrency)
-	canWait, err := h.concurrencyHelper.IncrementWaitCount(c.Request.Context(), subject.UserID, maxWait)
-	waitCounted := false
-	if err != nil {
-		reqLog.Warn("sora.user_wait_counter_increment_failed", zap.Error(err))
-	} else if !canWait {
-		reqLog.Info("sora.user_wait_queue_full", zap.Int("max_wait", maxWait))
-		h.errorResponse(c, http.StatusTooManyRequests, "rate_limit_error", "Too many pending requests, please retry later")
-		return
-	}
-	if err == nil && canWait {
-		waitCounted = true
-	}
-	defer func() {
-		if waitCounted {
-			h.concurrencyHelper.DecrementWaitCount(c.Request.Context(), subject.UserID)
-		}
-	}()
-
-	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, clientStream, &streamStarted)
+	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlotWithAdmission(c, subject.UserID, subject.Concurrency, clientStream, &streamStarted)
 	if err != nil {
 		reqLog.Warn("sora.user_slot_acquire_failed", zap.Error(err))
 		h.handleConcurrencyError(c, err, "user", streamStarted)
 		return
-	}
-	if waitCounted {
-		h.concurrencyHelper.DecrementWaitCount(c.Request.Context(), subject.UserID)
-		waitCounted = false
 	}
 	userReleaseFunc = wrapReleaseOnDone(c.Request.Context(), userReleaseFunc)
 	if userReleaseFunc != nil {
@@ -278,6 +259,8 @@ func (h *SoraGatewayHandler) ChatCompletions(c *gin.Context) {
 					zap.Bool("tls_fingerprint_enabled", tlsFingerprintEnabled),
 					zap.Error(err),
 				)
+				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "Too many pending requests, please retry later", streamStarted)
+				return
 			} else if !canWait {
 				reqLog.Info("sora.account_wait_queue_full",
 					zap.Int64("account_id", account.ID),

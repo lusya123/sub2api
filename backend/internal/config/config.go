@@ -301,6 +301,9 @@ type CircuitBreakerConfig struct {
 type ConcurrencyConfig struct {
 	// PingInterval: 并发等待期间的 SSE ping 间隔（秒）
 	PingInterval int `mapstructure:"ping_interval"`
+	// MaxUserWaiting: 每个用户在并发槽位满时允许排队等待的请求数。
+	// 0 表示不排队，超出用户并发后立即返回 429。
+	MaxUserWaiting int `mapstructure:"max_user_waiting"`
 }
 
 // SoraConfig 直连 Sora 配置
@@ -1341,6 +1344,7 @@ func setDefaults() {
 	viper.SetDefault("idempotency.cleanup_batch_size", 500)
 
 	// Gateway
+	viper.SetDefault("concurrency.max_user_waiting", 20)
 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
 	viper.SetDefault("gateway.log_upstream_error_body", true)
 	viper.SetDefault("gateway.log_upstream_error_body_max_bytes", 2048)
@@ -1990,6 +1994,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.ConcurrencySlotTTLMinutes <= 0 {
 		return fmt.Errorf("gateway.concurrency_slot_ttl_minutes must be positive")
+	}
+	if c.Concurrency.MaxUserWaiting < 0 {
+		return fmt.Errorf("concurrency.max_user_waiting must be non-negative")
 	}
 	if c.Gateway.StreamDataIntervalTimeout < 0 {
 		return fmt.Errorf("gateway.stream_data_interval_timeout must be non-negative")

@@ -74,6 +74,9 @@ func TestLoadDefaultSchedulingConfig(t *testing.T) {
 	if cfg.Gateway.Scheduling.SlotCleanupInterval != 30*time.Second {
 		t.Fatalf("SlotCleanupInterval = %v, want 30s", cfg.Gateway.Scheduling.SlotCleanupInterval)
 	}
+	if cfg.Concurrency.MaxUserWaiting != 20 {
+		t.Fatalf("MaxUserWaiting = %d, want 20", cfg.Concurrency.MaxUserWaiting)
+	}
 }
 
 func TestLoadDefaultOpenAIWSConfig(t *testing.T) {
@@ -1095,6 +1098,11 @@ func TestValidateConfigErrors(t *testing.T) {
 			name:    "gateway concurrency slot ttl",
 			mutate:  func(c *Config) { c.Gateway.ConcurrencySlotTTLMinutes = 0 },
 			wantErr: "gateway.concurrency_slot_ttl_minutes",
+		},
+		{
+			name:    "concurrency max user waiting",
+			mutate:  func(c *Config) { c.Concurrency.MaxUserWaiting = -1 },
+			wantErr: "concurrency.max_user_waiting",
 		},
 		{
 			name:    "gateway max conns per host",

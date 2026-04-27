@@ -116,7 +116,7 @@ func claudeCodeBodyMapFromContextCache(c *gin.Context) map[string]any {
 // 3. 减少 Redis 压力，避免惊群效应
 const (
 	// maxConcurrencyWait 等待并发槽位的最大时间
-	maxConcurrencyWait = 30 * time.Second
+	maxConcurrencyWait = time.Duration(service.DefaultUserConcurrencyWaitSeconds) * time.Second
 	// defaultPingInterval 流式响应等待时发送 ping 的默认间隔
 	defaultPingInterval = 10 * time.Second
 	// initialBackoff 初始退避时间
@@ -152,11 +152,22 @@ func (e *ConcurrencyError) Error() string {
 	return fmt.Sprintf("%s concurrency limit reached", e.SlotType)
 }
 
+// ConcurrencyQueueFullError means a request could not enter the bounded wait queue.
+type ConcurrencyQueueFullError struct {
+	SlotType   string
+	MaxWaiting int
+}
+
+func (e *ConcurrencyQueueFullError) Error() string {
+	return fmt.Sprintf("%s concurrency wait queue full", e.SlotType)
+}
+
 // ConcurrencyHelper provides common concurrency slot management for gateway handlers
 type ConcurrencyHelper struct {
 	concurrencyService *service.ConcurrencyService
 	pingFormat         SSEPingFormat
 	pingInterval       time.Duration
+	maxUserWaiting     int
 }
 
 // NewConcurrencyHelper creates a new ConcurrencyHelper
@@ -168,7 +179,32 @@ func NewConcurrencyHelper(concurrencyService *service.ConcurrencyService, pingFo
 		concurrencyService: concurrencyService,
 		pingFormat:         pingFormat,
 		pingInterval:       pingInterval,
+		maxUserWaiting:     service.DefaultMaxUserWaiting,
 	}
+}
+
+func (h *ConcurrencyHelper) SetMaxUserWaiting(maxUserWaiting int) {
+	if h == nil {
+		return
+	}
+	if maxUserWaiting < 0 {
+		maxUserWaiting = 0
+	}
+	h.maxUserWaiting = maxUserWaiting
+}
+
+func (h *ConcurrencyHelper) ConfiguredMaxUserWaiting() int {
+	if h == nil {
+		return service.DefaultMaxUserWaiting
+	}
+	return h.maxUserWaiting
+}
+
+func (h *ConcurrencyHelper) MaxUserWaiting(userConcurrency int) int {
+	if h == nil {
+		return service.CalculateMaxWait(userConcurrency)
+	}
+	return service.CalculateMaxWaitWithLimit(userConcurrency, h.maxUserWaiting)
 }
 
 // wrapReleaseOnDone ensures release runs at most once and still triggers on context cancellation.
@@ -259,6 +295,49 @@ func (h *ConcurrencyHelper) AcquireUserSlotWithWait(c *gin.Context, userID int64
 
 	// Need to wait - handle streaming ping if needed
 	return h.waitForSlotWithPing(c, "user", userID, maxConcurrency, isStream, streamStarted)
+}
+
+// AcquireUserSlotWithAdmission first tries to acquire a user slot. Only requests
+// that cannot get a slot enter the bounded wait queue.
+func (h *ConcurrencyHelper) AcquireUserSlotWithAdmission(c *gin.Context, userID int64, maxConcurrency int, isStream bool, streamStarted *bool) (func(), error) {
+	ctx := c.Request.Context()
+
+	releaseFunc, acquired, err := h.TryAcquireUserSlot(ctx, userID, maxConcurrency)
+	if err != nil {
+		return nil, err
+	}
+	if acquired {
+		return releaseFunc, nil
+	}
+
+	maxWait := h.MaxUserWaiting(maxConcurrency)
+	if maxWait <= 0 {
+		return nil, &ConcurrencyQueueFullError{SlotType: "user", MaxWaiting: maxWait}
+	}
+
+	canWait, err := h.IncrementWaitCount(ctx, userID, maxWait)
+	if err != nil {
+		return nil, err
+	}
+	if !canWait {
+		return nil, &ConcurrencyQueueFullError{SlotType: "user", MaxWaiting: maxWait}
+	}
+
+	waitCounted := true
+	defer func() {
+		if waitCounted {
+			h.DecrementWaitCount(ctx, userID)
+		}
+	}()
+
+	releaseFunc, err = h.waitForSlotWithPing(c, "user", userID, maxConcurrency, isStream, streamStarted)
+	if err != nil {
+		return nil, err
+	}
+
+	h.DecrementWaitCount(ctx, userID)
+	waitCounted = false
+	return releaseFunc, nil
 }
 
 // AcquireAccountSlotWithWait acquires an account concurrency slot, waiting if necessary.
@@ -374,6 +453,49 @@ func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType 
 // AcquireAccountSlotWithWaitTimeout acquires an account slot with a custom timeout (keeps SSE ping).
 func (h *ConcurrencyHelper) AcquireAccountSlotWithWaitTimeout(c *gin.Context, accountID int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
 	return h.waitForSlotWithPingTimeout(c, "account", accountID, maxConcurrency, timeout, isStream, streamStarted, true)
+}
+
+// AcquireAccountSlotWithAdmission acquires an account slot or enters the bounded
+// account wait queue before waiting. If the wait counter cannot be recorded, the
+// request is rejected instead of waiting invisibly.
+func (h *ConcurrencyHelper) AcquireAccountSlotWithAdmission(c *gin.Context, accountID int64, maxConcurrency int, maxWaiting int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
+	ctx := c.Request.Context()
+
+	releaseFunc, acquired, err := h.TryAcquireAccountSlot(ctx, accountID, maxConcurrency)
+	if err != nil {
+		return nil, err
+	}
+	if acquired {
+		return releaseFunc, nil
+	}
+
+	if maxWaiting <= 0 {
+		return nil, &ConcurrencyQueueFullError{SlotType: "account", MaxWaiting: maxWaiting}
+	}
+
+	canWait, err := h.IncrementAccountWaitCount(ctx, accountID, maxWaiting)
+	if err != nil {
+		return nil, err
+	}
+	if !canWait {
+		return nil, &ConcurrencyQueueFullError{SlotType: "account", MaxWaiting: maxWaiting}
+	}
+
+	waitCounted := true
+	defer func() {
+		if waitCounted {
+			h.DecrementAccountWaitCount(ctx, accountID)
+		}
+	}()
+
+	releaseFunc, err = h.AcquireAccountSlotWithWaitTimeout(c, accountID, maxConcurrency, timeout, isStream, streamStarted)
+	if err != nil {
+		return nil, err
+	}
+
+	h.DecrementAccountWaitCount(ctx, accountID)
+	waitCounted = false
+	return releaseFunc, nil
 }
 
 // nextBackoff 计算下一次退避时间

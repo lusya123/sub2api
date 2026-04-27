@@ -255,14 +255,14 @@ func TestIncrementWaitCount_QueueFull(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestIncrementWaitCount_FailOpen(t *testing.T) {
-	// Redis 错误时应 fail-open（允许请求通过）
+func TestIncrementWaitCount_FailClosed(t *testing.T) {
+	// Redis 错误时应拒绝进入等待队列，避免无界排队
 	cache := &stubConcurrencyCacheForTest{waitErr: errors.New("redis timeout")}
 	svc := NewConcurrencyService(cache)
 
 	allowed, err := svc.IncrementWaitCount(context.Background(), 1, 25)
-	require.NoError(t, err, "Redis 错误不应传播")
-	require.True(t, allowed, "Redis 错误时应 fail-open")
+	require.Error(t, err)
+	require.False(t, allowed)
 }
 
 func TestIncrementWaitCount_NilCache(t *testing.T) {
@@ -270,7 +270,7 @@ func TestIncrementWaitCount_NilCache(t *testing.T) {
 
 	allowed, err := svc.IncrementWaitCount(context.Background(), 1, 25)
 	require.NoError(t, err)
-	require.True(t, allowed, "nil cache 应 fail-open")
+	require.False(t, allowed, "nil cache 不应允许请求进入等待队列")
 }
 
 func TestCalculateMaxWait(t *testing.T) {
@@ -278,11 +278,11 @@ func TestCalculateMaxWait(t *testing.T) {
 		concurrency int
 		expected    int
 	}{
-		{5, 25},  // 5 + 20
-		{1, 21},  // 1 + 20
-		{0, 21},  // min(1) + 20
-		{-1, 21}, // min(1) + 20
-		{10, 30}, // 10 + 20
+		{5, 20},
+		{1, 20},
+		{0, 0},
+		{-1, 0},
+		{10, 20},
 	}
 	for _, tt := range tests {
 		result := CalculateMaxWait(tt.concurrency)
@@ -319,13 +319,13 @@ func TestGetAccountConcurrencyBatch(t *testing.T) {
 	}
 }
 
-func TestIncrementAccountWaitCount_FailOpen(t *testing.T) {
+func TestIncrementAccountWaitCount_FailClosed(t *testing.T) {
 	cache := &stubConcurrencyCacheForTest{waitErr: errors.New("redis error")}
 	svc := NewConcurrencyService(cache)
 
 	allowed, err := svc.IncrementAccountWaitCount(context.Background(), 1, 10)
-	require.NoError(t, err, "Redis 错误不应传播")
-	require.True(t, allowed, "Redis 错误时应 fail-open")
+	require.Error(t, err)
+	require.False(t, allowed, "Redis 错误时不应进入无法计数的账号等待队列")
 }
 
 func TestIncrementAccountWaitCount_NilCache(t *testing.T) {
@@ -333,5 +333,5 @@ func TestIncrementAccountWaitCount_NilCache(t *testing.T) {
 
 	allowed, err := svc.IncrementAccountWaitCount(context.Background(), 1, 10)
 	require.NoError(t, err)
-	require.True(t, allowed)
+	require.False(t, allowed)
 }
