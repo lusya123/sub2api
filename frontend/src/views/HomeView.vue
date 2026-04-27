@@ -81,17 +81,17 @@
           <div class="hero-foot" data-reveal data-delay="600">
             <div class="stat">
               <div class="stat-num">¥1</div>
-              <div class="stat-lbl">比你聪明一辈子</div>
+              <div class="stat-lbl">少花一点 多跑一轮</div>
             </div>
             <div class="sep-v"></div>
             <div class="stat">
               <div class="stat-num">0 秒</div>
-              <div class="stat-lbl">充完立即能用</div>
+              <div class="stat-lbl">下单立刻开跑</div>
             </div>
             <div class="sep-v"></div>
             <div class="stat">
               <div class="stat-num">∞</div>
-              <div class="stat-lbl">永不过期</div>
+              <div class="stat-lbl">买了总会用上</div>
             </div>
           </div>
         </div>
@@ -117,6 +117,11 @@
                       <stop offset="55%" stop-color="#E8A317"/>
                       <stop offset="100%" stop-color="#6B3F04"/>
                     </linearGradient>
+                    <linearGradient id="tokenInk" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#2a1802"/>
+                      <stop offset="58%" stop-color="#3a2608"/>
+                      <stop offset="100%" stop-color="#1b1002"/>
+                    </linearGradient>
                   </defs>
                   <polygon
                     points="110,8 200,58 200,162 110,212 20,162 20,58"
@@ -137,10 +142,7 @@
                     stroke-width="0.5"
                     stroke-dasharray="2 2"
                   />
-                  <text x="110" y="130" text-anchor="middle" class="token-glyph">T</text>
-                  <text x="110" y="58"  text-anchor="middle" class="token-tag">· LEGAL TENDER ·</text>
-                  <text x="110" y="168" text-anchor="middle" class="token-sub">ONE · TOKEN</text>
-                  <text x="110" y="182" text-anchor="middle" class="token-year">MMXXVI</text>
+                  <text x="110" y="140" text-anchor="middle" dominant-baseline="middle" class="token-glyph">T</text>
                 </svg>
               </div>
               <div class="token-shadow"></div>
@@ -821,31 +823,15 @@ onBeforeUnmount(() => {
 .hex-svg { width: 100%; height: 100%; }
 .token-glyph {
   font-family: 'Cormorant Garamond', 'Songti SC', Georgia, serif;
-  font-size: 150px;
+  font-size: 154px;
   font-weight: 500;
-  fill: #3a2608;
+  fill: url(#tokenInk);
   letter-spacing: -0.04em;
-}
-.token-tag {
-  font-size: 10px;
-  letter-spacing: 0.42em;
-  fill: #3a2608;
-  font-weight: 600;
-  font-family: 'Inter', sans-serif;
-}
-.token-sub {
-  font-size: 11px;
-  letter-spacing: 0.42em;
-  fill: #5a3d0c;
-  font-weight: 600;
-  font-family: 'Inter', sans-serif;
-}
-.token-year {
-  font-size: 9px;
-  letter-spacing: 0.3em;
-  fill: #8a5f14;
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-style: italic;
+  line-height: 1;
+  dominant-baseline: middle;
+  paint-order: stroke fill;
+  stroke: rgba(58,38,8,0.18);
+  stroke-width: 0.6px;
 }
 
 .token-shadow {
