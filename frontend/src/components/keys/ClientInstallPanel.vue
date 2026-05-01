@@ -204,8 +204,8 @@ const clientOptions = computed(() => [
       en: 'Claude Code',
     }),
     description: safeT('keys.clientInstallModal.clients.claude.description', {
-      zh: '安装官方 Claude Code CLI，并写入当前密钥配置。',
-      en: 'Install the official Claude Code CLI and persist this API key.',
+      zh: '安装 Claude Code 与 CC Switch，并自动导入当前供应商。',
+      en: 'Install Claude Code and CC Switch, then import this provider automatically.',
     })
   },
   {
@@ -225,8 +225,8 @@ const osOptions = computed(() => [
   {
     id: 'unix' as const,
     label: safeT('keys.clientInstallModal.os.unix', {
-      zh: 'macOS / Linux / WSL',
-      en: 'macOS / Linux / WSL',
+      zh: 'macOS',
+      en: 'macOS',
     }),
   },
   {
@@ -317,8 +317,8 @@ const currentSummary = computed(() => {
   if (selectedClient.value === 'claude') {
     return selectedOs.value === 'unix'
       ? safeT('keys.clientInstallModal.summary.claudeUnix', {
-        zh: 'Claude Code · macOS / Linux / WSL',
-        en: 'Claude Code · macOS / Linux / WSL',
+        zh: 'Claude Code · macOS · CC Switch 自动导入',
+        en: 'Claude Code · macOS · CC Switch auto import',
       })
       : safeT('keys.clientInstallModal.summary.claudeWindows', {
         zh: 'Claude Code · Windows PowerShell',
@@ -341,9 +341,9 @@ const currentSummary = computed(() => {
 const currentCommand = computed(() => {
   if (selectedClient.value === 'claude') {
     if (selectedOs.value === 'unix') {
-      return `CLAUDE_TOKEN="${props.apiKey}" CLAUDE_API_URL="${effectiveApiUrl.value}" bash -c "$(curl -fsSL ${scriptBaseUrl.value}/install-claude.sh)"`
+      return `XDT_TOKEN="${props.apiKey}" XDT_API_URL="${effectiveApiUrl.value}" bash -c "$(curl -fsSL ${scriptBaseUrl.value}/install-claude-ccswitch.sh)"`
     }
-    return `$env:CLAUDE_CLIENT_TOKEN='${escapePowerShell(props.apiKey)}'; $env:CLAUDE_API_URL='${escapePowerShell(effectiveApiUrl.value)}'; irm ${scriptBaseUrl.value}/install-claude-win.ps1 | iex`
+    return `$env:XDT_TOKEN='${escapePowerShell(props.apiKey)}'; $env:XDT_API_URL='${escapePowerShell(effectiveApiUrl.value)}'; irm ${scriptBaseUrl.value}/install-claude-ccswitch-win.ps1 | iex`
   }
 
   if (selectedOs.value === 'unix') {

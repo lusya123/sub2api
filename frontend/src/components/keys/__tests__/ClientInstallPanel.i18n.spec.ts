@@ -39,8 +39,8 @@ describe('ClientInstallPanel i18n resilience', () => {
     })
 
     expect(wrapper.text()).toContain('Claude Code')
-    expect(wrapper.text()).toContain('@anthropic-ai/claude-code')
-    expect(wrapper.text()).toContain('/install-claude.sh')
+    expect(wrapper.text()).toContain('CC Switch')
+    expect(wrapper.text()).toContain('/install-claude-ccswitch.sh')
 
     const openclawButton = wrapper.findAll('button').find((button) =>
       button.text().includes('OpenClaw')
@@ -58,7 +58,7 @@ describe('ClientInstallPanel i18n resilience', () => {
     await claudeButton!.trigger('click')
     await nextTick()
 
-    expect(wrapper.text()).toContain('/install-claude.sh')
+    expect(wrapper.text()).toContain('/install-claude-ccswitch.sh')
     expect(wrapper.text()).not.toContain('/install-openclaw.sh')
   })
 })

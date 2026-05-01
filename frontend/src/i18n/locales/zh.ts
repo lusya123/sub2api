@@ -663,15 +663,15 @@ export default {
       copied: '已复制',
       commandTitle: '一键命令',
       modelTitle: 'OpenClaw 默认模型',
-      claudeDescription: '为当前 API Key 生成 Claude Code 一键安装命令。脚本会安装官方 npm 包并把代理地址持久化到本机环境变量中。',
+      claudeDescription: '为当前 API Key 生成 Claude Code 一键安装命令。脚本会安装 Claude Code，确保增强版 CC Switch 可用，自动导入并切换到当前供应商。',
       openclawDescription: '为当前 API Key 生成 OpenClaw 一键部署命令。脚本会安装官方 openclaw npm 包，并写入 ~/.openclaw 配置。',
-      claudeNote: "Claude Code 脚本安装的是官方 {'@'}anthropic-ai/claude-code 包，包下载优先使用 npmmirror。安装后建议重新打开终端再执行 claude。",
+      claudeNote: "Claude Code 脚本安装的是官方 {'@'}anthropic-ai/claude-code 包，只在缺少 xdt-import 能力时安装或升级 CC Switch，然后启动 claude。",
       openclawNote: 'OpenClaw 脚本安装的是官方 openclaw npm 包，并把默认模型和认证信息写入 ~/.openclaw。脚本会优先准备 Node.js 22.16+，包下载优先使用 npmmirror。',
       openclawWindowsNote: 'OpenClaw 官方仍更推荐在 Windows 上通过 WSL2 使用。这里提供的是原生 PowerShell 部署命令，并要求 Node.js 22.16+；如果系统策略或 Node 环境受限，优先考虑 WSL。',
       clients: {
         claude: {
           label: 'Claude Code',
-          description: '安装官方 Claude Code CLI，并写入当前密钥配置。'
+          description: '安装 Claude Code 与 CC Switch，并自动导入当前供应商。'
         },
         openclaw: {
           label: 'OpenClaw',
@@ -679,7 +679,7 @@ export default {
         }
       },
       os: {
-        unix: 'macOS / Linux / WSL',
+        unix: 'macOS',
         windows: 'Windows'
       },
       models: {
@@ -688,7 +688,7 @@ export default {
         haiku45: 'Haiku 4.5'
       },
       summary: {
-        claudeUnix: 'Claude Code · macOS / Linux / WSL',
+        claudeUnix: 'Claude Code · macOS · CC Switch 自动导入',
         claudeWindows: 'Claude Code · Windows PowerShell',
         openclawUnix: 'OpenClaw · macOS / Linux / WSL · 默认模型 {model}',
         openclawWindows: 'OpenClaw · Windows PowerShell · 默认模型 {model}'

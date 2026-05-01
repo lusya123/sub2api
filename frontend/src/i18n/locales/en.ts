@@ -659,15 +659,15 @@ export default {
       copied: 'Copied',
       commandTitle: 'Install Command',
       modelTitle: 'Default OpenClaw Model',
-      claudeDescription: 'Generate a one-click Claude Code deployment command for this API key. The script installs the official npm package and persists the proxy endpoint in local environment variables.',
+      claudeDescription: 'Generate a one-click Claude Code deployment command for this API key. The script installs Claude Code, ensures the enhanced CC Switch build is available, imports this provider, and switches to it automatically.',
       openclawDescription: 'Generate a one-click OpenClaw deployment command for this API key. The script installs the official openclaw npm package and writes config into ~/.openclaw.',
-      claudeNote: "The Claude Code script installs the official {'@'}anthropic-ai/claude-code package and prefers npmmirror for package downloads. Reopen your terminal after installation, then run claude.",
+      claudeNote: "The Claude Code script installs the official {'@'}anthropic-ai/claude-code package, installs or upgrades CC Switch only when xdt-import is missing, then starts claude.",
       openclawNote: 'The OpenClaw script installs the official openclaw npm package and writes the default model plus auth config into ~/.openclaw. It also prepares Node.js 22.16+ and prefers npmmirror for downloads.',
       openclawWindowsNote: 'OpenClaw officially still recommends WSL2 on Windows. A native PowerShell deployment command is provided here and requires Node.js 22.16+; prefer WSL if local policy or Node setup causes issues.',
       clients: {
         claude: {
           label: 'Claude Code',
-          description: 'Install the official Claude Code CLI and persist this API key.'
+          description: 'Install Claude Code and CC Switch, then import this provider automatically.'
         },
         openclaw: {
           label: 'OpenClaw',
@@ -675,7 +675,7 @@ export default {
         }
       },
       os: {
-        unix: 'macOS / Linux / WSL',
+        unix: 'macOS',
         windows: 'Windows'
       },
       models: {
@@ -684,7 +684,7 @@ export default {
         haiku45: 'Haiku 4.5'
       },
       summary: {
-        claudeUnix: 'Claude Code · macOS / Linux / WSL',
+        claudeUnix: 'Claude Code · macOS · CC Switch auto import',
         claudeWindows: 'Claude Code · Windows PowerShell',
         openclawUnix: 'OpenClaw · macOS / Linux / WSL · Default model {model}',
         openclawWindows: 'OpenClaw · Windows PowerShell · Default model {model}'

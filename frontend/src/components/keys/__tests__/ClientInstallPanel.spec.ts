@@ -34,8 +34,8 @@ describe('ClientInstallPanel', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('CLAUDE_API_URL="https://example.com/antigravity"')
-    expect(wrapper.text()).toContain('/install-claude.sh')
+    expect(wrapper.text()).toContain('XDT_API_URL="https://example.com/antigravity"')
+    expect(wrapper.text()).toContain('/install-claude-ccswitch.sh')
   })
 
   it('updates OpenClaw command when model and os change', async () => {
@@ -107,8 +107,8 @@ describe('ClientInstallPanel', () => {
     await claudeButton!.trigger('click')
     await nextTick()
 
-    expect(wrapper.text()).toContain('CLAUDE_API_URL="https://example.com"')
-    expect(wrapper.text()).toContain('/install-claude.sh')
+    expect(wrapper.text()).toContain('XDT_API_URL="https://example.com"')
+    expect(wrapper.text()).toContain('/install-claude-ccswitch.sh')
     expect(wrapper.text()).not.toContain('/install-openclaw.sh')
   })
 
@@ -133,8 +133,8 @@ describe('ClientInstallPanel', () => {
     await windowsButton!.trigger('click')
     await nextTick()
 
-    expect(wrapper.text()).toContain("$env:CLAUDE_API_URL='https://example.com'")
-    expect(wrapper.text()).toContain('/install-claude-win.ps1')
+    expect(wrapper.text()).toContain("$env:XDT_API_URL='https://example.com'")
+    expect(wrapper.text()).toContain('/install-claude-ccswitch-win.ps1')
 
     const openclawButton = wrapper.findAll('button').find((button) =>
       button.text().includes('keys.clientInstallModal.clients.openclaw.label')
@@ -153,8 +153,8 @@ describe('ClientInstallPanel', () => {
     await claudeButton!.trigger('click')
     await nextTick()
 
-    expect(wrapper.text()).toContain("$env:CLAUDE_API_URL='https://example.com'")
-    expect(wrapper.text()).toContain('/install-claude-win.ps1')
+    expect(wrapper.text()).toContain("$env:XDT_API_URL='https://example.com'")
+    expect(wrapper.text()).toContain('/install-claude-ccswitch-win.ps1')
     expect(wrapper.text()).not.toContain('/install-openclaw-win.ps1')
   })
 })
