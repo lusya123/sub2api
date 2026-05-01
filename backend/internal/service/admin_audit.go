@@ -10,29 +10,30 @@ import (
 )
 
 type AdminAuditLog struct {
-	ID              int64           `json:"id"`
-	CreatedAt       time.Time       `json:"created_at"`
-	ActorUserID     int64           `json:"actor_user_id"`
-	ActorEmail      string          `json:"actor_email"`
-	ActorRole       string          `json:"actor_role"`
-	Method          string          `json:"method"`
-	RouteTemplate   string          `json:"route_template"`
-	Path            string          `json:"path"`
-	Module          string          `json:"module"`
-	Action          string          `json:"action"`
-	ActionType      string          `json:"action_type"`
-	TargetType      string          `json:"target_type"`
-	TargetID        *int64          `json:"target_id,omitempty"`
-	StatusCode      int             `json:"status_code"`
-	Success         bool            `json:"success"`
-	ErrorCode       string          `json:"error_code,omitempty"`
-	ErrorMessage    string          `json:"error_message,omitempty"`
-	IPAddress       string          `json:"ip_address"`
-	UserAgent       string          `json:"user_agent"`
-	Summary         string          `json:"summary"`
-	QueryParamsJSON json.RawMessage `json:"query_params,omitempty"`
-	RequestBodyJSON json.RawMessage `json:"request_body,omitempty"`
-	DurationMS      int64           `json:"duration_ms"`
+	ID              int64            `json:"id"`
+	CreatedAt       time.Time        `json:"created_at"`
+	ActorUserID     int64            `json:"actor_user_id"`
+	ActorEmail      string           `json:"actor_email"`
+	ActorRole       string           `json:"actor_role"`
+	Method          string           `json:"method"`
+	RouteTemplate   string           `json:"route_template"`
+	Path            string           `json:"path"`
+	Module          string           `json:"module"`
+	Action          string           `json:"action"`
+	ActionType      string           `json:"action_type"`
+	TargetType      string           `json:"target_type"`
+	TargetID        *int64           `json:"target_id,omitempty"`
+	UserRefs        map[int64]string `json:"user_refs,omitempty"`
+	StatusCode      int              `json:"status_code"`
+	Success         bool             `json:"success"`
+	ErrorCode       string           `json:"error_code,omitempty"`
+	ErrorMessage    string           `json:"error_message,omitempty"`
+	IPAddress       string           `json:"ip_address"`
+	UserAgent       string           `json:"user_agent"`
+	Summary         string           `json:"summary"`
+	QueryParamsJSON json.RawMessage  `json:"query_params,omitempty"`
+	RequestBodyJSON json.RawMessage  `json:"request_body,omitempty"`
+	DurationMS      int64            `json:"duration_ms"`
 }
 
 type AdminAuditLogInput struct {

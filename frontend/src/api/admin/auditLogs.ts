@@ -15,6 +15,7 @@ export interface AdminAuditLog {
   action_type: string
   target_type?: string | null
   target_id?: number | string | null
+  user_refs?: Record<string, string> | null
   status_code: number
   success: boolean
   error_code?: string | null

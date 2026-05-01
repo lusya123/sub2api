@@ -296,6 +296,7 @@ const actionTypeLabel = (actionType: string) => {
 
 const formatTarget = (log: AdminAuditLog) => {
   if (!log.target_type && !log.target_id) return '-'
+  if (log.target_type === 'user' && log.target_id) return userRef(log, log.target_id)
   const type = log.target_type ? targetTypeLabel(log.target_type) : ''
   return [type, log.target_id].filter(Boolean).join(' #')
 }
@@ -405,11 +406,11 @@ const operationView = (log: AdminAuditLog): OperationView => {
   }
   if (route === '/api/v1/admin/subscriptions/assign') {
     return op('admin.auditLogs.operations.subscriptions.assign', {
-      user: userRef(body.user_id),
+      user: userRef(log, body.user_id),
       group: idRef(body.group_id),
       days: days(body.validity_days)
     }, [
-      detail('user', userRef(body.user_id)),
+      detail('user', userRef(log, body.user_id)),
       detail('group', idRef(body.group_id)),
       detail('validityDays', days(body.validity_days)),
       detail('notes', body.notes)
@@ -421,7 +422,7 @@ const operationView = (log: AdminAuditLog): OperationView => {
       group: idRef(body.group_id),
       days: days(body.validity_days)
     }, [
-      detail('users', idList(body.user_ids)),
+      detail('users', userListRef(log, body.user_ids)),
       detail('group', idRef(body.group_id)),
       detail('validityDays', days(body.validity_days)),
       detail('notes', body.notes)
@@ -447,7 +448,7 @@ const operationView = (log: AdminAuditLog): OperationView => {
   if (route === '/api/v1/admin/usage/cleanup-tasks' && method === 'POST') {
     return op('admin.auditLogs.operations.usage.createCleanup', {}, [
       detail('dateRange', [body.start_date, body.end_date].filter(Boolean).join(' ~ ')),
-      detail('user', body.user_id ? userRef(body.user_id) : ''),
+      detail('user', body.user_id ? userRef(log, body.user_id) : ''),
       detail('apiKey', idRef(body.api_key_id)),
       detail('account', idRef(body.account_id)),
       detail('group', idRef(body.group_id)),
@@ -519,13 +520,19 @@ const queryDetails = (log: AdminAuditLog) => {
 
 const userLabel = (log: AdminAuditLog, body: Record<string, unknown>) => {
   if (typeof body.email === 'string' && body.email) return `${body.email}${log.target_id ? ` (#${log.target_id})` : ''}`
-  if (body.user_id) return userRef(body.user_id)
-  if (log.target_type === 'user' && log.target_id) return userRef(log.target_id)
+  if (body.user_id) return userRef(log, body.user_id)
+  if (log.target_type === 'user' && log.target_id) return userRef(log, log.target_id)
   return formatTarget(log)
 }
 
 const subscriptionLabel = (log: AdminAuditLog) => log.target_id ? `${t('admin.auditLogs.targetTypes.subscription')} #${log.target_id}` : t('admin.auditLogs.targetTypes.subscription')
-const userRef = (id: unknown) => id ? `${t('admin.auditLogs.targetTypes.user')} #${id}` : '-'
+const userRef = (log: AdminAuditLog, id: unknown) => {
+  if (!id) return '-'
+  const normalizedId = String(id)
+  const email = log.user_refs?.[normalizedId]
+  if (email) return `${email} (#${normalizedId})`
+  return `${t('admin.auditLogs.targetTypes.user')} #${normalizedId}`
+}
 const idRef = (id: unknown) => id ? `#${id}` : '-'
 
 const valueOrDash = (value: unknown): string => {
@@ -573,6 +580,12 @@ const idList = (value: unknown) => {
   const items = arrayValue(value)
   if (!items.length) return valueOrDash(value)
   return items.map(idRef).join(', ')
+}
+
+const userListRef = (log: AdminAuditLog, value: unknown) => {
+  const items = arrayValue(value)
+  if (!items.length) return valueOrDash(value)
+  return items.map(id => userRef(log, id)).join(', ')
 }
 
 const formatGroupRates = (value: unknown) => {

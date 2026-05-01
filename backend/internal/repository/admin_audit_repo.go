@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 type adminAuditRepository struct {
@@ -96,6 +98,9 @@ FROM admin_audit_logs l` + where + fmt.Sprintf(" ORDER BY created_at DESC, id DE
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if err := r.hydrateAdminAuditUserRefs(ctx, logs); err != nil {
+		return nil, err
+	}
 	return &service.AdminAuditLogList{Logs: logs, Total: total, Page: page, PageSize: pageSize}, nil
 }
 
@@ -108,9 +113,17 @@ SELECT id, created_at, actor_user_id, actor_email, actor_role, method, route_tem
 	COALESCE(request_body, '{}'::jsonb)::text,
 	duration_ms
 FROM admin_audit_logs
-WHERE id = $1`
+	WHERE id = $1`
 	row := r.db.QueryRowContext(ctx, q, id)
-	return scanAdminAuditLog(row)
+	item, err := scanAdminAuditLog(row)
+	if err != nil {
+		return nil, err
+	}
+	logs := []service.AdminAuditLog{*item}
+	if err := r.hydrateAdminAuditUserRefs(ctx, logs); err != nil {
+		return nil, err
+	}
+	return &logs[0], nil
 }
 
 type adminAuditScanner interface {
@@ -156,6 +169,135 @@ func scanAdminAuditLog(scanner adminAuditScanner) (*service.AdminAuditLog, error
 	item.QueryParamsJSON = json.RawMessage(queryRaw)
 	item.RequestBodyJSON = json.RawMessage(bodyRaw)
 	return &item, nil
+}
+
+func (r *adminAuditRepository) hydrateAdminAuditUserRefs(ctx context.Context, logs []service.AdminAuditLog) error {
+	if r == nil || r.db == nil || len(logs) == 0 {
+		return nil
+	}
+	idsByLog := make([]map[int64]struct{}, len(logs))
+	uniqueIDs := make(map[int64]struct{})
+	for i := range logs {
+		ids := collectAdminAuditUserIDs(&logs[i])
+		if len(ids) == 0 {
+			continue
+		}
+		idsByLog[i] = ids
+		for id := range ids {
+			uniqueIDs[id] = struct{}{}
+		}
+	}
+	if len(uniqueIDs) == 0 {
+		return nil
+	}
+
+	ids := make([]int64, 0, len(uniqueIDs))
+	for id := range uniqueIDs {
+		ids = append(ids, id)
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT id, email FROM users WHERE id = ANY($1)`, pq.Array(ids))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+
+	emailsByID := make(map[int64]string, len(ids))
+	for rows.Next() {
+		var id int64
+		var email string
+		if err := rows.Scan(&id, &email); err != nil {
+			return err
+		}
+		emailsByID[id] = email
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for i := range logs {
+		if len(idsByLog[i]) == 0 {
+			continue
+		}
+		refs := make(map[int64]string, len(idsByLog[i]))
+		for id := range idsByLog[i] {
+			if email := strings.TrimSpace(emailsByID[id]); email != "" {
+				refs[id] = email
+			}
+		}
+		if len(refs) > 0 {
+			logs[i].UserRefs = refs
+		}
+	}
+	return nil
+}
+
+func collectAdminAuditUserIDs(log *service.AdminAuditLog) map[int64]struct{} {
+	ids := make(map[int64]struct{})
+	if log == nil {
+		return ids
+	}
+	if log.TargetType == "user" && log.TargetID != nil {
+		ids[*log.TargetID] = struct{}{}
+	}
+	collectAdminAuditUserIDsFromJSON(log.RequestBodyJSON, ids)
+	collectAdminAuditUserIDsFromJSON(log.QueryParamsJSON, ids)
+	return ids
+}
+
+func collectAdminAuditUserIDsFromJSON(raw json.RawMessage, ids map[int64]struct{}) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return
+	}
+	var value any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return
+	}
+	collectAdminAuditUserIDsFromValue(value, ids)
+}
+
+func collectAdminAuditUserIDsFromValue(value any, ids map[int64]struct{}) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if key == "user_id" || key == "user_ids" {
+				addAdminAuditUserID(child, ids)
+				continue
+			}
+			collectAdminAuditUserIDsFromValue(child, ids)
+		}
+	case []any:
+		for _, child := range typed {
+			collectAdminAuditUserIDsFromValue(child, ids)
+		}
+	}
+}
+
+func addAdminAuditUserID(value any, ids map[int64]struct{}) {
+	switch typed := value.(type) {
+	case json.Number:
+		if id, err := typed.Int64(); err == nil && id > 0 {
+			ids[id] = struct{}{}
+		}
+	case float64:
+		id := int64(typed)
+		if typed == float64(id) && id > 0 {
+			ids[id] = struct{}{}
+		}
+	case int64:
+		if typed > 0 {
+			ids[typed] = struct{}{}
+		}
+	case string:
+		if id, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64); err == nil && id > 0 {
+			ids[id] = struct{}{}
+		}
+	case []any:
+		for _, child := range typed {
+			addAdminAuditUserID(child, ids)
+		}
+	}
 }
 
 func buildAdminAuditWhere(filter *service.AdminAuditLogFilter) (string, []any) {
