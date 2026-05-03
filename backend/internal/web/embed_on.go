@@ -142,15 +142,34 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
 
-	settings, err := s.settings.GetPublicSettingsForInjection(ctx)
-	if err != nil {
+	type settingsResult struct {
+		value any
+		err   error
+	}
+	resultCh := make(chan settingsResult, 1)
+	go func() {
+		settings, err := s.settings.GetPublicSettingsForInjection(ctx)
+		resultCh <- settingsResult{value: settings, err: err}
+	}()
+
+	var result settingsResult
+	select {
+	case result = <-resultCh:
+	case <-ctx.Done():
+		// The frontend shell should never be blocked by slow public settings
+		// reads. Serve the base app and let client-side API calls hydrate.
+		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
+		c.Abort()
+		return
+	}
+	if result.err != nil {
 		// Fallback: serve without injection
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
 	}
 
-	settingsJSON, err := json.Marshal(settings)
+	settingsJSON, err := json.Marshal(result.value)
 	if err != nil {
 		// Fallback: serve without injection
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)

@@ -351,6 +351,7 @@ export default {
     modelHealthConfig: '模型健康配置',
     proxies: 'IP管理',
     redeemCodes: '兑换码',
+    operations: '运营看板',
     ops: '运维监控',
     promoCodes: '优惠码',
     auditLogs: '操作审计',
@@ -1005,6 +1006,8 @@ export default {
     last7Days: '近 7 天',
     last14Days: '近 14 天',
     last30Days: '近 30 天',
+    last180Days: '近半年',
+    allData: '所有数据',
     custom: '自定义',
     startDate: '开始日期',
     endDate: '结束日期',
@@ -3713,6 +3716,279 @@ export default {
           succeeded: '已完成',
           failed: '失败',
           canceled: '已取消'
+        }
+      }
+    },
+
+    // Operation Dashboard
+    operations: {
+      title: '运营看板',
+      description: '用日活、留存、转化、流量和收入指导运营动作',
+      failedToLoad: '加载运营看板失败',
+      generatedAt: '更新时间：{value}',
+      empty: '暂无数据',
+      tabs: {
+        trend: '趋势',
+        retention: '留存',
+        distribution: '分布',
+        lists: '运营名单'
+      },
+      metrics: {
+        activeUsers: '活跃用户',
+        newUsers: '新增用户',
+        firstCall: '首调用 {value}',
+        retention: 'D7 留存',
+        revenue: '消耗收入',
+        traffic: 'API 流量',
+        expiring: '7 天到期',
+        activeSubs: '活跃订阅 {value}'
+      },
+      advice: {
+        title: '行动建议'
+      },
+      funnel: {
+        title: '新用户漏斗'
+      },
+      trend: {
+        activeRevenue: '收入趋势',
+        conversion: '首调用转化趋势'
+      },
+      retention: {
+        title: '注册留存 Cohort',
+        cohort: '注册日期',
+        newUsers: '新增用户'
+      },
+      distribution: {
+        groups: '套餐/分组排行',
+        models: '模型排行',
+        apiKeys: 'API Key排行',
+        promos: '优惠码/兑换码'
+      },
+      lists: {
+        highSpending: '高消费用户',
+        silentHighValue: '沉默高价值用户',
+        benefitIdle: '有权益但未使用',
+        expiringSoon: '订阅快到期',
+        newInactive: '新注册未激活'
+      },
+      actions: {
+        usage: '看用量',
+        subscription: '看订阅'
+      },
+      units: {
+        tokens: '{value} Token',
+        vsPrevious: '较上一周期 {value}',
+        usageSummary: '{requests} 请求 · {tokens} Token',
+        conversionSummary: '{count} 次 · {users} 用户',
+        daysIdle: '沉默 {value} 天'
+      },
+      v2: {
+        captionPlain: '💬 人话：',
+        captionAction: '👉 该做什么：',
+        modal: { close: '关闭' },
+        pulse: {
+          title: '今日脉搏',
+          sub: '业务每天有没有出事，3 秒看完',
+          revenue: '消耗收入',
+          activeUsers: '活跃用户',
+          newUsers: '新增用户',
+          payingUsers: '付费用户',
+          spark30d: '近 30 天趋势',
+          vsWow: '环比上一周期',
+          vsYoy: '同比去年同期',
+          vs90d: 'vs 90 天日均',
+          hint: {
+            revenue: {
+              up: '收入正在涨，继续保持节奏。',
+              down: '收入比上周期下滑，去看流失瀑布找原因。',
+              flat: '收入与上周期持平。'
+            },
+            active: {
+              up: '活跃用户上升，渠道获客或留存生效。',
+              down: '活跃下降，立刻看流失分析定位人群。',
+              flat: '活跃用户与上周期持平。'
+            },
+            new: {
+              up: '新增有起色，可加大渠道投放。',
+              down: '新增不足，去优化注册转化或推广。',
+              flat: '新增节奏稳定。'
+            },
+            paying: {
+              up: '付费用户增加，订阅或充值入口转化健康。',
+              down: '付费下滑，检查充值入口和优惠券。',
+              flat: '付费用户数稳定。'
+            }
+          }
+        },
+        funnel: {
+          title: '销售漏斗',
+          sub: '看用户从进门到付钱每一步漏了多少',
+          chartTitle: '6 步转化漏斗（vs 上一周期）',
+          hint: '用户像水管里的水，每层都会少一些。哪一层 pp 跌得最多就先修哪层。注意"真实付费"已经排除了 5 元体验券和 promo_codes 这些白嫖。',
+          action: '找到掉得最严重的一层，去优化对应的页面、文案或权益。',
+          dropTo: '继续到'
+        },
+        trial: {
+          title: '5 元体验券转化分析',
+          sub: '白嫖 5 元体验之后，到底有多少人愿意付钱',
+          chartTitle: '5 元体验券漏斗（窗口期内拿券的新用户）',
+          hint: '本期共发出 {issued} 张体验券，{used} 人真正调用过，最终 {converted} 人转化为真实付费。',
+          action: '关注两个数：①领了不用的人比例 → 修复客户端安装/首调用流程；②用尽体验券但不付费的人 → 在快用尽时推送续费券。',
+          summaryLabel: '📊 关键诊断：',
+          summary: '体验券人均消耗 {avg}；同期没领体验券就直接付费的"硬核用户"有 {nonTrial} 人，这部分是渠道质量最高的人群。',
+          caveat: '⚠️ 数据局限：失败的 API 调用不写入 usage_logs，所以"领券没调用"既包含装不上客户端的人，也包含调用失败的人，无法在 SQL 层区分。',
+          cards: {
+            issued: '发出体验券',
+            issuedSub: '面值 {value}，每人一张',
+            used: '真正用了',
+            usedSub: '至少调用一次 ({rate})',
+            idle: '领了没用',
+            idleSub: '占发券人数 {rate}，可能装不上客户端或调用失败',
+            exhausted: '用尽体验券',
+            exhaustedSub: '消耗 ≥ {threshold} ({rate})',
+            converted: '体验后真实付费',
+            convertedSub: '占发券人数 {rate}，体验券获客的真实回报'
+          }
+        },
+        churn: {
+          title: '留存与流失',
+          sub: '用每个用户自己的调用节奏当尺子，不一刀切',
+          totalRate: '确定流失率',
+          totalRateSub: '全局调用间隔中位数 {p50} 天，按 P50×6 分级',
+          atRiskRate: '高危人群占比',
+          atRiskRateSub: '异常静默 + 高危流失 共 {count} 人',
+          highValueRisk: '高价值流失风险',
+          highValueRiskSub: '历史付过钱的用户里有 {revenue} 美元在流失边缘',
+          definitionLabel: '🧮 流失定义：',
+          weeklyDelta: '比上周 {value}',
+          waterfallTitle: '流失瀑布：上周还在的人现在去哪了',
+          waterfallHint: '上周有 {base} 个活跃用户，本周还在的 {still}，流失 {lost} 人。',
+          waterfallAction: '哪种流失原因人数最多，就先做对应的挽回动作（发券 / 续费提醒 / 唤醒邮件）。',
+          lastWeekActive: '上周活跃',
+          stillActive: '本周仍活跃',
+          completelyGone: '完全消失',
+          halfActivity: '调用减半',
+          balanceExhausted: '余额耗尽',
+          subscriptionEnded: '订阅过期',
+          userCount: '用户数',
+          historyTitle: '近 30 天流失率走势',
+          historyHint: '红线越往上 = 流失越严重。突然窜高的那天，回去查当天发生了什么。',
+          historyAction: '盯红线的拐点。突然抬升 = 上游故障 / 调价 / 体验劣化的第一信号。',
+          churnRateLabel: '流失率 (%)',
+          retentionTitle: '注册留存（自家历史均值）',
+          retentionHint: 'D1/D7/D30 = 注册第 1/7/30 天还在用的比例。颜色：绿好黄一般红差。',
+          retentionAction: 'D7 < 20% 说明产品体验或新人引导有大问题，必须优化首单流程。'
+        },
+        pyramid: {
+          title: '用户金字塔',
+          sub: '5 层用户，谁是宝贝、谁是包袱一目了然',
+          chartTitle: '按近 30 天消耗分 5 层',
+          hint: '总用户 {total}，付费用户占 {paid}。条越宽人越多。',
+          action: '把顶层用户当 VIP 维护；推动 free → bronze → silver 升级。',
+          insight: '顶端 {users} 的用户贡献了 {top} 的收入，绝对不能让他们流失。',
+          insightLabel: '🎯 关键洞察：'
+        },
+        actions: {
+          title: '今日要做的事',
+          sub: '从所有数字里挑出"今天必须采取的动作"',
+          chartTitle: '4 类紧急行动',
+          hint: '汇总数字，点击查看具体名单。',
+          action: '按颜色优先级处理：红 > 黄 > 绿 > 紫。',
+          viewList: '查看名单',
+          highRisk: {
+            title: '紧急挽回',
+            sub: '高危流失 + 已流失人群，必须今天处理',
+            modal: '历史付过钱、近期不来的人。建议发挽回券（30% 折扣）或人工联系。'
+          },
+          atRisk: {
+            title: '异常静默',
+            sub: '调用节奏明显变慢，可能在流失边缘',
+            modal: '调用频率降到自身 P50×2 之外的人。建议发提醒邮件 + 优惠码。'
+          },
+          newInactive: {
+            title: '新用户激活',
+            sub: '注册超 7 天还没首次调用',
+            modal: '建议发引导邮件 / API Key 安装教程。'
+          },
+          expiring: {
+            title: '订阅快到期',
+            sub: '7 天内到期的订阅，提前续费',
+            modal: '高 ARPU 用户优先一对一联系，普通用户群发续费提醒。'
+          }
+        },
+        product: {
+          title: '产品矩阵',
+          sub: '哪个套餐该推、哪个模型该砍，一眼看到',
+          bcgTitle: '套餐 BCG 矩阵（用户数 × ARPU）',
+          bcgHint: '右上角是宝贝（明星 / 现金牛），左下角是包袱（待砍）。圆圈大小代表周期内总收入。',
+          bcgAction: '明星套餐做主推；问题套餐改包装或调价；待砍套餐评估是否下线。',
+          modelTitle: '模型健康度',
+          modelHint: '每个模型的请求量占比、收入、用户数和环比变化。',
+          modelAction: '用户数环比红色 = 流量在流走，去看是不是出了上游故障或被竞品抢走。',
+          modelTrafficShare: '流量占比',
+          modelRevenue: '收入',
+          modelUsers: '用户数',
+          modelUsersChange: '用户环比'
+        },
+        financial: {
+          title: '财务驾驶舱',
+          sub: '钱从哪进、到哪去、还能撑多久',
+          cushionTitle: '余额沉淀健康度',
+          cushionHint: '用户余额池子总共 {balance}，按近 30 天日均消耗 {cost} 算，还能用 {months} 个月。',
+          cushionAction: {
+            danger: '🚨 余额池快空了！下个月可能集中流失，立刻推充值券或续费活动。',
+            warning: '⚠️ 余额池偏少，开始关注；推一波小额充值激励。',
+            healthy: '✅ 余额池健康，正常运营即可。',
+            overloaded: '💤 钱躺着没动 = 用户充了但用不爽。发限时使用券、推新模型刺激消耗。'
+          },
+          months: ' 个月',
+          healthDanger: '危险：< 1 个月',
+          healthWarning: '偏紧：1-3 个月',
+          healthHealthy: '健康：3-6 个月',
+          healthOverloaded: '过剩：> 6 个月',
+          cashflowTitle: '本期现金流（注入 vs 消耗）',
+          inflow: '注入',
+          outflow: '消耗',
+          netFlow: '净流',
+          cashflowNote: '注入 = 真实付费的充值卡 + 管理员充值（不含 5 元体验券和 promo_codes）；消耗 = usage_logs 实际扣费。',
+          revenueTitle: '收入构成（2 大类）',
+          revenueHint: '钱从两个口进来：管理员充值（含退款）和兑换码兑换（余额类 + 订阅类）。',
+          revenueAction: '退款率高 → 检查产品体验或上游故障；订阅占比低 → 推订阅活动；纯充值占比低 → 推大额返利。',
+          // 第 1 类
+          adminGroup: '管理员充值',
+          adminGross: '正向充值',
+          adminRefund: '退款（{count} 笔）',
+          adminNet: '净充值',
+          // 第 2 类
+          redeemGroup: '兑换码兑换',
+          redeemReal: '余额类卡密（真实充值）',
+          redeemTrial: '余额类 - 5 元体验券',
+          redeemSub: '订阅类卡密',
+          newSubs: '本期新增订阅',
+          revTrialNote: '赠送，不算真收入',
+          netInjected: '净注入',
+          refundBar: '本期退款冲销',
+          refundRateNote: '⚠️ 退款率 {rate}（共 {amount}）',
+          revenueCaveat: '⚠️ sub2api 没有真实的订单流水表，这里展示的是 redeem_codes / user_subscriptions 注入金额，不等于"真正到账"。要看真实到账请对照支付宝/微信账单。',
+          totalInjected: '本期注入',
+          subUnit: '次',
+          arpuTitle: 'ARPU 30 天曲线（每个付费用户日均贡献）',
+          arpuHint: 'ARPU 上升 = 用户越来越值钱；下降 = 在打价格战或体验劣化。',
+          arpuAction: '曲线突然下跌时回去查那一天发生了什么（调价 / 上游降级 / 大客户流失）。'
+        },
+        details: {
+          title: '更多详情',
+          sub: 'Cohort 留存表 / 套餐分布 / 模型分布等次要分析'
+        },
+        tabs: {
+          cohort: '注册留存矩阵',
+          distribution: '套餐 / 模型分布',
+          trend: '收入与转化趋势'
+        },
+        cohort: {
+          title: '注册 Cohort 热力矩阵',
+          hint: '每行是一个注册日期的用户群，看他们 D1/D7/D30 的留存。颜色越深越好。',
+          action: '哪一行颜色突然变浅 → 那天来的用户质量差，回去看那天做了什么。'
         }
       }
     },

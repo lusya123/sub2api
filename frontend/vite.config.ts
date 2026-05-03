@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8080'
+  const operationsBackendUrl = env.VITE_DEV_OPERATIONS_PROXY_TARGET || backendUrl
   const devPort = Number(env.VITE_DEV_PORT || 3000)
 
   return {
@@ -92,6 +93,35 @@ export default defineConfig(({ mode }) => {
               return 'vendor-i18n'
             }
 
+            // Globe 看板依赖里有 three-globe、kapsule、d3、topojson、
+            // turf/geometry helpers 等一组互相依赖的 ESM/CJS 包。不要
+            // 强制塞进 manual chunk：Rollup 自动分包能保持初始化顺序，
+            // 避免 vendor-globe <-> vendor-misc 循环依赖导致运行时
+            // `... is not a function`。
+            if (
+              id.includes('/three/') ||
+              id.includes('/three-globe/') ||
+              /\/three-[a-z-]+\//.test(id) ||
+              /\/d3-[a-z-]+\//.test(id) ||
+              id.includes('/@turf/') ||
+              id.includes('/accessor-fn/') ||
+              id.includes('/data-bind-mapper/') ||
+              id.includes('/delaunator/') ||
+              id.includes('/earcut/') ||
+              id.includes('/frame-ticker/') ||
+              id.includes('/h3-js/') ||
+              id.includes('/index-array-by/') ||
+              id.includes('/kapsule/') ||
+              id.includes('/polygon-clipping/') ||
+              id.includes('/robust-predicates/') ||
+              id.includes('/tinycolor2/') ||
+              id.includes('/@tweenjs/') ||
+              id.includes('/world-atlas/') ||
+              id.includes('/topojson-client/')
+            ) {
+              return undefined
+            }
+
             // 其他小型第三方库合并
             return 'vendor-misc'
           }
@@ -106,6 +136,10 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: devPort,
       proxy: {
+        '/api/v1/admin/operations': {
+          target: operationsBackendUrl,
+          changeOrigin: true
+        },
         '/api': {
           target: backendUrl,
           changeOrigin: true

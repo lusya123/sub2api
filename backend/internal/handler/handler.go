@@ -8,6 +8,7 @@ import (
 // AdminHandlers contains all admin-related HTTP handlers
 type AdminHandlers struct {
 	Dashboard             *admin.DashboardHandler
+	Operation             *admin.OperationHandler
 	User                  *admin.UserHandler
 	Group                 *admin.GroupHandler
 	Account               *admin.AccountHandler
@@ -53,6 +54,7 @@ type Handlers struct {
 	Setting       *SettingHandler
 	Totp          *TotpHandler
 	PublicStatus  *public.PublicStatusHandler
+	Globe         *public.GlobeHandler
 }
 
 // BuildInfo contains build-time information

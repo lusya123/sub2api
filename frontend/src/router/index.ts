@@ -37,6 +37,15 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/globe',
+    name: 'GlobeShowcase',
+    component: () => import('@/views/globe/GlobeShowcaseView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Live Globe'
+    }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/auth/LoginView.vue'),
@@ -278,6 +287,16 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/globe',
+    name: 'AdminGlobe',
+    component: () => import('@/views/admin/GlobeView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Live Globe'
+    }
+  },
+  {
     path: '/admin/ops',
     name: 'AdminOps',
     component: () => import('@/views/admin/ops/OpsDashboard.vue'),
@@ -287,6 +306,19 @@ const routes: RouteRecordRaw[] = [
       title: 'Ops Monitoring',
       titleKey: 'admin.ops.title',
       descriptionKey: 'admin.ops.description'
+    }
+  },
+  {
+    path: '/admin/operations',
+    name: 'AdminOperations',
+    component: () => import('@/views/admin/OperationDashboardView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      requiresSuperAdmin: true,
+      title: 'Operation Dashboard',
+      titleKey: 'admin.operations.title',
+      descriptionKey: 'admin.operations.description'
     }
   },
   {

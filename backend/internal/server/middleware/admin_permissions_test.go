@@ -21,6 +21,8 @@ func TestOperatorRouteAllowed(t *testing.T) {
 		want   bool
 	}{
 		{name: "dashboard read", method: "GET", path: "/api/v1/admin/dashboard", want: true},
+		{name: "operations read denied", method: "GET", path: "/api/v1/admin/operations/snapshot", want: false},
+		{name: "operations write denied", method: "POST", path: "/api/v1/admin/operations/snapshot", want: false},
 		{name: "usage read", method: "GET", path: "/api/v1/admin/usage", want: true},
 		{name: "usage cleanup write denied", method: "POST", path: "/api/v1/admin/usage/cleanup-tasks", want: false},
 		{name: "user write allowed", method: "PUT", path: "/api/v1/admin/users/:id", want: true},

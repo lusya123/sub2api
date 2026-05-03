@@ -662,6 +662,8 @@ const customMenuItemsForAdmin = computed(() => {
 const adminNavItems = computed((): NavItem[] => {
   const baseItems: NavItem[] = [
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
+    { path: '/admin/operations', label: t('nav.operations'), icon: ChartIcon },
+    { path: '/admin/globe', label: 'Live Globe', icon: GlobeIcon },
     ...(adminSettingsStore.opsMonitoringEnabled
       ? [{ path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon }]
       : []),
@@ -680,7 +682,7 @@ const adminNavItems = computed((): NavItem[] => {
 
   if (!isAdmin.value) {
     return baseItems.filter(item =>
-      ['/admin/dashboard', '/admin/ops', '/admin/users', '/admin/subscriptions', '/admin/usage'].includes(item.path)
+      ['/admin/dashboard', '/admin/globe', '/admin/ops', '/admin/users', '/admin/subscriptions', '/admin/usage'].includes(item.path)
     )
   }
 

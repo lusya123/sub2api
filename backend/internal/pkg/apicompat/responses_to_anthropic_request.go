@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const defaultClaudeLongOutputTokens = 26000
+
 // ResponsesToAnthropicRequest converts a Responses API request into an
 // Anthropic Messages request. This is the reverse of AnthropicToResponses and
 // enables Anthropic platform groups to accept OpenAI Responses API requests
@@ -33,8 +35,7 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 		out.MaxTokens = *req.MaxOutputTokens
 	}
 	if out.MaxTokens == 0 {
-		// Anthropic requires max_tokens; default to a sensible value.
-		out.MaxTokens = 8192
+		out.MaxTokens = defaultAnthropicMaxTokens(req.Model)
 	}
 
 	// Convert tools
@@ -65,6 +66,27 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 	}
 
 	return out, nil
+}
+
+// defaultAnthropicMaxTokens returns a model-aware default for OpenAI-compatible
+// endpoints that do not provide max_output_tokens/max_tokens. Keep this aligned
+// with the advertised KRS model max_tokens to avoid over-promising output length
+// on OpenAI-compatible routes while still avoiding the old 8192 truncation.
+func defaultAnthropicMaxTokens(model string) int {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if strings.Contains(m, "claude-opus-4-6") || strings.Contains(m, "claude-opus-4.6") {
+		return defaultClaudeLongOutputTokens
+	}
+	if strings.Contains(m, "claude-sonnet-4-6") || strings.Contains(m, "claude-sonnet-4.6") {
+		return defaultClaudeLongOutputTokens
+	}
+	if strings.Contains(m, "claude-opus-4-5") || strings.Contains(m, "claude-opus-4.5") {
+		return defaultClaudeLongOutputTokens
+	}
+	if strings.Contains(m, "claude-sonnet-4-5") || strings.Contains(m, "claude-sonnet-4.5") {
+		return defaultClaudeLongOutputTokens
+	}
+	return 8192
 }
 
 // defaultThinkingBudget returns a sensible thinking budget based on effort level.

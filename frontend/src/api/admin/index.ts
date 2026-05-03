@@ -27,6 +27,7 @@ import backupAPI from './backup'
 import tlsFingerprintProfileAPI from './tlsFingerprintProfile'
 import auditLogsAPI from './auditLogs'
 import modelMarketplaceAPI from './modelMarketplace'
+import operationsAPI from './operations'
 
 /**
  * Unified admin API object for convenient access
@@ -55,7 +56,8 @@ export const adminAPI = {
   backup: backupAPI,
   tlsFingerprintProfiles: tlsFingerprintProfileAPI,
   auditLogs: auditLogsAPI,
-  modelMarketplace: modelMarketplaceAPI
+  modelMarketplace: modelMarketplaceAPI,
+  operations: operationsAPI
 }
 
 export {
@@ -82,7 +84,8 @@ export {
   backupAPI,
   tlsFingerprintProfileAPI,
   auditLogsAPI,
-  modelMarketplaceAPI
+  modelMarketplaceAPI,
+  operationsAPI
 }
 
 export default adminAPI

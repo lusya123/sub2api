@@ -193,6 +193,61 @@
       </div>
     </section>
 
+    <!-- GLOBE — live world map of API calls -->
+    <section class="globe-section" ref="globeSectionEl">
+      <div class="chapter-mark center" data-reveal>
+        <span class="chapter-n">№ 02</span>
+        <span class="chapter-rule"></span>
+        <span class="chapter-title">GLOBAL · 全 球 在 用</span>
+      </div>
+
+      <div class="globe-section-headline" data-reveal>
+        <h2 class="globe-h2">
+          每一道光弧，<br />
+          都是世界某处的 <span class="gold-ital">一次真实调用</span>。
+        </h2>
+        <p class="globe-sub">
+          数据每 1.5 秒刷新一次<span class="dot-sep">·</span>
+          来自 {{ liveCountries }} 个国家 / 地区<span class="dot-sep">·</span>
+          匿名展示
+        </p>
+      </div>
+
+      <div class="globe-stage" data-reveal>
+        <!--
+          Lazy-mounted: the ~620KB three.js + world-atlas chunk only loads
+          when this section is about to scroll into view. Above-the-fold
+          experience stays light.
+        -->
+        <GlobeStage v-if="globeInView" :snapshot="liveGlobeSnapshot" detail="public" toggle-position="top-right" class="globe-canvas-wrap" />
+        <div v-else class="globe-placeholder">
+          <div class="globe-placeholder-orb"></div>
+        </div>
+
+        <div class="globe-overlay-meta">
+          <div class="meta-row">
+            <span class="meta-k">CALLS · 24H</span>
+            <span class="meta-v">{{ formatNumber(globe24hCalls) }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-k">UNIQUE IPS</span>
+            <span class="meta-v">{{ formatNumber(globe24hIPs) }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-k">COUNTRIES</span>
+            <span class="meta-v">{{ liveCountries }}</span>
+          </div>
+        </div>
+
+        <router-link to="/globe" class="globe-cta-link">
+          <span>看 全 屏 版 本</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M7 17L17 7M17 7H9M17 7V15" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </router-link>
+      </div>
+    </section>
+
     <!-- TRUST -->
     <section class="trust">
       <div class="trust-inner" data-reveal>
@@ -263,6 +318,21 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
+import GlobeStage from '@/components/globe/GlobeStage.vue'
+import { useGlobeStream } from '@/composables/useGlobeStream'
+
+// Live globe data feed for the homepage section. Same SSE stream the
+// /globe page uses — data is shared, the visualisation is shared.
+const { snapshot: liveGlobeSnapshot, summary: liveGlobeSummary } = useGlobeStream()
+const liveCountries = computed(() => liveGlobeSummary.value?.window_24h?.unique_countries ?? 0)
+const globe24hCalls = computed(() => liveGlobeSummary.value?.window_24h?.calls ?? 0)
+const globe24hIPs = computed(() => liveGlobeSummary.value?.window_24h?.unique_ips ?? 0)
+
+// Lazy-mount the globe when its section enters the viewport (with a 200px
+// rootMargin so the canvas has time to render before user scrolls to it).
+const globeSectionEl = ref<HTMLElement | null>(null)
+const globeInView = ref(false)
+let globeObserver: IntersectionObserver | null = null
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
@@ -370,12 +440,28 @@ onMounted(async () => {
   onScroll()
   await nextTick()
   setupReveal()
+
+  // Lazy-mount the globe when its section comes within 200px of the viewport.
+  if (globeSectionEl.value) {
+    globeObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          globeInView.value = true
+          globeObserver?.disconnect()
+          globeObserver = null
+        }
+      },
+      { rootMargin: '200px 0px 200px 0px' },
+    )
+    globeObserver.observe(globeSectionEl.value)
+  }
 })
 
 onBeforeUnmount(() => {
   if (tickTimer) window.clearInterval(tickTimer)
   window.removeEventListener('scroll', onScroll)
   revealObserver?.disconnect()
+  globeObserver?.disconnect()
 })
 </script>
 
@@ -1134,5 +1220,139 @@ onBeforeUnmount(() => {
   .hero-foot { gap: 28px; }
   .stat-num { font-size: 26px; }
   .marquee-group { font-size: 22px; gap: 26px; padding-right: 26px; }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   GLOBE SECTION — embedded live world map
+   Tonally consistent with the rest of the landing: editorial centred
+   headline, dark stage, gold-italic accent on the noun. Stage is 70vh
+   tall on desktop so the globe always reads as a proper "moment", not
+   a thumbnail.
+   ────────────────────────────────────────────────────────────────────── */
+.globe-section {
+  padding: 160px 24px 120px;
+  background: linear-gradient(to bottom, transparent 0%, #03070d 18%, #03070d 82%, transparent 100%);
+  position: relative;
+}
+.globe-section-headline {
+  max-width: 920px;
+  margin: 32px auto 56px;
+  text-align: center;
+}
+.globe-h2 {
+  font-family: 'Cormorant Garamond', 'Source Han Serif SC', 'Songti SC', Georgia, serif;
+  font-size: clamp(32px, 4.4vw, 64px);
+  line-height: 1.1;
+  font-weight: 400;
+  color: #fff;
+  margin: 0 0 18px;
+  letter-spacing: -0.01em;
+}
+.globe-h2 .gold-ital {
+  font-style: italic;
+  color: #ffd87a;
+  letter-spacing: 0.04em;
+  font-weight: 300;
+}
+.globe-sub {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: rgba(184, 200, 220, 0.7);
+  letter-spacing: 0.04em;
+}
+.globe-sub .dot-sep { margin: 0 12px; color: rgba(255,255,255,0.25); }
+
+.globe-stage {
+  position: relative;
+  max-width: 1280px;
+  margin: 0 auto;
+  height: 70vh;
+  min-height: 520px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: #02060c;
+  overflow: hidden;
+}
+.globe-canvas-wrap {
+  position: absolute !important;
+  inset: 0;
+}
+.globe-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 55%, #06121e 0%, #02060c 60%, #000 100%);
+}
+.globe-placeholder-orb {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, rgba(95,199,255,0.05) 0%, transparent 70%);
+  border: 1px solid rgba(95,199,255,0.08);
+  animation: globe-placeholder-pulse 2.4s ease-in-out infinite;
+}
+@keyframes globe-placeholder-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.96); }
+  50% { opacity: 0.8; transform: scale(1.0); }
+}
+.globe-overlay-meta {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  z-index: 4;
+}
+.globe-overlay-meta .meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.globe-overlay-meta .meta-k {
+  color: rgba(184, 200, 220, 0.45);
+  min-width: 110px;
+}
+.globe-overlay-meta .meta-v {
+  color: #fff;
+  font-feature-settings: 'tnum' 1;
+  font-size: 14px;
+}
+.globe-cta-link {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border: 1px solid rgba(255,216,122,0.4);
+  color: #ffd87a;
+  text-decoration: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  background: rgba(2,6,12,0.5);
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+  z-index: 4;
+}
+.globe-cta-link:hover {
+  background: rgba(255,216,122,0.08);
+  border-color: rgba(255,216,122,0.7);
+}
+.globe-cta-link svg { width: 14px; height: 14px; }
+
+@media (max-width: 768px) {
+  .globe-section { padding: 100px 14px 80px; }
+  .globe-stage { height: 60vh; min-height: 420px; }
+  .globe-overlay-meta { top: 14px; left: 14px; font-size: 9px; }
+  .globe-overlay-meta .meta-k { min-width: 80px; }
+  .globe-overlay-meta .meta-v { font-size: 12px; }
+  .globe-cta-link { bottom: 14px; right: 14px; padding: 8px 12px; font-size: 10px; }
 }
 </style>

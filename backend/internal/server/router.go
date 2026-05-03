@@ -108,6 +108,9 @@ func registerRoutes(
 	// 公共状态页路由（无需认证，暴露给匿名访客）
 	routes.RegisterPublicStatusRoutes(r, h.PublicStatus)
 
+	// 公共全球看板路由（无需认证，匿名安全）
+	routes.RegisterPublicGlobeRoutes(r, h.Globe)
+
 	// API v1
 	v1 := r.Group("/api/v1")
 

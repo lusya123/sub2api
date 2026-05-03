@@ -351,6 +351,7 @@ export default {
     modelHealthConfig: 'Model Health Config',
     proxies: 'Proxies',
     redeemCodes: 'Redeem Codes',
+    operations: 'Operations',
     ops: 'Ops',
     promoCodes: 'Promo Codes',
     auditLogs: 'Audit Logs',
@@ -1000,6 +1001,8 @@ export default {
     last7Days: 'Last 7 Days',
     last14Days: 'Last 14 Days',
     last30Days: 'Last 30 Days',
+    last180Days: 'Last 6 Months',
+    allData: 'All Data',
     custom: 'Custom',
     startDate: 'Start Date',
     endDate: 'End Date',
@@ -3555,6 +3558,277 @@ export default {
           succeeded: 'Succeeded',
           failed: 'Failed',
           canceled: 'Canceled'
+        }
+      }
+    },
+
+    // Operation Dashboard
+    operations: {
+      title: 'Operation Dashboard',
+      description: 'Use DAU, retention, conversion, traffic, and revenue to guide operations',
+      failedToLoad: 'Failed to load operation dashboard',
+      generatedAt: 'Updated: {value}',
+      empty: 'No data',
+      tabs: {
+        trend: 'Trend',
+        retention: 'Retention',
+        distribution: 'Distribution',
+        lists: 'User Lists'
+      },
+      metrics: {
+        activeUsers: 'Active Users',
+        newUsers: 'New Users',
+        firstCall: 'First call {value}',
+        retention: 'D7 Retention',
+        revenue: 'Usage Revenue',
+        traffic: 'API Traffic',
+        expiring: 'Expiring in 7d',
+        activeSubs: 'Active subscriptions {value}'
+      },
+      advice: {
+        title: 'Action Advice'
+      },
+      funnel: {
+        title: 'New User Funnel'
+      },
+      trend: {
+        activeRevenue: 'Revenue Trend',
+        conversion: 'First Call Conversion Trend'
+      },
+      retention: {
+        title: 'Registration Retention Cohort',
+        cohort: 'Signup Date',
+        newUsers: 'New Users'
+      },
+      distribution: {
+        groups: 'Plan / Group Ranking',
+        models: 'Model Ranking',
+        apiKeys: 'API Key Ranking',
+        promos: 'Promo / Redeem Codes'
+      },
+      lists: {
+        highSpending: 'High Spending Users',
+        silentHighValue: 'Silent High Value Users',
+        benefitIdle: 'Entitled but Idle',
+        expiringSoon: 'Expiring Subscriptions',
+        newInactive: 'New Inactive Users'
+      },
+      actions: {
+        usage: 'Usage',
+        subscription: 'Subscriptions'
+      },
+      units: {
+        tokens: '{value} tokens',
+        vsPrevious: '{value} vs previous',
+        usageSummary: '{requests} req · {tokens} tokens',
+        conversionSummary: '{count} times · {users} users',
+        daysIdle: '{value} days idle'
+      },
+      v2: {
+        captionPlain: '💬 In plain words: ',
+        captionAction: '👉 What to do: ',
+        modal: { close: 'Close' },
+        pulse: {
+          title: "Today's Pulse",
+          sub: 'Did anything go wrong today? See it in 3 seconds.',
+          revenue: 'Revenue',
+          activeUsers: 'Active Users',
+          newUsers: 'New Users',
+          payingUsers: 'Paying Users',
+          spark30d: '30-day trend',
+          vsWow: 'vs previous period',
+          vsYoy: 'vs same period last year',
+          vs90d: 'vs 90-day daily avg',
+          hint: {
+            revenue: {
+              up: 'Revenue is up. Keep momentum.',
+              down: 'Revenue dropped vs previous period. Investigate via churn waterfall.',
+              flat: 'Revenue is flat vs previous period.'
+            },
+            active: {
+              up: 'Active users rising — acquisition or retention is working.',
+              down: 'Active users falling — open churn analysis to locate the segment.',
+              flat: 'Active users flat vs previous period.'
+            },
+            new: {
+              up: 'New signups improving — consider scaling acquisition.',
+              down: 'Signups slowing — optimize signup conversion or marketing.',
+              flat: 'Signup pace is stable.'
+            },
+            paying: {
+              up: 'More paying users — recharge/subscription funnel is healthy.',
+              down: 'Paying users dropped — check recharge UX and promos.',
+              flat: 'Paying user count is stable.'
+            }
+          }
+        },
+        funnel: {
+          title: 'Sales Funnel',
+          sub: 'See where users leak from signup to payment.',
+          chartTitle: '6-step conversion funnel (vs previous period)',
+          hint: 'Each step loses some users. Fix the worst-leaking step first. Note: "Real Paid" excludes the $5 trial coupon and promo_codes (those are freebies).',
+          action: 'Find the step with the largest drop and optimize that page, copy, or perk.',
+          dropTo: 'continue to'
+        },
+        trial: {
+          title: '$5 Trial Coupon Conversion',
+          sub: 'After the freebie, how many actually pay?',
+          chartTitle: '$5 trial funnel (new users who claimed a coupon in this window)',
+          hint: '{issued} coupons issued, {used} actually called the API, {converted} converted to real paying users.',
+          action: 'Watch two ratios: 1) Idle rate → fix client install / first-call flow. 2) Exhausted but no payment → push a renewal coupon when the trial is nearly used up.',
+          summaryLabel: '📊 Key diagnosis: ',
+          summary: 'Average trial spend {avg}. Hardcore users who paid without claiming the trial: {nonTrial} (highest channel quality).',
+          caveat: '⚠️ Data limitation: failed API calls are not recorded in usage_logs, so "claimed but never called" lumps together both install failures and failed calls — they can\'t be separated at the SQL layer.',
+          cards: {
+            issued: 'Coupons Issued',
+            issuedSub: '{value} face value, one per user',
+            used: 'Actually Used',
+            usedSub: 'at least one call ({rate})',
+            idle: 'Claimed, Idle',
+            idleSub: '{rate} of issued — install or call failure',
+            exhausted: 'Trial Exhausted',
+            exhaustedSub: 'spent ≥ {threshold} ({rate})',
+            converted: 'Trial → Real Pay',
+            convertedSub: '{rate} of issued — true ROI of the coupon'
+          }
+        },
+        churn: {
+          title: 'Retention & Churn',
+          sub: 'Each user has their own rhythm — no one-size-fits-all.',
+          totalRate: 'Confirmed Churn Rate',
+          totalRateSub: 'Global call-interval median {p50} days, classified by P50×6',
+          atRiskRate: 'At-Risk Share',
+          atRiskRateSub: 'Silent + High-Risk = {count} users',
+          highValueRisk: 'High-Value At Risk',
+          highValueRiskSub: '${revenue} of historical revenue is on the brink',
+          definitionLabel: '🧮 Churn definition: ',
+          weeklyDelta: '{value} vs last week',
+          waterfallTitle: 'Churn Waterfall: where did last week\'s actives go?',
+          waterfallHint: '{base} were active last week, {still} still active, {lost} lost.',
+          waterfallAction: 'Tackle the largest reason first (coupons / renewal nudge / wakeup email).',
+          lastWeekActive: 'Last Week Active',
+          stillActive: 'Still Active',
+          completelyGone: 'Completely Gone',
+          halfActivity: 'Halved Activity',
+          balanceExhausted: 'Balance Exhausted',
+          subscriptionEnded: 'Subscription Expired',
+          userCount: 'Users',
+          historyTitle: '30-Day Churn Rate Trend',
+          historyHint: 'Higher red line = worse churn. Investigate any sudden spike.',
+          historyAction: 'Watch the inflection points — sudden jumps often indicate upstream incidents or pricing changes.',
+          churnRateLabel: 'Churn Rate (%)',
+          retentionTitle: 'Signup Retention (vs your own history)',
+          retentionHint: 'D1/D7/D30 = % still using on day 1/7/30 after signup. Green good, yellow ok, red bad.',
+          retentionAction: 'D7 < 20% means onboarding is broken — fix the first-call flow.'
+        },
+        pyramid: {
+          title: 'User Pyramid',
+          sub: '5 levels of users — see your VIPs and your free riders at a glance.',
+          chartTitle: 'Segmented by 30-day spend',
+          hint: '{total} total users, {paid} paying. Bar width = number of users.',
+          action: 'Treat top tiers as VIPs; nudge free → bronze → silver upgrades.',
+          insight: 'Top {users} of users contribute {top} of revenue — these must not churn.',
+          insightLabel: '🎯 Key insight: '
+        },
+        actions: {
+          title: "Today's Action Items",
+          sub: 'The actions you must take today, distilled from all the numbers above.',
+          chartTitle: '4 categories of urgent actions',
+          hint: 'Aggregate counts — click to expand the actual user list.',
+          action: 'Triage by color: red > amber > green > violet.',
+          viewList: 'View list',
+          highRisk: {
+            title: 'Urgent Win-Back',
+            sub: 'High-risk + already churned. Must handle today.',
+            modal: 'Users who paid before but recently stopped. Send 30% recovery coupon or contact manually.'
+          },
+          atRisk: {
+            title: 'Silent (At Risk)',
+            sub: 'Call rhythm slowing — close to churning.',
+            modal: 'Users whose call cadence dropped beyond their own P50×2. Send reminder + promo.'
+          },
+          newInactive: {
+            title: 'Activate New Users',
+            sub: 'Signed up >7 days ago, still no first call.',
+            modal: 'Send onboarding email / API Key install guide.'
+          },
+          expiring: {
+            title: 'Subscription Expiring',
+            sub: 'Subscriptions expiring in the next 7 days.',
+            modal: '1-on-1 outreach for high-ARPU users; bulk renewal nudge for the rest.'
+          }
+        },
+        product: {
+          title: 'Product Matrix',
+          sub: 'Which plan to push, which model to cut — at a glance.',
+          bcgTitle: 'Plan BCG Matrix (Users × ARPU)',
+          bcgHint: 'Top-right = stars / cash cows. Bottom-left = candidates to cut. Circle size = total revenue in the period.',
+          bcgAction: 'Promote stars; reposition or reprice problem plans; evaluate dogs for retirement.',
+          modelTitle: 'Model Health',
+          modelHint: "Each model's traffic share, revenue, users and WoW change.",
+          modelAction: 'Red user-change = traffic leaking — check upstream incidents or a competitor.',
+          modelTrafficShare: 'Traffic share',
+          modelRevenue: 'Revenue',
+          modelUsers: 'Users',
+          modelUsersChange: 'Users WoW'
+        },
+        financial: {
+          title: 'Financial Cockpit',
+          sub: 'Where money comes in, goes out, and how long the runway is.',
+          cushionTitle: 'Balance Cushion Health',
+          cushionHint: 'Total user balance is {balance}. At the recent 30-day average daily spend of {cost}, the pool covers {months} more months.',
+          cushionAction: {
+            danger: '🚨 Balance pool nearly empty — risk of mass churn next month. Push a recharge or renewal campaign now.',
+            warning: '⚠️ Balance pool tight. Run a small recharge incentive to refill before churn starts.',
+            healthy: '✅ Balance pool is healthy. Continue normal ops.',
+            overloaded: '💤 Money is sitting idle. Push limited-time use coupons or new models to drive consumption.'
+          },
+          months: ' months',
+          healthDanger: 'Danger: < 1 month',
+          healthWarning: 'Tight: 1-3 months',
+          healthHealthy: 'Healthy: 3-6 months',
+          healthOverloaded: 'Overstock: > 6 months',
+          cashflowTitle: 'Cash flow (in vs out)',
+          inflow: 'Inflow',
+          outflow: 'Outflow',
+          netFlow: 'Net',
+          cashflowNote: 'Inflow = real-money recharge cards + admin top-ups (excludes the $5 trial coupon and promo_codes). Outflow = usage_logs actual_cost.',
+          revenueTitle: 'Revenue Mix (2 Sources)',
+          revenueHint: 'Money comes in via two channels: admin top-ups (with refunds) and redeem codes (balance + subscription).',
+          revenueAction: 'High refund rate → check product/upstream issues. Low subscription share → push a subscription drive. Low recharge share → run a top-up bonus.',
+          adminGroup: 'Admin Top-ups',
+          adminGross: 'Gross top-up',
+          adminRefund: 'Refunds ({count})',
+          adminNet: 'Net',
+          redeemGroup: 'Redeem Codes',
+          redeemReal: 'Balance cards (real recharge)',
+          redeemTrial: 'Balance — $5 trial coupon',
+          redeemSub: 'Subscription cards',
+          newSubs: 'New subscriptions this period',
+          revTrialNote: 'Freebie — not real revenue',
+          netInjected: 'Net inflow',
+          refundBar: 'Refunds this period',
+          refundRateNote: '⚠️ Refund rate {rate} (total {amount})',
+          revenueCaveat: '⚠️ sub2api has no real-order ledger. These numbers come from redeem_codes / user_subscriptions injections, not "real money received". Cross-check with Alipay/WeChat statements for actuals.',
+          totalInjected: 'Total in',
+          subUnit: 'subs',
+          arpuTitle: 'ARPU — Last 30 Days (per paying user / day)',
+          arpuHint: 'ARPU up = users worth more. Down = price war or experience regression.',
+          arpuAction: 'On a sharp drop, check that day for pricing changes, upstream degradation, or a major customer leaving.'
+        },
+        details: {
+          title: 'More Details',
+          sub: 'Cohort retention table, plan/model distribution, and other secondary analyses.'
+        },
+        tabs: {
+          cohort: 'Signup Cohort',
+          distribution: 'Plan / Model Distribution',
+          trend: 'Revenue & Conversion Trend'
+        },
+        cohort: {
+          title: 'Signup Cohort Heatmap',
+          hint: 'Each row is a signup-date cohort. Watch their D1/D7/D30 retention. Darker = better.',
+          action: 'A row that suddenly fades = poor user quality on that day. Check what happened.'
         }
       }
     },

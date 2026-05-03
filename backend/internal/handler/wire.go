@@ -11,6 +11,7 @@ import (
 // ProvideAdminHandlers creates the AdminHandlers struct
 func ProvideAdminHandlers(
 	dashboardHandler *admin.DashboardHandler,
+	operationHandler *admin.OperationHandler,
 	userHandler *admin.UserHandler,
 	groupHandler *admin.GroupHandler,
 	accountHandler *admin.AccountHandler,
@@ -40,6 +41,7 @@ func ProvideAdminHandlers(
 ) *AdminHandlers {
 	return &AdminHandlers{
 		Dashboard:             dashboardHandler,
+		Operation:             operationHandler,
 		User:                  userHandler,
 		Group:                 groupHandler,
 		Account:               accountHandler,
@@ -96,6 +98,7 @@ func ProvideHandlers(
 	settingHandler *SettingHandler,
 	totpHandler *TotpHandler,
 	publicStatusHandler *public.PublicStatusHandler,
+	globeHandler *public.GlobeHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 	// Depend on the marker so wire evaluates the recorder setters before the
@@ -118,6 +121,7 @@ func ProvideHandlers(
 		Setting:       settingHandler,
 		Totp:          totpHandler,
 		PublicStatus:  publicStatusHandler,
+		Globe:         globeHandler,
 	}
 }
 
@@ -139,6 +143,7 @@ var ProviderSet = wire.NewSet(
 
 	// Admin handlers
 	admin.NewDashboardHandler,
+	admin.NewOperationHandler,
 	admin.NewUserHandler,
 	admin.NewGroupHandler,
 	admin.NewAccountHandler,
@@ -168,6 +173,7 @@ var ProviderSet = wire.NewSet(
 
 	// Public handlers (no auth)
 	public.NewPublicStatusHandler,
+	public.NewGlobeHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

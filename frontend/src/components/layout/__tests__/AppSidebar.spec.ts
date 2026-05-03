@@ -200,4 +200,32 @@ describe('AppSidebar', () => {
     expect(hrefs).not.toContain('/status')
     expect(hrefs).not.toContain('/models')
   })
+
+  it('does not show operations dashboard to operator users', async () => {
+    const appStore = useAppStore()
+    const authStore = useAuthStore()
+    const router = createTestRouter()
+
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = createPublicSettings()
+    authStore.user = createUser({ role: 'operator' })
+
+    await router.push('/dashboard')
+    await router.isReady()
+
+    const wrapper = mount(AppSidebar, {
+      global: {
+        plugins: [router],
+        stubs: {
+          VersionBadge: true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'))
+
+    expect(hrefs).not.toContain('/admin/operations')
+  })
 })

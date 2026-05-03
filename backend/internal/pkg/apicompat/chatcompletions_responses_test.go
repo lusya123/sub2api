@@ -144,6 +144,45 @@ func TestChatCompletionsToResponses_MaxTokens(t *testing.T) {
 	})
 }
 
+func TestResponsesToAnthropicRequest_DefaultMaxTokensModelAware(t *testing.T) {
+	tests := []struct {
+		name  string
+		model string
+		want  int
+	}{
+		{name: "sonnet 4.6", model: "claude-sonnet-4-6", want: 26000},
+		{name: "opus 4.6 dot", model: "claude-opus-4.6-thinking", want: 26000},
+		{name: "sonnet 4.5", model: "claude-sonnet-4-5", want: 26000},
+		{name: "unknown model", model: "gpt-4o", want: 8192},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &ResponsesRequest{
+				Model: tt.model,
+				Input: json.RawMessage(`"Hi"`),
+			}
+
+			got, err := ResponsesToAnthropicRequest(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.MaxTokens)
+		})
+	}
+}
+
+func TestResponsesToAnthropicRequest_ExplicitMaxOutputTokensWins(t *testing.T) {
+	maxOutputTokens := 12000
+	req := &ResponsesRequest{
+		Model:           "claude-sonnet-4-6",
+		Input:           json.RawMessage(`"Hi"`),
+		MaxOutputTokens: &maxOutputTokens,
+	}
+
+	got, err := ResponsesToAnthropicRequest(req)
+	require.NoError(t, err)
+	assert.Equal(t, maxOutputTokens, got.MaxTokens)
+}
+
 func TestChatCompletionsToResponses_ReasoningEffort(t *testing.T) {
 	req := &ChatCompletionsRequest{
 		Model:           "gpt-4o",

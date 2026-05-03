@@ -24,6 +24,9 @@ func RegisterAdminRoutes(
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
 
+		// 运营看板
+		registerOperationsRoutes(admin, h)
+
 		// 用户管理
 		registerUserManagementRoutes(admin, h)
 
@@ -240,6 +243,13 @@ func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		dashboard.POST("/api-keys-usage", h.Admin.Dashboard.GetBatchAPIKeysUsage)
 		dashboard.GET("/user-breakdown", h.Admin.Dashboard.GetUserBreakdown)
 		dashboard.POST("/aggregation/backfill", h.Admin.Dashboard.BackfillAggregation)
+	}
+}
+
+func registerOperationsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	operations := admin.Group("/operations")
+	{
+		operations.GET("/snapshot", h.Admin.Operation.GetSnapshot)
 	}
 }
 

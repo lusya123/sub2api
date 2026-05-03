@@ -107,6 +107,14 @@ backend/internal/web/dist/*
 # 后端运行时缓存数据
 backend/data/
 
+# 本地导出/批处理数据，可能包含账号、token、API key 等敏感信息
+data/
+kiro-config-downloads/
+kiro-config-downloads-*/
+kiro-cards-*.txt
+tmp_*
+*.csv
+
 # ===================
 # 本地配置文件（包含敏感信息）
 # ===================
@@ -132,6 +140,7 @@ vite.config.js
 docs/*
 .serena/
 .codex/
+.codex-skill-staging/
 frontend/coverage/
 aicodex
 output/
