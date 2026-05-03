@@ -145,6 +145,38 @@ func (r *operationAnalyticsRepository) fillOperationCore(ctx context.Context, fi
 			FROM usage_logs
 			WHERE created_at >= $1 AND created_at < $2
 		),
+		real_paid_until_end AS (
+			SELECT DISTINCT used_by AS user_id
+			FROM redeem_codes
+			WHERE used_by IS NOT NULL
+			  AND used_at < $2
+			  AND ((type = 'balance' AND value > 0 AND value <> 5) OR (type = 'admin_balance' AND value > 0) OR type = 'subscription')
+			UNION
+			SELECT DISTINCT user_id
+			FROM user_subscriptions
+			WHERE deleted_at IS NULL AND created_at < $2
+		),
+		previous_real_paid_until_end AS (
+			SELECT DISTINCT used_by AS user_id
+			FROM redeem_codes
+			WHERE used_by IS NOT NULL
+			  AND used_at < $4
+			  AND ((type = 'balance' AND value > 0 AND value <> 5) OR (type = 'admin_balance' AND value > 0) OR type = 'subscription')
+			UNION
+			SELECT DISTINCT user_id
+			FROM user_subscriptions
+			WHERE deleted_at IS NULL AND created_at < $4
+		),
+		trial_users_until_end AS (
+			SELECT DISTINCT used_by AS user_id
+			FROM redeem_codes
+			WHERE used_by IS NOT NULL AND type = 'balance' AND value = 5 AND used_at < $2
+		),
+		previous_trial_users_until_end AS (
+			SELECT DISTINCT used_by AS user_id
+			FROM redeem_codes
+			WHERE used_by IS NOT NULL AND type = 'balance' AND value = 5 AND used_at < $4
+		),
 		daily_buckets AS (
 			SELECT generate_series(
 				($1::timestamptz AT TIME ZONE $5)::date,
@@ -231,12 +263,38 @@ func (r *operationAnalyticsRepository) fillOperationCore(ctx context.Context, fi
 			COALESCE((SELECT COUNT(*) FROM scoped_usage), 0) AS requests,
 			COALESCE((SELECT SUM(tokens) FROM scoped_usage), 0) AS tokens,
 			COALESCE((SELECT SUM(actual_cost) FROM scoped_usage), 0) AS actual_cost,
-			COALESCE((SELECT COUNT(DISTINCT user_id) FROM scoped_usage WHERE actual_cost > 0), 0) AS paying_users,
+			COALESCE((
+				SELECT COUNT(DISTINCT su.user_id)
+				FROM scoped_usage su
+				JOIN real_paid_until_end rp ON rp.user_id = su.user_id
+				WHERE su.actual_cost > 0
+			), 0) AS paying_users,
+			COALESCE((SELECT COUNT(DISTINCT user_id) FROM scoped_usage WHERE actual_cost > 0), 0) AS consuming_users,
+			COALESCE((
+				SELECT COUNT(DISTINCT su.user_id)
+				FROM scoped_usage su
+				JOIN trial_users_until_end tu ON tu.user_id = su.user_id
+				LEFT JOIN real_paid_until_end rp ON rp.user_id = su.user_id
+				WHERE su.actual_cost > 0 AND rp.user_id IS NULL
+			), 0) AS trial_consuming_users,
 			COALESCE((SELECT COUNT(*) FROM user_subscriptions WHERE deleted_at IS NULL AND status = 'active' AND starts_at < $2 AND expires_at > $1), 0) AS active_subscriptions,
 			COALESCE((SELECT COUNT(*) FROM user_subscriptions WHERE deleted_at IS NULL AND status = 'active' AND expires_at >= $2 AND expires_at < ($2::timestamptz + INTERVAL '7 days')), 0) AS expiring_subscriptions,
 				COALESCE((SELECT COUNT(DISTINCT api_key_id) FROM scoped_usage WHERE api_key_id IS NOT NULL), 0) AS active_api_keys,
 			COALESCE((SELECT COUNT(DISTINCT user_id) FROM usage_logs WHERE created_at >= $3 AND created_at < $4), 0) AS previous_active_users,
-			COALESCE((SELECT COUNT(DISTINCT user_id) FROM usage_logs WHERE created_at >= $3 AND created_at < $4 AND actual_cost > 0), 0) AS previous_paying_users,
+			COALESCE((
+				SELECT COUNT(DISTINCT ul.user_id)
+				FROM usage_logs ul
+				JOIN previous_real_paid_until_end rp ON rp.user_id = ul.user_id
+				WHERE ul.created_at >= $3 AND ul.created_at < $4 AND ul.actual_cost > 0
+			), 0) AS previous_paying_users,
+			COALESCE((SELECT COUNT(DISTINCT user_id) FROM usage_logs WHERE created_at >= $3 AND created_at < $4 AND actual_cost > 0), 0) AS previous_consuming_users,
+			COALESCE((
+				SELECT COUNT(DISTINCT ul.user_id)
+				FROM usage_logs ul
+				JOIN previous_trial_users_until_end tu ON tu.user_id = ul.user_id
+				LEFT JOIN previous_real_paid_until_end rp ON rp.user_id = ul.user_id
+				WHERE ul.created_at >= $3 AND ul.created_at < $4 AND ul.actual_cost > 0 AND rp.user_id IS NULL
+			), 0) AS previous_trial_consuming_users,
 			COALESCE((SELECT SUM(actual_cost) FROM usage_logs WHERE created_at >= $3 AND created_at < $4), 0) AS previous_actual_cost,
 			COALESCE((SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND created_at >= $3 AND created_at < $4), 0) AS previous_new_users,
 			COALESCE((SELECT COUNT(*) FROM retention_users WHERE mature_d1), 0) AS eligible_d1,
@@ -260,11 +318,15 @@ func (r *operationAnalyticsRepository) fillOperationCore(ctx context.Context, fi
 		&snapshot.Core.Tokens,
 		&snapshot.Core.ActualCost,
 		&snapshot.Core.PayingUsers,
+		&snapshot.Core.ConsumingUsers,
+		&snapshot.Core.TrialConsumingUsers,
 		&snapshot.Core.ActiveSubscriptions,
 		&snapshot.Core.ExpiringSubscriptions,
 		&snapshot.Core.ActiveAPIKeys,
 		&snapshot.Core.PreviousActiveUsers,
 		&snapshot.Core.PreviousPayingUsers,
+		&snapshot.Core.PreviousConsumingUsers,
+		&snapshot.Core.PreviousTrialUsers,
 		&snapshot.Core.PreviousActualCost,
 		&snapshot.Core.PreviousNewUsers,
 		&eligibleD1,
@@ -289,6 +351,8 @@ func (r *operationAnalyticsRepository) fillOperationCore(ctx context.Context, fi
 	snapshot.Core.ActiveUsersChangePercent = changePercent(float64(snapshot.Core.ActiveUsers), float64(snapshot.Core.PreviousActiveUsers))
 	snapshot.Core.NewUsersChangePercent = changePercent(float64(snapshot.Core.NewUsers), float64(snapshot.Core.PreviousNewUsers))
 	snapshot.Core.PayingUsersChangePercent = changePercent(float64(snapshot.Core.PayingUsers), float64(snapshot.Core.PreviousPayingUsers))
+	snapshot.Core.ConsumingChangePercent = changePercent(float64(snapshot.Core.ConsumingUsers), float64(snapshot.Core.PreviousConsumingUsers))
+	snapshot.Core.TrialUsersChangePercent = changePercent(float64(snapshot.Core.TrialConsumingUsers), float64(snapshot.Core.PreviousTrialUsers))
 	snapshot.Core.ActualCostChangePercent = changePercent(snapshot.Core.ActualCost, snapshot.Core.PreviousActualCost)
 	return nil
 }
@@ -302,6 +366,22 @@ func (r *operationAnalyticsRepository) fillOperationCoreAllData(ctx context.Cont
 				input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens AS tokens,
 				actual_cost
 			FROM usage_logs
+		),
+		real_payers AS (
+			SELECT DISTINCT used_by AS user_id
+			FROM redeem_codes
+			WHERE used_by IS NOT NULL
+			  AND ((type = 'balance' AND value > 0 AND value <> 5) OR (type = 'admin_balance' AND value > 0) OR type = 'subscription')
+			UNION
+			SELECT DISTINCT user_id
+			FROM user_subscriptions
+			WHERE deleted_at IS NULL
+		),
+		trial_only_users AS (
+			SELECT DISTINCT rc.used_by AS user_id
+			FROM redeem_codes rc
+			LEFT JOIN real_payers rp ON rp.user_id = rc.used_by
+			WHERE rc.used_by IS NOT NULL AND rc.type = 'balance' AND rc.value = 5 AND rp.user_id IS NULL
 		)
 		SELECT
 			COALESCE((SELECT COUNT(DISTINCT user_id) FROM all_usage), 0) AS active_users,
@@ -309,7 +389,14 @@ func (r *operationAnalyticsRepository) fillOperationCoreAllData(ctx context.Cont
 			COALESCE((SELECT COUNT(*) FROM all_usage), 0) AS requests,
 			COALESCE((SELECT SUM(tokens) FROM all_usage), 0) AS tokens,
 			COALESCE((SELECT SUM(actual_cost) FROM all_usage), 0) AS actual_cost,
-			COALESCE((SELECT COUNT(DISTINCT user_id) FROM all_usage WHERE actual_cost > 0), 0) AS paying_users,
+			COALESCE((SELECT COUNT(*) FROM real_payers), 0) AS paying_users,
+			COALESCE((SELECT COUNT(DISTINCT user_id) FROM all_usage WHERE actual_cost > 0), 0) AS consuming_users,
+			COALESCE((
+				SELECT COUNT(DISTINCT au.user_id)
+				FROM all_usage au
+				JOIN trial_only_users tu ON tu.user_id = au.user_id
+				WHERE au.actual_cost > 0
+			), 0) AS trial_consuming_users,
 			COALESCE((SELECT COUNT(DISTINCT api_key_id) FROM all_usage WHERE api_key_id IS NOT NULL), 0) AS active_api_keys,
 			COALESCE((SELECT COUNT(*) FROM user_subscriptions WHERE deleted_at IS NULL AND status = 'active' AND starts_at < $1 AND expires_at > $1), 0) AS active_subscriptions,
 			COALESCE((SELECT COUNT(*) FROM user_subscriptions WHERE deleted_at IS NULL AND status = 'active' AND expires_at >= $1 AND expires_at < ($1::timestamptz + INTERVAL '7 days')), 0) AS expiring_subscriptions
@@ -321,6 +408,8 @@ func (r *operationAnalyticsRepository) fillOperationCoreAllData(ctx context.Cont
 		&snapshot.Core.Tokens,
 		&snapshot.Core.ActualCost,
 		&snapshot.Core.PayingUsers,
+		&snapshot.Core.ConsumingUsers,
+		&snapshot.Core.TrialConsumingUsers,
 		&snapshot.Core.ActiveAPIKeys,
 		&snapshot.Core.ActiveSubscriptions,
 		&snapshot.Core.ExpiringSubscriptions,

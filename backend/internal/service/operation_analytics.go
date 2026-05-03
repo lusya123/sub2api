@@ -207,6 +207,8 @@ type OperationCoreMetrics struct {
 	AverageDAU               float64 `json:"average_dau"`
 	NewUsers                 int64   `json:"new_users"`
 	PayingUsers              int64   `json:"paying_users"`
+	ConsumingUsers           int64   `json:"consuming_users"`
+	TrialConsumingUsers      int64   `json:"trial_consuming_users"`
 	FirstCallConversionRate  float64 `json:"first_call_conversion_rate"`
 	BenefitConversionRate    float64 `json:"benefit_conversion_rate"`
 	RetentionD1              float64 `json:"retention_d1"`
@@ -223,10 +225,14 @@ type OperationCoreMetrics struct {
 	PreviousActiveUsers      int64   `json:"previous_active_users"`
 	PreviousNewUsers         int64   `json:"previous_new_users"`
 	PreviousPayingUsers      int64   `json:"previous_paying_users"`
+	PreviousConsumingUsers   int64   `json:"previous_consuming_users"`
+	PreviousTrialUsers       int64   `json:"previous_trial_consuming_users"`
 	PreviousActualCost       float64 `json:"previous_actual_cost"`
 	ActiveUsersChangePercent float64 `json:"active_users_change_percent"`
 	NewUsersChangePercent    float64 `json:"new_users_change_percent"`
 	PayingUsersChangePercent float64 `json:"paying_users_change_percent"`
+	ConsumingChangePercent   float64 `json:"consuming_users_change_percent"`
+	TrialUsersChangePercent  float64 `json:"trial_consuming_users_change_percent"`
 	ActualCostChangePercent  float64 `json:"actual_cost_change_percent"`
 }
 

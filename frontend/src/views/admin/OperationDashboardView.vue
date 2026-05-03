@@ -42,7 +42,7 @@
           :title="t('admin.operations.v2.pulse.title')"
           :sub="t('admin.operations.v2.pulse.sub')"
         />
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <PulseCard
             :label="t('admin.operations.v2.pulse.revenue')"
             :value="`$${formatMoney(snapshot.core.actual_cost)}`"
@@ -72,6 +72,15 @@
             :spark="trendSpark('new_users')"
             :hint="pulseHint('new', snapshot.core.new_users_change_percent)"
             tone="violet"
+          />
+          <PulseCard
+            :label="t('admin.operations.v2.pulse.trialUsers')"
+            :value="formatNumber(snapshot.core.trial_consuming_users)"
+            :wow="snapshot.core.trial_consuming_users_change_percent"
+            :history="0"
+            :spark="trendSpark('actual_cost')"
+            :hint="pulseHint('trial', snapshot.core.trial_consuming_users_change_percent)"
+            tone="rose"
           />
           <PulseCard
             :label="t('admin.operations.v2.pulse.payingUsers')"
@@ -474,6 +483,8 @@ function emptyCore(): OperationCoreMetrics {
     average_dau: 0,
     new_users: 0,
     paying_users: 0,
+    consuming_users: 0,
+    trial_consuming_users: 0,
     first_call_conversion_rate: 0,
     benefit_conversion_rate: 0,
     retention_d1: 0,
@@ -490,10 +501,14 @@ function emptyCore(): OperationCoreMetrics {
     previous_active_users: 0,
     previous_new_users: 0,
     previous_paying_users: 0,
+    previous_consuming_users: 0,
+    previous_trial_consuming_users: 0,
     previous_actual_cost: 0,
     active_users_change_percent: 0,
     new_users_change_percent: 0,
     paying_users_change_percent: 0,
+    consuming_users_change_percent: 0,
+    trial_consuming_users_change_percent: 0,
     actual_cost_change_percent: 0
   }
 }
@@ -663,7 +678,7 @@ function formatPercent(value: number | undefined): string {
   return `${((value || 0) * 100).toFixed(1)}%`
 }
 
-function pulseHint(kind: 'revenue' | 'active' | 'new' | 'paying', wow: number): string {
+function pulseHint(kind: 'revenue' | 'active' | 'new' | 'trial' | 'paying', wow: number): string {
   const dir = wow > 1 ? 'up' : wow < -1 ? 'down' : 'flat'
   return t(`admin.operations.v2.pulse.hint.${kind}.${dir}`)
 }
@@ -862,7 +877,8 @@ const PulseCard = defineComponent({
       emerald: '#10b981',
       sky: '#0ea5e9',
       violet: '#8b5cf6',
-      amber: '#f59e0b'
+      amber: '#f59e0b',
+      rose: '#f43f5e'
     }
     const color = colorMap[props.tone] || '#10b981'
     return () => h('div', { class: 'card p-5 space-y-3' }, [

@@ -14,6 +14,8 @@ export interface OperationCoreMetrics {
   average_dau: number
   new_users: number
   paying_users: number
+  consuming_users: number
+  trial_consuming_users: number
   first_call_conversion_rate: number
   benefit_conversion_rate: number
   retention_d1: number
@@ -30,10 +32,14 @@ export interface OperationCoreMetrics {
   previous_active_users: number
   previous_new_users: number
   previous_paying_users: number
+  previous_consuming_users: number
+  previous_trial_consuming_users: number
   previous_actual_cost: number
   active_users_change_percent: number
   new_users_change_percent: number
   paying_users_change_percent: number
+  consuming_users_change_percent: number
+  trial_consuming_users_change_percent: number
   actual_cost_change_percent: number
 }
 

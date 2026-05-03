@@ -69,6 +69,8 @@ const snapshot = {
     average_dau: 3,
     new_users: 4,
     paying_users: 2,
+    consuming_users: 3,
+    trial_consuming_users: 1,
     first_call_conversion_rate: 0.5,
     benefit_conversion_rate: 0.25,
     retention_d1: 0.4,
@@ -85,10 +87,14 @@ const snapshot = {
     previous_active_users: 10,
     previous_new_users: 3,
     previous_paying_users: 1,
+    previous_consuming_users: 2,
+    previous_trial_consuming_users: 1,
     previous_actual_cost: 11.0,
     active_users_change_percent: 20,
     new_users_change_percent: 33.3,
     paying_users_change_percent: 100,
+    consuming_users_change_percent: 50,
+    trial_consuming_users_change_percent: 0,
     actual_cost_change_percent: 10
   },
   trend: [{

@@ -3634,7 +3634,8 @@ export default {
           revenue: 'Revenue',
           activeUsers: 'Active Users',
           newUsers: 'New Users',
-          payingUsers: 'Paying Users',
+          trialUsers: 'Trial Coupon Users',
+          payingUsers: 'Real Paying Users',
           spark30d: '30-day trend',
           vsWow: 'vs previous period',
           vsYoy: 'vs same period last year',
@@ -3655,10 +3656,15 @@ export default {
               down: 'Signups slowing — optimize signup conversion or marketing.',
               flat: 'Signup pace is stable.'
             },
+            trial: {
+              up: 'More trial coupon users consumed API credits — watch whether they convert.',
+              down: 'Trial coupon consumption dropped — check activation and coupon redemption.',
+              flat: 'Trial coupon consumption is stable.'
+            },
             paying: {
-              up: 'More paying users — recharge/subscription funnel is healthy.',
-              down: 'Paying users dropped — check recharge UX and promos.',
-              flat: 'Paying user count is stable.'
+              up: 'More real paying users — recharge/subscription funnel is healthy.',
+              down: 'Real paying users dropped — check recharge UX and package appeal.',
+              flat: 'Real paying user count is stable.'
             }
           }
         },
