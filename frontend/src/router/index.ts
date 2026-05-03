@@ -315,7 +315,6 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      requiresSuperAdmin: true,
       title: 'Operation Dashboard',
       titleKey: 'admin.operations.title',
       descriptionKey: 'admin.operations.description'

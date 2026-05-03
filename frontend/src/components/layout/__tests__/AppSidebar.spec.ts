@@ -201,7 +201,7 @@ describe('AppSidebar', () => {
     expect(hrefs).not.toContain('/models')
   })
 
-  it('does not show operations dashboard to operator users', async () => {
+  it('shows operations dashboard to operator users', async () => {
     const appStore = useAppStore()
     const authStore = useAuthStore()
     const router = createTestRouter()
@@ -226,6 +226,6 @@ describe('AppSidebar', () => {
 
     const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'))
 
-    expect(hrefs).not.toContain('/admin/operations')
+    expect(hrefs).toContain('/admin/operations')
   })
 })

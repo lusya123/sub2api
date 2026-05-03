@@ -682,7 +682,7 @@ const adminNavItems = computed((): NavItem[] => {
 
   if (!isAdmin.value) {
     return baseItems.filter(item =>
-      ['/admin/dashboard', '/admin/globe', '/admin/ops', '/admin/users', '/admin/subscriptions', '/admin/usage'].includes(item.path)
+      ['/admin/dashboard', '/admin/operations', '/admin/globe', '/admin/ops', '/admin/users', '/admin/subscriptions', '/admin/usage'].includes(item.path)
     )
   }
 

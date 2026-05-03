@@ -51,6 +51,10 @@ func operatorRouteAllowed(method, fullPath, rawPath string) bool {
 		return method == "GET"
 	}
 
+	if strings.HasPrefix(path, "/api/v1/admin/operations") {
+		return method == "GET"
+	}
+
 	if strings.HasPrefix(path, "/api/v1/admin/usage") {
 		return method == "GET"
 	}
