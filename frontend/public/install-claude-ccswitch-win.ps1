@@ -253,20 +253,14 @@ function Test-VcRuntime {
     (Test-Path (Join-Path $system32 'VCRUNTIME140_1.dll'))
 }
 
-function Ensure-VcRuntime {
-  if (Test-VcRuntime) {
-    return
-  }
-
-  Write-XdtLog 'Installing Microsoft Visual C++ Runtime'
+function Install-VcRuntimeFile([string]$VcFile) {
+  Write-XdtLog "Installing Microsoft Visual C++ Runtime: $VcFile"
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  $arch = Get-XdtWindowsArch
-  $vcFile = if ($arch -eq 'arm64') { 'vc_redist.arm64.exe' } else { 'vc_redist.x64.exe' }
   $tmp = Join-Path ([IO.Path]::GetTempPath()) ("xdt-vcredist-" + [Guid]::NewGuid().ToString())
   New-Item -ItemType Directory -Path $tmp -Force | Out-Null
   try {
-    $installer = Join-Path $tmp $vcFile
-    Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/$vcFile" -OutFile $installer -UseBasicParsing
+    $installer = Join-Path $tmp $VcFile
+    Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/$VcFile" -OutFile $installer -UseBasicParsing
     $process = Start-Process -FilePath $installer -ArgumentList @('/install', '/quiet', '/norestart') -Wait -PassThru
     if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010 -and $process.ExitCode -ne 1638) {
       Fail-Xdt "Microsoft Visual C++ Runtime installer failed with exit code $($process.ExitCode)"
@@ -274,6 +268,25 @@ function Ensure-VcRuntime {
   } finally {
     Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue
   }
+}
+
+function Ensure-VcRuntime {
+  $arch = Get-XdtWindowsArch
+  if ($arch -eq 'arm64') {
+    if (-not (Test-VcRuntime)) {
+      Install-VcRuntimeFile 'vc_redist.arm64.exe'
+    }
+    # CC Switch currently ships as a Windows x64 executable, which runs on
+    # Windows ARM64 through x64 emulation, so install the x64 runtime too.
+    Install-VcRuntimeFile 'vc_redist.x64.exe'
+    return
+  }
+
+  if (Test-VcRuntime) {
+    return
+  }
+
+  Install-VcRuntimeFile 'vc_redist.x64.exe'
 
   if (-not (Test-VcRuntime)) {
     Fail-Xdt 'Microsoft Visual C++ Runtime installation finished but required DLLs were not found'
@@ -651,8 +664,17 @@ function Get-XdtPackagePath([string]$TempDir, [string]$Url) {
   return Join-Path $TempDir 'cc-switch-package'
 }
 
-function Install-XdtCcSwitchForWindows {
+function Get-XdtCcSwitchWindowsPackageArch {
   $arch = Get-XdtWindowsArch
+  if ($arch -eq 'arm64') {
+    Write-XdtLog 'Windows ARM64 detected; using CC Switch Windows x64 package through Windows x64 emulation'
+    return 'x64'
+  }
+  return $arch
+}
+
+function Install-XdtCcSwitchForWindows {
+  $arch = Get-XdtCcSwitchWindowsPackageArch
   Write-XdtLog "Using Windows $arch package for CC Switch"
   $baseUrl = if ([string]::IsNullOrWhiteSpace($env:XDT_INSTALLER_BASE)) {
     'https://xuedingtoken.com'
