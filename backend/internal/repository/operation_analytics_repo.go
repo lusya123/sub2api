@@ -361,7 +361,7 @@ func (r *operationAnalyticsRepository) fillOperationTrend(ctx context.Context, f
 	for rows.Next() {
 		var point service.OperationTrendPoint
 		if err := rows.Scan(&point.Bucket, &point.ActiveUsers, &point.Requests, &point.Tokens, &point.ActualCost); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		points[point.Bucket] = &point
@@ -421,7 +421,7 @@ func (r *operationAnalyticsRepository) fillOperationTrend(ctx context.Context, f
 		var bucket string
 		var newUsers, firstCallUsers, benefitUsers int64
 		if err := rows.Scan(&bucket, &newUsers, &firstCallUsers, &benefitUsers); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		point := points[bucket]
@@ -610,7 +610,7 @@ func (r *operationAnalyticsRepository) fillOperationCohorts(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("operation cohorts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	endDate := localDate(filter.EndTime, filter.Timezone)
 	for rows.Next() {
@@ -1225,7 +1225,7 @@ func (r *operationAnalyticsRepository) fillOperationChurn(ctx context.Context, f
 		// 历史曲线失败不致命，只记日志。
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var bucket string
 		var base, churned int64
@@ -1378,7 +1378,7 @@ func (r *operationAnalyticsRepository) fillOperationPyramid(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("operation pyramid: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type rawLevel struct {
 		key     string
@@ -1588,7 +1588,7 @@ func (r *operationAnalyticsRepository) fillOperationFinancial(ctx context.Contex
 	if err != nil {
 		return fmt.Errorf("operation financial arpu: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var p service.OperationArpuPoint
 		var cost float64
@@ -1639,7 +1639,7 @@ func (r *operationAnalyticsRepository) fillOperationProductMatrix(ctx context.Co
 	for rows.Next() {
 		var p service.OperationPlanMatrix
 		if err := rows.Scan(&p.GroupID, &p.Name, &p.ActiveUsers, &p.Revenue); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		if p.ActiveUsers > 0 {
@@ -1716,7 +1716,7 @@ func (r *operationAnalyticsRepository) fillOperationProductMatrix(ctx context.Co
 	if err != nil {
 		return fmt.Errorf("operation product models: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var m service.OperationModelHealth
 		var prevUsers int64
@@ -1734,7 +1734,7 @@ func (r *operationAnalyticsRepository) queryUserList(ctx context.Context, query 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	items := make([]service.OperationUserListItem, 0)
 	for rows.Next() {
@@ -1767,7 +1767,7 @@ func (r *operationAnalyticsRepository) queryDistribution(ctx context.Context, qu
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	items := make([]service.OperationDistributionItem, 0)
 	for rows.Next() {

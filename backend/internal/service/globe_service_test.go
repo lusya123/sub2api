@@ -63,7 +63,7 @@ func TestGlobeServiceSubscribeUnsubscribe(t *testing.T) {
 	select {
 	case _, ok := <-ch:
 		if ok {
-			// Acceptable: cached snapshot drained before close.
+			t.Log("cached snapshot drained before close")
 		}
 	case <-time.After(20 * time.Millisecond):
 		// Acceptable: no further events.
@@ -91,7 +91,7 @@ func TestGlobeServiceBuildsSnapshotFromRecentUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery(`(?s)FROM usage_logs ul\s+JOIN ip_geo_cache g ON g\.ip = ul\.ip_address.*ORDER BY MAX\(ul\.created_at\) DESC, calls DESC`).
 		WithArgs(int64(snapshotInterval / time.Millisecond)).
@@ -136,7 +136,7 @@ func TestGlobeServiceSnapshotDoesNotSerializeRawIP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery(`(?s)FROM usage_logs ul\s+JOIN ip_geo_cache g ON g\.ip = ul\.ip_address.*ORDER BY MAX\(ul\.created_at\) DESC, calls DESC`).
 		WithArgs(int64(snapshotInterval / time.Millisecond)).

@@ -89,13 +89,13 @@ type ServerPoint struct {
 // GlobeSummary is the heavyweight rollup served via REST (cached 30s) for the
 // public landing hero numbers — totals over 24h / 30d.
 type GlobeSummary struct {
-	GeneratedAt    time.Time              `json:"generated_at"`
-	Window24h      GlobeSummaryBucket     `json:"window_24h"`
-	WindowAllTime  GlobeSummaryBucket     `json:"window_all_time"`
-	TopCountries   []GlobeCountry         `json:"top_countries"`
-	HourlyHistory  []GlobeHourBucket      `json:"hourly_history_24h"`
-	ServerLocation *ServerPoint           `json:"server_location,omitempty"`
-	GeoCoverage    map[string]interface{} `json:"geo_coverage"`
+	GeneratedAt    time.Time          `json:"generated_at"`
+	Window24h      GlobeSummaryBucket `json:"window_24h"`
+	WindowAllTime  GlobeSummaryBucket `json:"window_all_time"`
+	TopCountries   []GlobeCountry     `json:"top_countries"`
+	HourlyHistory  []GlobeHourBucket  `json:"hourly_history_24h"`
+	ServerLocation *ServerPoint       `json:"server_location,omitempty"`
+	GeoCoverage    map[string]any     `json:"geo_coverage"`
 }
 
 // GlobeSummaryBucket is a totals-only block, used for both 24h and lifetime.
@@ -359,7 +359,7 @@ ORDER BY MAX(ul.created_at) DESC, calls DESC`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	arcs := make([]GlobeArc, 0, 256)
 	countriesByCC := make(map[string]*GlobeCountry, 32)
@@ -445,133 +445,6 @@ WHERE ul.created_at > NOW() - ($1 * interval '1 millisecond')
 	return snap, nil
 }
 
-func (s *GlobeService) fillReplayArcs(ctx context.Context, snap *GlobeSnapshot, lookback time.Duration, limit int, normalizeCalls bool) error {
-	if s == nil || s.db == nil || snap == nil {
-		return nil
-	}
-	seenIPs := make(map[string]struct{}, len(snap.Arcs))
-	for _, arc := range snap.Arcs {
-		if arc.IP != "" {
-			seenIPs[arc.IP] = struct{}{}
-		}
-	}
-	limited := limit > 0
-	remaining := 0
-	if limited {
-		remaining = limit - len(snap.Arcs)
-		if remaining <= 0 {
-			return nil
-		}
-	}
-
-	q := `
-SELECT
-  ul.ip_address,
-  COALESCE(g.country,        ''),
-  COALESCE(g.country_code,   ''),
-  COALESCE(g.region,         ''),
-  COALESCE(g.city,           ''),
-  COALESCE(g.lat,            0),
-  COALESCE(g.lng,            0),
-  COUNT(*) AS calls
-FROM usage_logs ul
-JOIN ip_geo_cache g ON g.ip = ul.ip_address
-WHERE ul.ip_address IS NOT NULL
-  AND g.country_code <> ''
-  AND NOT (COALESCE(g.lat, 0) = 0 AND COALESCE(g.lng, 0) = 0)`
-	args := make([]interface{}, 0, 2)
-	limitPlaceholder := 1
-	if lookback > 0 {
-		q += `
-  AND ul.created_at > NOW() - ($1 * interval '1 millisecond')`
-		args = append(args, int64(lookback/time.Millisecond))
-		limitPlaceholder = 2
-	}
-	q += `
-	GROUP BY ul.ip_address, g.country, g.country_code, g.region, g.city, g.lat, g.lng
-	ORDER BY MAX(ul.created_at) DESC, calls DESC`
-	if limited {
-		q += fmt.Sprintf(`
-	LIMIT $%d`, limitPlaceholder)
-		args = append(args, remaining)
-	}
-
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	arcs := make([]GlobeArc, 0, 16)
-	countriesByCC := make(map[string]*GlobeCountry, 16)
-	for _, c := range snap.Countries {
-		if c.CountryCode == "" {
-			continue
-		}
-		cp := c
-		countriesByCC[c.CountryCode] = &cp
-	}
-	for rows.Next() {
-		var (
-			ip, country, cc, region, city string
-			lat, lng                      float64
-			calls                         int
-		)
-		if err := rows.Scan(&ip, &country, &cc, &region, &city, &lat, &lng, &calls); err != nil {
-			return err
-		}
-		if _, ok := seenIPs[ip]; ok {
-			continue
-		}
-		seenIPs[ip] = struct{}{}
-		if normalizeCalls {
-			if calls < 1 {
-				calls = 1
-			} else if calls > snapshotReplayMaxCalls {
-				calls = snapshotReplayMaxCalls
-			}
-		}
-		arcs = append(arcs, GlobeArc{
-			IP:          ip,
-			CountryCode: cc,
-			Country:     country,
-			Region:      region,
-			City:        city,
-			Lat:         lat,
-			Lng:         lng,
-			Calls:       calls,
-			IPMask:      maskIP(ip),
-		})
-		c := countriesByCC[cc]
-		if c == nil {
-			c = &GlobeCountry{
-				CountryCode: cc,
-				Country:     country,
-				Lat:         lat,
-				Lng:         lng,
-			}
-			countriesByCC[cc] = c
-		}
-		c.Calls += calls
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	if len(arcs) == 0 {
-		return nil
-	}
-
-	countries := make([]GlobeCountry, 0, len(countriesByCC))
-	for _, c := range countriesByCC {
-		countries = append(countries, *c)
-	}
-	sort.Slice(countries, func(i, j int) bool { return countries[i].Calls > countries[j].Calls })
-
-	snap.Arcs = append(snap.Arcs, arcs...)
-	snap.Countries = countries
-	return nil
-}
-
 // ----- Summary (REST) -------------------------------------------------------
 
 func (s *GlobeService) buildSummary(ctx context.Context) (*GlobeSummary, error) {
@@ -579,7 +452,7 @@ func (s *GlobeService) buildSummary(ctx context.Context) (*GlobeSummary, error) 
 	out := &GlobeSummary{
 		GeneratedAt:    now,
 		ServerLocation: defaultServerPoint(),
-		GeoCoverage:    map[string]interface{}{},
+		GeoCoverage:    map[string]any{},
 	}
 
 	if s.db == nil {
@@ -774,7 +647,7 @@ LIMIT $1`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var ips []string
 	for rows.Next() {
@@ -821,7 +694,7 @@ func (s *GlobeService) batchGeoLookup(ctx context.Context, ips []string) ([]ipAp
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("ip-api: %d: %s", resp.StatusCode, string(b))
@@ -857,7 +730,7 @@ func emptySummary() *GlobeSummary {
 	return &GlobeSummary{
 		GeneratedAt:    time.Now(),
 		ServerLocation: defaultServerPoint(),
-		GeoCoverage:    map[string]interface{}{},
+		GeoCoverage:    map[string]any{},
 	}
 }
 

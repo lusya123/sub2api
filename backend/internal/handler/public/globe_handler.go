@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -120,13 +119,4 @@ func (h *GlobeHandler) Stream(c *gin.Context) {
 			flusher.Flush()
 		}
 	}
-}
-
-// parsePosInt is a tiny helper for query params we may add later.
-func parsePosInt(s string, fallback int) int {
-	n, err := strconv.Atoi(s)
-	if err != nil || n <= 0 {
-		return fallback
-	}
-	return n
 }

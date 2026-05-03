@@ -18,9 +18,9 @@ import (
 )
 
 type apiResponse struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 type snapshotCacheEntry struct {
@@ -42,7 +42,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	db.SetMaxOpenConns(2)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(5 * time.Minute)
