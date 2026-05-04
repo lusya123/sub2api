@@ -564,11 +564,19 @@ function Find-CcSwitch {
 
 function Test-XdtImportSupport([string]$CcSwitch) {
   if (-not $CcSwitch) { return $false }
+  $tmp = Join-Path ([IO.Path]::GetTempPath()) ("xdt-ccswitch-help-" + [Guid]::NewGuid().ToString())
+  $stdout = "$tmp.out"
+  $stderr = "$tmp.err"
   try {
-    $process = Start-Process -FilePath $CcSwitch -ArgumentList @('xdt-import', '--help') -Wait -PassThru -WindowStyle Hidden
-    return $process.ExitCode -eq 0
+    $process = Start-Process -FilePath $CcSwitch -ArgumentList @('xdt-import', '--help') -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $text = ''
+    if (Test-Path $stdout) { $text += Get-Content -Raw -Path $stdout }
+    if (Test-Path $stderr) { $text += Get-Content -Raw -Path $stderr }
+    return ($process.ExitCode -eq 0 -and $text -match 'xdt-import')
   } catch {
     return $false
+  } finally {
+    Remove-Item -Path $stdout,$stderr -Force -ErrorAction SilentlyContinue
   }
 }
 

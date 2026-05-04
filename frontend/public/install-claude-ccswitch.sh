@@ -151,7 +151,18 @@ detect_ccswitch() {
 
 supports_xdt_import() {
   local bin="$1"
-  "$bin" xdt-import --help >/dev/null 2>&1
+  local help_output=""
+  help_output="$("$bin" xdt-import --help 2>&1 || true)"
+  if printf '%s\n' "$help_output" | grep -qi 'xdt-import'; then
+    return 0
+  fi
+
+  if command -v strings >/dev/null 2>&1 &&
+    strings -a "$bin" 2>/dev/null | grep -q 'Usage: cc-switch xdt-import'; then
+    return 0
+  fi
+
+  return 1
 }
 
 ensure_node_and_claude() {
