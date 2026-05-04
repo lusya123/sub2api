@@ -282,8 +282,8 @@ const copyLabel = computed(() => (
 const description = computed(() => (
   selectedClient.value === 'claude'
     ? safeT('keys.clientInstallModal.claudeDescription', {
-      zh: '为当前 API Key 生成 Claude Code 一键安装命令。脚本会安装官方 npm 包并把代理地址持久化到本机环境变量中。',
-      en: 'Generate a one-click Claude Code deployment command for this API key. The script installs the official npm package and persists the proxy endpoint in local environment variables.',
+      zh: '为当前 API Key 生成 Claude Code 一键安装命令。脚本会安装 Claude Code，确保增强版 CC Switch 可用，自动导入并切换到当前供应商。',
+      en: 'Generate a one-click Claude Code deployment command for this API key. The script installs Claude Code, ensures the enhanced CC Switch build is available, imports this provider, and switches to it automatically.',
     })
     : safeT('keys.clientInstallModal.openclawDescription', {
       zh: '为当前 API Key 生成 OpenClaw 一键部署命令。脚本会安装官方 openclaw npm 包，并写入 ~/.openclaw 配置。',
@@ -294,8 +294,8 @@ const description = computed(() => (
 const note = computed(() => {
   if (selectedClient.value === 'claude') {
     return safeT('keys.clientInstallModal.claudeNote', {
-      zh: 'Claude Code 脚本安装的是官方 @anthropic-ai/claude-code 包，包下载优先使用 npmmirror。安装后建议重新打开终端再执行 claude。',
-      en: 'The Claude Code script installs the official @anthropic-ai/claude-code package and prefers npmmirror for package downloads. Reopen your terminal after installation, then run claude.',
+      zh: '命令里的 XDT_TOKEN/XDT_API_URL 只用于本次安装脚本传参。脚本会安装官方 Claude Code，导入并切换 CC Switch 供应商，然后启动 claude。',
+      en: 'XDT_TOKEN/XDT_API_URL are only temporary inputs for this installer run. The script installs official Claude Code, imports and switches the CC Switch provider, then starts claude.',
     })
   }
   return selectedOs.value === 'windows'
@@ -317,8 +317,8 @@ const currentSummary = computed(() => {
   if (selectedClient.value === 'claude') {
     return selectedOs.value === 'unix'
       ? safeT('keys.clientInstallModal.summary.claudeUnix', {
-        zh: 'Claude Code · macOS · CC Switch 自动导入',
-        en: 'Claude Code · macOS · CC Switch auto import',
+        zh: 'Claude Code · macOS / Linux / WSL · CC Switch 自动导入',
+        en: 'Claude Code · macOS / Linux / WSL · CC Switch auto import',
       })
       : safeT('keys.clientInstallModal.summary.claudeWindows', {
         zh: 'Claude Code · Windows PowerShell',
@@ -343,7 +343,7 @@ const currentCommand = computed(() => {
     if (selectedOs.value === 'unix') {
       return `XDT_TOKEN="${props.apiKey}" XDT_API_URL="${effectiveApiUrl.value}" bash -c "$(curl -fsSL ${scriptBaseUrl.value}/install-claude-ccswitch.sh)"`
     }
-    return `$env:XDT_TOKEN='${escapePowerShell(props.apiKey)}'; $env:XDT_API_URL='${escapePowerShell(effectiveApiUrl.value)}'; irm ${scriptBaseUrl.value}/install-claude-ccswitch-win.ps1 | iex`
+    return `$env:XDT_TOKEN='${escapePowerShell(props.apiKey)}'; $env:XDT_API_URL='${escapePowerShell(effectiveApiUrl.value)}'; try { irm ${scriptBaseUrl.value}/install-claude-ccswitch-win.ps1 | iex } finally { Remove-Item Env:XDT_TOKEN,Env:XDT_API_URL -ErrorAction SilentlyContinue }`
   }
 
   if (selectedOs.value === 'unix') {
