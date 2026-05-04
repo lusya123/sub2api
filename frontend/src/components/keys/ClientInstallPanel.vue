@@ -341,7 +341,8 @@ const currentSummary = computed(() => {
 const currentCommand = computed(() => {
   if (selectedClient.value === 'claude') {
     if (selectedOs.value === 'unix') {
-      return `XDT_TOKEN="${props.apiKey}" XDT_API_URL="${effectiveApiUrl.value}" bash -c "$(curl -fsSL ${scriptBaseUrl.value}/install-claude-ccswitch.sh)"`
+      const scriptUrl = `${scriptBaseUrl.value}/install-claude-ccswitch.sh`
+      return `XDT_TOKEN="${props.apiKey}" XDT_API_URL="${effectiveApiUrl.value}" bash -c "$(curl -fsSL ${scriptUrl} || wget -qO- ${scriptUrl})"`
     }
     return `$env:XDT_TOKEN='${escapePowerShell(props.apiKey)}'; $env:XDT_API_URL='${escapePowerShell(effectiveApiUrl.value)}'; try { irm ${scriptBaseUrl.value}/install-claude-ccswitch-win.ps1 | iex } finally { Remove-Item Env:XDT_TOKEN,Env:XDT_API_URL -ErrorAction SilentlyContinue }`
   }
