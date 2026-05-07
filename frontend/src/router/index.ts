@@ -767,7 +767,7 @@ function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: bo
   return false
 }
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   // 开始导航加载状态
   navigationLoading.startNavigation()
 
@@ -863,9 +863,14 @@ router.beforeEach((to, _from, next) => {
     }
   }
 
-  if (to.meta.requiresChatPage && !isFeatureFlagEnabled(FeatureFlags.chatPage)) {
-    next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
-    return
+  if (to.meta.requiresChatPage) {
+    if (!appStore.publicSettingsLoaded) {
+      await appStore.fetchPublicSettings()
+    }
+    if (!isFeatureFlagEnabled(FeatureFlags.chatPage)) {
+      next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+      return
+    }
   }
 
   // 简易模式下限制访问某些页面
