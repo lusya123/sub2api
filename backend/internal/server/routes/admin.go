@@ -92,6 +92,9 @@ func RegisterAdminRoutes(
 		// 渠道监控
 		registerChannelMonitorRoutes(admin, h)
 
+		// 模型广场 / 公开状态页配置
+		registerModelMarketplaceRoutes(admin, h)
+
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
 
@@ -616,6 +619,15 @@ func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		templates.DELETE("/:id", h.Admin.ChannelMonitorTemplate.Delete)
 		templates.GET("/:id/monitors", h.Admin.ChannelMonitorTemplate.AssociatedMonitors)
 		templates.POST("/:id/apply", h.Admin.ChannelMonitorTemplate.Apply)
+	}
+}
+
+func registerModelMarketplaceRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	marketplace := admin.Group("/model-marketplace")
+	{
+		marketplace.GET("", h.Admin.ModelMarketplace.List)
+		marketplace.GET("/status-config", h.Admin.ModelMarketplace.GetPublicStatusConfig)
+		marketplace.PUT("/status-config", h.Admin.ModelMarketplace.UpdatePublicStatusConfig)
 	}
 }
 

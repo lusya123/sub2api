@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
+	"github.com/Wei-Shaw/sub2api/internal/handler/public"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/google/wire"
@@ -36,6 +37,7 @@ func ProvideAdminHandlers(
 	channelHandler *admin.ChannelHandler,
 	channelMonitorHandler *admin.ChannelMonitorHandler,
 	channelMonitorTemplateHandler *admin.ChannelMonitorRequestTemplateHandler,
+	modelMarketplaceHandler *admin.ModelMarketplaceHandler,
 	contentModerationHandler *admin.ContentModerationHandler,
 	paymentHandler *admin.PaymentHandler,
 	affiliateHandler *admin.AffiliateHandler,
@@ -68,6 +70,7 @@ func ProvideAdminHandlers(
 		Channel:                channelHandler,
 		ChannelMonitor:         channelMonitorHandler,
 		ChannelMonitorTemplate: channelMonitorTemplateHandler,
+		ModelMarketplace:       modelMarketplaceHandler,
 		ContentModeration:      contentModerationHandler,
 		Payment:                paymentHandler,
 		Affiliate:              affiliateHandler,
@@ -105,6 +108,7 @@ func ProvideHandlers(
 	paymentHandler *PaymentHandler,
 	paymentWebhookHandler *PaymentWebhookHandler,
 	availableChannelHandler *AvailableChannelHandler,
+	publicStatusHandler *public.PublicStatusHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 ) *Handlers {
@@ -128,6 +132,7 @@ func ProvideHandlers(
 		Payment:          paymentHandler,
 		PaymentWebhook:   paymentWebhookHandler,
 		AvailableChannel: availableChannelHandler,
+		PublicStatus:     publicStatusHandler,
 	}
 }
 
@@ -152,6 +157,7 @@ var ProviderSet = wire.NewSet(
 	NewPaymentHandler,
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
+	public.NewPublicStatusHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,
@@ -181,6 +187,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewChannelHandler,
 	admin.NewChannelMonitorHandler,
 	admin.NewChannelMonitorRequestTemplateHandler,
+	admin.NewModelMarketplaceHandler,
 	admin.NewContentModerationHandler,
 	admin.NewPaymentHandler,
 	admin.NewAffiliateHandler,

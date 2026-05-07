@@ -503,6 +503,10 @@ var ProviderSet = wire.NewSet(
 	NewErrorPassthroughService,
 	NewTLSFingerprintProfileService,
 	NewDigestSessionStore,
+	NewChannelHealthRecorder,
+	ProvideStatusPageService,
+	NewModelMarketplaceService,
+	ProvideChannelHealthProber,
 	ProvideIdempotencyCoordinator,
 	ProvideSystemOperationLockService,
 	ProvideIdempotencyCleanupService,
@@ -558,4 +562,20 @@ func ProvideChannelMonitorRunner(svc *ChannelMonitorService, settingService *Set
 	svc.SetScheduler(r)
 	r.Start()
 	return r
+}
+
+func ProvideStatusPageService(entClient *dbent.Client, settingRepo SettingRepository) *StatusPageService {
+	return NewStatusPageService(entClient).WithSettingRepo(settingRepo)
+}
+
+func ProvideChannelHealthProber(
+	entClient *dbent.Client,
+	recorder *ChannelHealthRecorder,
+	tester *AccountTestService,
+	settingRepo SettingRepository,
+	gateway *GatewayService,
+) *ChannelHealthProber {
+	return NewChannelHealthProber(entClient, recorder, tester).
+		WithSettingRepo(settingRepo).
+		WithGatewayService(gateway)
 }

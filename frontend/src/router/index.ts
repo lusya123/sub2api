@@ -145,6 +145,16 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/status',
+    name: 'Status',
+    component: () => import('@/views/status/StatusView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Status',
+      titleKey: 'status.title'
+    }
+  },
+  {
     path: '/legal/:documentId',
     name: 'LegalDocument',
     component: () => import('@/views/public/LegalDocumentView.vue'),
@@ -413,6 +423,14 @@ const routes: RouteRecordRaw[] = [
       title: 'Model Marketplace',
       titleKey: 'admin.modelMarketplace.title'
     }
+  },
+  {
+    path: '/admin/model-health',
+    redirect: '/admin/model-marketplace'
+  },
+  {
+    path: '/models',
+    redirect: '/admin/model-marketplace'
   },
   {
     path: '/admin/users',
@@ -702,7 +720,7 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/legal']
+const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/legal', '/status']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',
