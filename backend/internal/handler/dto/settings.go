@@ -107,20 +107,23 @@ type SystemSettings struct {
 	GoogleOAuthRedirectURL            string `json:"google_oauth_redirect_url"`
 	GoogleOAuthFrontendRedirectURL    string `json:"google_oauth_frontend_redirect_url"`
 
-	SiteName                    string           `json:"site_name"`
-	SiteLogo                    string           `json:"site_logo"`
-	SiteSubtitle                string           `json:"site_subtitle"`
-	APIBaseURL                  string           `json:"api_base_url"`
-	ContactInfo                 string           `json:"contact_info"`
-	DocURL                      string           `json:"doc_url"`
-	HomeContent                 string           `json:"home_content"`
-	HideCcsImportButton         bool             `json:"hide_ccs_import_button"`
-	PurchaseSubscriptionEnabled bool             `json:"purchase_subscription_enabled"`
-	PurchaseSubscriptionURL     string           `json:"purchase_subscription_url"`
-	TableDefaultPageSize        int              `json:"table_default_page_size"`
-	TablePageSizeOptions        []int            `json:"table_page_size_options"`
-	CustomMenuItems             []CustomMenuItem `json:"custom_menu_items"`
-	CustomEndpoints             []CustomEndpoint `json:"custom_endpoints"`
+	SiteName                        string           `json:"site_name"`
+	SiteLogo                        string           `json:"site_logo"`
+	SiteSubtitle                    string           `json:"site_subtitle"`
+	APIBaseURL                      string           `json:"api_base_url"`
+	ContactInfo                     string           `json:"contact_info"`
+	DocURL                          string           `json:"doc_url"`
+	HomeContent                     string           `json:"home_content"`
+	HideCcsImportButton             bool             `json:"hide_ccs_import_button"`
+	PurchaseSubscriptionEnabled     bool             `json:"purchase_subscription_enabled"`
+	PurchaseSubscriptionMode        string           `json:"purchase_subscription_mode"`
+	PurchaseSubscriptionEmbeddedURL string           `json:"purchase_subscription_embedded_url"`
+	PurchaseSubscriptionRedirectURL string           `json:"purchase_subscription_redirect_url"`
+	PurchaseSubscriptionURL         string           `json:"purchase_subscription_url"`
+	TableDefaultPageSize            int              `json:"table_default_page_size"`
+	TablePageSizeOptions            []int            `json:"table_page_size_options"`
+	CustomMenuItems                 []CustomMenuItem `json:"custom_menu_items"`
+	CustomEndpoints                 []CustomEndpoint `json:"custom_endpoints"`
 
 	DefaultConcurrency           int                          `json:"default_concurrency"`
 	DefaultBalance               float64                      `json:"default_balance"`
@@ -256,6 +259,9 @@ type PublicSettings struct {
 	HomeContent                      string                   `json:"home_content"`
 	HideCcsImportButton              bool                     `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled      bool                     `json:"purchase_subscription_enabled"`
+	PurchaseSubscriptionMode         string                   `json:"purchase_subscription_mode"`
+	PurchaseSubscriptionEmbeddedURL  string                   `json:"purchase_subscription_embedded_url"`
+	PurchaseSubscriptionRedirectURL  string                   `json:"purchase_subscription_redirect_url"`
 	PurchaseSubscriptionURL          string                   `json:"purchase_subscription_url"`
 	TableDefaultPageSize             int                      `json:"table_default_page_size"`
 	TablePageSizeOptions             []int                    `json:"table_page_size_options"`

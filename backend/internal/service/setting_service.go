@@ -586,7 +586,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyHomeContent,
 		SettingKeyHideCcsImportButton,
 		SettingKeyPurchaseSubscriptionEnabled,
+		SettingKeyPurchaseSubscriptionMode,
 		SettingKeyPurchaseSubscriptionURL,
+		SettingKeyPurchaseSubscriptionEmbeddedURL,
+		SettingKeyPurchaseSubscriptionRedirectURL,
 		SettingKeyTableDefaultPageSize,
 		SettingKeyTablePageSizeOptions,
 		SettingKeyCustomMenuItems,
@@ -668,6 +671,12 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		settings[SettingKeyTableDefaultPageSize],
 		settings[SettingKeyTablePageSizeOptions],
 	)
+	purchaseEmbeddedURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionEmbeddedURL])
+	if purchaseEmbeddedURL == "" {
+		purchaseEmbeddedURL = strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL])
+	}
+	purchaseRedirectURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionRedirectURL])
+	purchaseMode := NormalizePurchaseSubscriptionMode(settings[SettingKeyPurchaseSubscriptionMode])
 	loginAgreementDocuments := parseLoginAgreementDocuments(settings[SettingKeyLoginAgreementDocuments])
 	loginAgreementUpdatedAt := strings.TrimSpace(settings[SettingKeyLoginAgreementUpdatedAt])
 	if loginAgreementUpdatedAt == "" {
@@ -704,7 +713,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		HomeContent:                      settings[SettingKeyHomeContent],
 		HideCcsImportButton:              settings[SettingKeyHideCcsImportButton] == "true",
 		PurchaseSubscriptionEnabled:      settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
-		PurchaseSubscriptionURL:          strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
+		PurchaseSubscriptionMode:         purchaseMode,
+		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
+		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		TableDefaultPageSize:             tableDefaultPageSize,
 		TablePageSizeOptions:             tablePageSizeOptions,
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
@@ -860,6 +872,9 @@ type PublicSettingsInjectionPayload struct {
 	HomeContent                      string                   `json:"home_content"`
 	HideCcsImportButton              bool                     `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled      bool                     `json:"purchase_subscription_enabled"`
+	PurchaseSubscriptionMode         string                   `json:"purchase_subscription_mode"`
+	PurchaseSubscriptionEmbeddedURL  string                   `json:"purchase_subscription_embedded_url,omitempty"`
+	PurchaseSubscriptionRedirectURL  string                   `json:"purchase_subscription_redirect_url,omitempty"`
 	PurchaseSubscriptionURL          string                   `json:"purchase_subscription_url"`
 	TableDefaultPageSize             int                      `json:"table_default_page_size"`
 	TablePageSizeOptions             []int                    `json:"table_page_size_options"`
@@ -925,6 +940,9 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		HomeContent:                      settings.HomeContent,
 		HideCcsImportButton:              settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:      settings.PurchaseSubscriptionEnabled,
+		PurchaseSubscriptionMode:         settings.PurchaseSubscriptionMode,
+		PurchaseSubscriptionEmbeddedURL:  settings.PurchaseSubscriptionEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:  settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:          settings.PurchaseSubscriptionURL,
 		TableDefaultPageSize:             settings.TableDefaultPageSize,
 		TablePageSizeOptions:             settings.TablePageSizeOptions,
@@ -1155,7 +1173,7 @@ func safeRawJSONArray(raw string) json.RawMessage {
 }
 
 // GetFrameSrcOrigins returns deduplicated http(s) origins from home_content URL,
-// purchase_subscription_url, and all custom_menu_items URLs. Used by the router layer for CSP frame-src injection.
+// purchase subscription embed URLs, and all custom_menu_items URLs. Used by the router layer for CSP frame-src injection.
 func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, error) {
 	settings, err := s.GetPublicSettings(ctx)
 	if err != nil {
@@ -1177,9 +1195,10 @@ func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, erro
 	// home content URL (when home_content is set to a URL for iframe embedding)
 	addOrigin(settings.HomeContent)
 
-	// purchase subscription URL
+	// Purchase subscription embed URL. Keep this permissive even when current mode is
+	// redirect so admins can switch modes without requiring a CSP refresh boundary.
 	if settings.PurchaseSubscriptionEnabled {
-		addOrigin(settings.PurchaseSubscriptionURL)
+		addOrigin(settings.PurchaseSubscriptionEmbeddedURL)
 	}
 
 	// all custom menu items (including admin-only, since CSP must allow all iframes)
@@ -1496,7 +1515,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyHomeContent] = settings.HomeContent
 	updates[SettingKeyHideCcsImportButton] = strconv.FormatBool(settings.HideCcsImportButton)
 	updates[SettingKeyPurchaseSubscriptionEnabled] = strconv.FormatBool(settings.PurchaseSubscriptionEnabled)
-	updates[SettingKeyPurchaseSubscriptionURL] = strings.TrimSpace(settings.PurchaseSubscriptionURL)
+	updates[SettingKeyPurchaseSubscriptionMode] = NormalizePurchaseSubscriptionMode(settings.PurchaseSubscriptionMode)
+	updates[SettingKeyPurchaseSubscriptionEmbeddedURL] = strings.TrimSpace(settings.PurchaseSubscriptionEmbeddedURL)
+	updates[SettingKeyPurchaseSubscriptionRedirectURL] = strings.TrimSpace(settings.PurchaseSubscriptionRedirectURL)
+	updates[SettingKeyPurchaseSubscriptionURL] = strings.TrimSpace(settings.PurchaseSubscriptionEmbeddedURL)
 	tableDefaultPageSize, tablePageSizeOptions := normalizeTablePreferences(
 		settings.TableDefaultPageSize,
 		settings.TablePageSizeOptions,
@@ -2236,7 +2258,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeySiteName:                                 "Sub2API",
 		SettingKeySiteLogo:                                 "",
 		SettingKeyPurchaseSubscriptionEnabled:              "false",
+		SettingKeyPurchaseSubscriptionMode:                 PurchaseSubscriptionModeEmbedded,
 		SettingKeyPurchaseSubscriptionURL:                  "",
+		SettingKeyPurchaseSubscriptionEmbeddedURL:          "",
+		SettingKeyPurchaseSubscriptionRedirectURL:          "",
 		SettingKeyTableDefaultPageSize:                     "20",
 		SettingKeyTablePageSizeOptions:                     "[10,20,50,100]",
 		SettingKeyCustomMenuItems:                          "[]",
@@ -2387,6 +2412,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	if loginAgreementUpdatedAt == "" {
 		loginAgreementUpdatedAt = defaultLoginAgreementDate
 	}
+	purchaseEmbeddedURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionEmbeddedURL])
+	if purchaseEmbeddedURL == "" {
+		purchaseEmbeddedURL = strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL])
+	}
+	purchaseRedirectURL := strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionRedirectURL])
+	purchaseMode := NormalizePurchaseSubscriptionMode(settings[SettingKeyPurchaseSubscriptionMode])
 	result := &SystemSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
 		EmailVerifyEnabled:               emailVerifyEnabled,
@@ -2418,7 +2449,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		HomeContent:                      settings[SettingKeyHomeContent],
 		HideCcsImportButton:              settings[SettingKeyHideCcsImportButton] == "true",
 		PurchaseSubscriptionEnabled:      settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
-		PurchaseSubscriptionURL:          strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
+		PurchaseSubscriptionMode:         purchaseMode,
+		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
+		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
+		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
 		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",

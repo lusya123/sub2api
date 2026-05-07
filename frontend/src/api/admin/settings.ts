@@ -9,6 +9,7 @@ import type {
   CustomMenuItem,
   LoginAgreementDocument,
   NotifyEmailEntry,
+  PurchaseSubscriptionMode,
 } from "@/types";
 
 export interface DefaultSubscriptionSetting {
@@ -378,6 +379,11 @@ export interface SystemSettings {
   doc_url: string;
   home_content: string;
   hide_ccs_import_button: boolean;
+  purchase_subscription_enabled: boolean;
+  purchase_subscription_mode: PurchaseSubscriptionMode;
+  purchase_subscription_embedded_url: string;
+  purchase_subscription_redirect_url: string;
+  purchase_subscription_url: string;
   table_default_page_size: number;
   table_page_size_options: number[];
   backend_mode_enabled: boolean;
@@ -597,6 +603,11 @@ export interface UpdateSettingsRequest {
   doc_url?: string;
   home_content?: string;
   hide_ccs_import_button?: boolean;
+  purchase_subscription_enabled?: boolean;
+  purchase_subscription_mode?: PurchaseSubscriptionMode;
+  purchase_subscription_embedded_url?: string;
+  purchase_subscription_redirect_url?: string;
+  purchase_subscription_url?: string;
   table_default_page_size?: number;
   table_page_size_options?: number[];
   backend_mode_enabled?: boolean;

@@ -69,27 +69,43 @@
               </div>
             </template>
             <!-- Normal item (no children) -->
-            <router-link
-              v-else
-              :to="item.path"
-              class="sidebar-link mb-1"
-              :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
-              :title="sidebarCollapsed ? item.label : undefined"
-              :id="
-                item.path === '/admin/accounts'
-                  ? 'sidebar-channel-manage'
-                  : item.path === '/admin/groups'
-                    ? 'sidebar-group-manage'
-                    : item.path === '/admin/redeem'
-                      ? 'sidebar-wallet'
-                      : undefined
-              "
-              @click="handleMenuItemClick(item.path)"
-            >
-              <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
-              <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
-              <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
-            </router-link>
+            <template v-else>
+              <a
+                v-if="isExternalPurchaseItem(item.path)"
+                :href="purchaseRedirectUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="sidebar-link mb-1"
+                :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
+                :title="sidebarCollapsed ? item.label : undefined"
+                @click="handleMenuItemClick(item.path)"
+              >
+                <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
+                <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
+                <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+              </a>
+              <router-link
+                v-else
+                :to="item.path"
+                class="sidebar-link mb-1"
+                :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
+                :title="sidebarCollapsed ? item.label : undefined"
+                :id="
+                  item.path === '/admin/accounts'
+                    ? 'sidebar-channel-manage'
+                    : item.path === '/admin/groups'
+                      ? 'sidebar-group-manage'
+                      : item.path === '/admin/redeem'
+                        ? 'sidebar-wallet'
+                        : undefined
+                "
+                @click="handleMenuItemClick(item.path)"
+              >
+                <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
+                <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
+                <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+              </router-link>
+            </template>
           </template>
         </div>
 
@@ -101,40 +117,70 @@
             </span>
           </div>
 
-          <router-link
-            v-for="item in personalNavItems"
-            :key="item.path"
-            :to="item.path"
-            class="sidebar-link mb-1"
-            :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
-            :title="sidebarCollapsed ? item.label : undefined"
-            :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
-            @click="handleMenuItemClick(item.path)"
-          >
-            <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
-            <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
-            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
-          </router-link>
+          <template v-for="item in personalNavItems" :key="item.path">
+            <a
+              v-if="isExternalPurchaseItem(item.path)"
+              :href="purchaseRedirectUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="sidebar-link mb-1"
+              :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
+              :title="sidebarCollapsed ? item.label : undefined"
+              @click="handleMenuItemClick(item.path)"
+            >
+              <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
+              <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
+              <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            </a>
+            <router-link
+              v-else
+              :to="item.path"
+              class="sidebar-link mb-1"
+              :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
+              :title="sidebarCollapsed ? item.label : undefined"
+              :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
+              @click="handleMenuItemClick(item.path)"
+            >
+              <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
+              <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
+              <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            </router-link>
+          </template>
         </div>
       </template>
 
       <!-- Regular User View -->
       <template v-else-if="!appStore.backendModeEnabled">
         <div class="sidebar-section">
-          <router-link
-            v-for="item in userNavItems"
-            :key="item.path"
-            :to="item.path"
-            class="sidebar-link mb-1"
-            :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
-            :title="sidebarCollapsed ? item.label : undefined"
-            :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
-            @click="handleMenuItemClick(item.path)"
-          >
-            <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
-            <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
-            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
-          </router-link>
+          <template v-for="item in userNavItems" :key="item.path">
+            <a
+              v-if="isExternalPurchaseItem(item.path)"
+              :href="purchaseRedirectUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="sidebar-link mb-1"
+              :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
+              :title="sidebarCollapsed ? item.label : undefined"
+              @click="handleMenuItemClick(item.path)"
+            >
+              <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
+              <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
+              <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            </a>
+            <router-link
+              v-else
+              :to="item.path"
+              class="sidebar-link mb-1"
+              :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
+              :title="sidebarCollapsed ? item.label : undefined"
+              :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
+              @click="handleMenuItemClick(item.path)"
+            >
+              <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
+              <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
+              <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            </router-link>
+          </template>
         </div>
       </template>
     </nav>
@@ -187,6 +233,11 @@ import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } 
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
+import {
+  getPurchaseRedirectUrl,
+  isAbsoluteHttpUrl,
+  normalizePurchaseSubscriptionMode
+} from '@/utils/purchase'
 
 interface NavItem {
   path: string
@@ -237,6 +288,10 @@ const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
 const isAdmin = computed(() => authStore.isAdmin)
 const isDark = ref(document.documentElement.classList.contains('dark'))
+const purchaseMode = computed(() =>
+  normalizePurchaseSubscriptionMode(appStore.cachedPublicSettings?.purchase_subscription_mode)
+)
+const purchaseRedirectUrl = computed(() => getPurchaseRedirectUrl(appStore.cachedPublicSettings))
 
 // Track which parent nav groups are expanded
 const expandedGroups = ref<Set<string>>(new Set())
@@ -648,6 +703,12 @@ const ChevronDownIcon = {
 // yet. Admin-only flags (not in public settings) stay inline below.
 const flagChannelMonitor = makeSidebarFlag(FeatureFlags.channelMonitor)
 const flagPayment = makeSidebarFlag(FeatureFlags.payment)
+const flagPurchase = () => {
+  const payment = flagPayment()
+  const externalPurchase = appStore.cachedPublicSettings?.purchase_subscription_enabled
+  if (payment === false && externalPurchase !== true) return false
+  return true
+}
 const flagChatPage = makeSidebarFlag(FeatureFlags.chatPage)
 const flagAvailableChannels = makeSidebarFlag(FeatureFlags.availableChannels)
 const flagAffiliate = makeSidebarFlag(FeatureFlags.affiliate)
@@ -674,7 +735,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
-    { path: '/purchase', label: t('nav.buySubscription'), icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
+    { path: '/purchase', label: t('nav.buySubscription'), icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPurchase },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
@@ -827,6 +888,14 @@ function handleMenuItemClick(itemPath: string) {
   if (selector && onboardingStore.isCurrentStep(selector)) {
     onboardingStore.nextStep(500)
   }
+}
+
+function isExternalPurchaseItem(itemPath: string): boolean {
+  return (
+    itemPath === '/purchase' &&
+    purchaseMode.value === 'redirect' &&
+    isAbsoluteHttpUrl(purchaseRedirectUrl.value)
+  )
 }
 
 function isActive(path: string): boolean {

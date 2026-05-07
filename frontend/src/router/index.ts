@@ -291,14 +291,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/purchase',
     name: 'PurchaseSubscription',
-    component: () => import('@/views/user/PaymentView.vue'),
+    component: () => import('@/views/user/PurchaseView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
       title: 'Purchase Subscription',
       titleKey: 'nav.buySubscription',
-      descriptionKey: 'purchase.description',
-      requiresPayment: true
+      descriptionKey: 'purchase.description'
     }
   },
   {

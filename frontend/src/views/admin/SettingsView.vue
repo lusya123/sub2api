@@ -4211,6 +4211,105 @@
             </div>
           </div>
 
+          <!-- Purchase Subscription Page -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.purchase.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.purchase.description") }}
+              </p>
+            </div>
+            <div class="space-y-6 p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="font-medium text-gray-900 dark:text-white">
+                    {{ t("admin.settings.purchase.enabled") }}
+                  </label>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.purchase.enabledHint") }}
+                  </p>
+                </div>
+                <Toggle v-model="form.purchase_subscription_enabled" />
+              </div>
+
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.purchase.mode") }}
+                </label>
+                <select v-model="form.purchase_subscription_mode" class="input">
+                  <option value="embedded">
+                    {{ t("admin.settings.purchase.modeEmbedded") }}
+                  </option>
+                  <option value="redirect">
+                    {{ t("admin.settings.purchase.modeRedirect") }}
+                  </option>
+                </select>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.purchase.modeHint") }}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.purchase.embeddedUrl") }}
+                </label>
+                <input
+                  v-model="form.purchase_subscription_embedded_url"
+                  type="url"
+                  class="input font-mono text-sm"
+                  :placeholder="t('admin.settings.purchase.embeddedUrlPlaceholder')"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.purchase.embeddedUrlHint") }}
+                </p>
+                <p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  {{ t("admin.settings.purchase.iframeWarning") }}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.purchase.redirectUrl") }}
+                </label>
+                <input
+                  v-model="form.purchase_subscription_redirect_url"
+                  type="url"
+                  class="input font-mono text-sm"
+                  :placeholder="t('admin.settings.purchase.redirectUrlPlaceholder')"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.purchase.redirectUrlHint") }}
+                </p>
+              </div>
+
+              <div class="flex items-center gap-2 text-sm">
+                <Icon name="document" size="sm" class="text-gray-400" />
+                <a
+                  href="https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/docs/ADMIN_PAYMENT_INTEGRATION_API.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  {{ t("admin.settings.purchase.integrationDoc") }}
+                </a>
+                <span class="text-gray-400 dark:text-gray-500">-</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.purchase.integrationDocHint") }}
+                </span>
+              </div>
+            </div>
+          </div>
+
           <!-- Custom Menu Items -->
           <div class="card">
             <div
@@ -6105,6 +6204,7 @@ import type {
   AdminGroup,
   LoginAgreementDocument,
   NotifyEmailEntry,
+  PurchaseSubscriptionMode,
   Proxy,
 } from "@/types";
 import type { ProviderInstance } from "@/types/payment";
@@ -6369,6 +6469,11 @@ const form = reactive<SettingsForm>({
   home_content: "",
   backend_mode_enabled: false,
   hide_ccs_import_button: false,
+  purchase_subscription_enabled: false,
+  purchase_subscription_mode: "embedded" as PurchaseSubscriptionMode,
+  purchase_subscription_embedded_url: "",
+  purchase_subscription_redirect_url: "",
+  purchase_subscription_url: "",
   payment_enabled: false,
   risk_control_enabled: false,
   payment_min_amount: 1,
@@ -7116,6 +7221,15 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.purchase_subscription_mode =
+      settings.purchase_subscription_mode || "embedded";
+    form.purchase_subscription_embedded_url =
+      settings.purchase_subscription_embedded_url ||
+      settings.purchase_subscription_url ||
+      "";
+    form.purchase_subscription_redirect_url =
+      settings.purchase_subscription_redirect_url || "";
+    form.purchase_subscription_url = form.purchase_subscription_embedded_url;
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_updated_at =
@@ -7436,6 +7550,32 @@ async function saveSettings() {
     // Optional URL fields: auto-clear invalid values so they don't cause backend 400 errors
     if (!isValidHttpUrl(form.frontend_url)) form.frontend_url = "";
     if (!isValidHttpUrl(form.doc_url)) form.doc_url = "";
+    if (!isValidHttpUrl(form.purchase_subscription_embedded_url)) {
+      form.purchase_subscription_embedded_url = "";
+    }
+    if (!isValidHttpUrl(form.purchase_subscription_redirect_url)) {
+      form.purchase_subscription_redirect_url = "";
+    }
+    if (form.purchase_subscription_enabled) {
+      if (
+        form.purchase_subscription_mode === "embedded" &&
+        !form.purchase_subscription_embedded_url
+      ) {
+        appStore.showError(
+          `${t("admin.settings.purchase.embeddedUrl")}: ${t("admin.settings.purchase.modeRequiredHint")}`,
+        );
+        return;
+      }
+      if (
+        form.purchase_subscription_mode === "redirect" &&
+        !form.purchase_subscription_redirect_url
+      ) {
+        appStore.showError(
+          `${t("admin.settings.purchase.redirectUrl")}: ${t("admin.settings.purchase.modeRequiredHint")}`,
+        );
+        return;
+      }
+    }
     syncWeChatConnectMode();
     const wechatStoredMode = deriveWeChatConnectStoredMode(
       form.wechat_connect_open_enabled,
@@ -7480,6 +7620,13 @@ async function saveSettings() {
       home_content: form.home_content,
       backend_mode_enabled: form.backend_mode_enabled,
       hide_ccs_import_button: form.hide_ccs_import_button,
+      purchase_subscription_enabled: form.purchase_subscription_enabled,
+      purchase_subscription_mode: form.purchase_subscription_mode,
+      purchase_subscription_embedded_url:
+        form.purchase_subscription_embedded_url,
+      purchase_subscription_redirect_url:
+        form.purchase_subscription_redirect_url,
+      purchase_subscription_url: form.purchase_subscription_embedded_url,
       table_default_page_size: form.table_default_page_size,
       table_page_size_options: form.table_page_size_options,
       custom_menu_items: form.custom_menu_items,
@@ -7666,6 +7813,15 @@ async function saveSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.purchase_subscription_mode =
+      updated.purchase_subscription_mode || "embedded";
+    form.purchase_subscription_embedded_url =
+      updated.purchase_subscription_embedded_url ||
+      updated.purchase_subscription_url ||
+      "";
+    form.purchase_subscription_redirect_url =
+      updated.purchase_subscription_redirect_url || "";
+    form.purchase_subscription_url = form.purchase_subscription_embedded_url;
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     registrationEmailSuffixWhitelistTags.value =
       normalizeRegistrationEmailSuffixDomains(
