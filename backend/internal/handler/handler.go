@@ -2,62 +2,63 @@ package handler
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
-	"github.com/Wei-Shaw/sub2api/internal/handler/public"
 )
 
 // AdminHandlers contains all admin-related HTTP handlers
 type AdminHandlers struct {
-	Dashboard             *admin.DashboardHandler
-	Operation             *admin.OperationHandler
-	User                  *admin.UserHandler
-	Group                 *admin.GroupHandler
-	Account               *admin.AccountHandler
-	ModelMarketplace      *admin.ModelMarketplaceHandler
-	Announcement          *admin.AnnouncementHandler
-	DataManagement        *admin.DataManagementHandler
-	Backup                *admin.BackupHandler
-	OAuth                 *admin.OAuthHandler
-	OpenAIOAuth           *admin.OpenAIOAuthHandler
-	GeminiOAuth           *admin.GeminiOAuthHandler
-	AntigravityOAuth      *admin.AntigravityOAuthHandler
-	Proxy                 *admin.ProxyHandler
-	Redeem                *admin.RedeemHandler
-	Promo                 *admin.PromoHandler
-	Setting               *admin.SettingHandler
-	Ops                   *admin.OpsHandler
-	System                *admin.SystemHandler
-	Subscription          *admin.SubscriptionHandler
-	Usage                 *admin.UsageHandler
-	UserAttribute         *admin.UserAttributeHandler
-	ErrorPassthrough      *admin.ErrorPassthroughHandler
-	TLSFingerprintProfile *admin.TLSFingerprintProfileHandler
-	APIKey                *admin.AdminAPIKeyHandler
-	ScheduledTest         *admin.ScheduledTestHandler
-	Audit                 *admin.AuditHandler
-	RefundInspection      *admin.RefundInspectionHandler
+	Dashboard              *admin.DashboardHandler
+	User                   *admin.UserHandler
+	Group                  *admin.GroupHandler
+	Account                *admin.AccountHandler
+	Announcement           *admin.AnnouncementHandler
+	DataManagement         *admin.DataManagementHandler
+	Backup                 *admin.BackupHandler
+	OAuth                  *admin.OAuthHandler
+	OpenAIOAuth            *admin.OpenAIOAuthHandler
+	GeminiOAuth            *admin.GeminiOAuthHandler
+	AntigravityOAuth       *admin.AntigravityOAuthHandler
+	Proxy                  *admin.ProxyHandler
+	Redeem                 *admin.RedeemHandler
+	Promo                  *admin.PromoHandler
+	Setting                *admin.SettingHandler
+	Ops                    *admin.OpsHandler
+	System                 *admin.SystemHandler
+	Subscription           *admin.SubscriptionHandler
+	Usage                  *admin.UsageHandler
+	UserAttribute          *admin.UserAttributeHandler
+	ErrorPassthrough       *admin.ErrorPassthroughHandler
+	TLSFingerprintProfile  *admin.TLSFingerprintProfileHandler
+	APIKey                 *admin.AdminAPIKeyHandler
+	ScheduledTest          *admin.ScheduledTestHandler
+	Channel                *admin.ChannelHandler
+	ChannelMonitor         *admin.ChannelMonitorHandler
+	ChannelMonitorTemplate *admin.ChannelMonitorRequestTemplateHandler
+	ContentModeration      *admin.ContentModerationHandler
+	Payment                *admin.PaymentHandler
+	Affiliate              *admin.AffiliateHandler
 }
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
-	Auth          *AuthHandler
-	OIDC          *OIDCHandler
-	User          *UserHandler
-	APIKey        *APIKeyHandler
-	Usage         *UsageHandler
-	Chat          *ChatHandler
-	LobeConfig    *LobeConfigHandler
-	Redeem        *RedeemHandler
-	Subscription  *SubscriptionHandler
-	Announcement  *AnnouncementHandler
-	Admin         *AdminHandlers
-	Gateway       *GatewayHandler
-	OpenAIGateway *OpenAIGatewayHandler
-	SoraGateway   *SoraGatewayHandler
-	SoraClient    *SoraClientHandler
-	Setting       *SettingHandler
-	Totp          *TotpHandler
-	PublicStatus  *public.PublicStatusHandler
-	Globe         *public.GlobeHandler
+	Auth             *AuthHandler
+	OIDC             *OIDCHandler
+	User             *UserHandler
+	APIKey           *APIKeyHandler
+	Usage            *UsageHandler
+	Chat             *ChatHandler
+	LobeConfig       *LobeConfigHandler
+	Redeem           *RedeemHandler
+	Subscription     *SubscriptionHandler
+	Announcement     *AnnouncementHandler
+	ChannelMonitor   *ChannelMonitorUserHandler
+	Admin            *AdminHandlers
+	Gateway          *GatewayHandler
+	OpenAIGateway    *OpenAIGatewayHandler
+	Setting          *SettingHandler
+	Totp             *TotpHandler
+	Payment          *PaymentHandler
+	PaymentWebhook   *PaymentWebhookHandler
+	AvailableChannel *AvailableChannelHandler
 }
 
 // BuildInfo contains build-time information

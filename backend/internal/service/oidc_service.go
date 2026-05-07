@@ -72,35 +72,35 @@ func (s *OIDCService) Issuer() string {
 	if s == nil || s.cfg == nil {
 		return ""
 	}
-	if issuer := strings.TrimRight(strings.TrimSpace(s.cfg.OIDC.Issuer), "/"); issuer != "" {
+	if issuer := strings.TrimRight(strings.TrimSpace(s.cfg.OIDCServer.Issuer), "/"); issuer != "" {
 		return issuer
 	}
 	return strings.TrimRight(strings.TrimSpace(s.cfg.Server.FrontendURL), "/")
 }
 
 func (s *OIDCService) CookieName() string {
-	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.OIDC.CookieName) == "" {
+	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.OIDCServer.CookieName) == "" {
 		return "sub2api_access_token"
 	}
-	return strings.TrimSpace(s.cfg.OIDC.CookieName)
+	return strings.TrimSpace(s.cfg.OIDCServer.CookieName)
 }
 
 func (s *OIDCService) CookieDomain() string {
 	if s == nil || s.cfg == nil {
 		return ""
 	}
-	return strings.TrimSpace(s.cfg.OIDC.CookieDomain)
+	return strings.TrimSpace(s.cfg.OIDCServer.CookieDomain)
 }
 
 func (s *OIDCService) ClientID() string {
 	if s == nil || s.cfg == nil {
 		return ""
 	}
-	return strings.TrimSpace(s.cfg.OIDC.ClientID)
+	return strings.TrimSpace(s.cfg.OIDCServer.ClientID)
 }
 
 func (s *OIDCService) IsConfigured() bool {
-	return s != nil && s.Issuer() != "" && s.ClientID() != "" && strings.TrimSpace(s.cfg.OIDC.ClientSecret) != "" && len(s.cfg.OIDC.RedirectURIs) > 0
+	return s != nil && s.Issuer() != "" && s.ClientID() != "" && strings.TrimSpace(s.cfg.OIDCServer.ClientSecret) != "" && len(s.cfg.OIDCServer.RedirectURIs) > 0
 }
 
 func (s *OIDCService) ValidateClient(clientID, clientSecret string) error {
@@ -110,7 +110,7 @@ func (s *OIDCService) ValidateClient(clientID, clientSecret string) error {
 	if clientID != s.ClientID() {
 		return ErrOIDCInvalidClient
 	}
-	expected := strings.TrimSpace(s.cfg.OIDC.ClientSecret)
+	expected := strings.TrimSpace(s.cfg.OIDCServer.ClientSecret)
 	if subtle.ConstantTimeCompare([]byte(clientSecret), []byte(expected)) != 1 {
 		return ErrOIDCInvalidClient
 	}
@@ -121,7 +121,7 @@ func (s *OIDCService) ValidateRedirectURI(redirectURI string) bool {
 	if s == nil || s.cfg == nil {
 		return false
 	}
-	for _, item := range s.cfg.OIDC.RedirectURIs {
+	for _, item := range s.cfg.OIDCServer.RedirectURIs {
 		if strings.TrimSpace(item) == redirectURI {
 			return true
 		}

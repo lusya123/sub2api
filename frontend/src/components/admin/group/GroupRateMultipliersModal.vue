@@ -13,10 +13,6 @@
         <span class="text-gray-600 dark:text-gray-400">
           {{ t('admin.groups.columns.rateMultiplier') }}: {{ group.rate_multiplier }}x
         </span>
-        <span class="text-gray-400">|</span>
-        <span class="text-gray-600 dark:text-gray-400">
-          {{ t('admin.groups.columns.actualRateMultiplier') }}: {{ group.actual_rate_multiplier ?? group.rate_multiplier }}x
-        </span>
       </div>
 
       <!-- 操作区 -->
@@ -62,17 +58,6 @@
               autocomplete="off"
               class="hide-spinner input w-full"
               placeholder="1.0"
-            />
-          </div>
-          <div class="w-24">
-            <input
-              v-model.number="newActualRate"
-              type="number"
-              step="0.001"
-              min="0"
-              autocomplete="off"
-              class="hide-spinner input w-full"
-              :placeholder="String(newRate ?? 1)"
             />
           </div>
           <button
@@ -151,7 +136,6 @@
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.groups.columns.userNotes') }}</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.groups.columns.userStatus') }}</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.groups.columns.rateMultiplier') }}</th>
-                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.groups.columns.actualRateMultiplier') }}</th>
                     <th v-if="showFinalRate" class="px-3 py-2 text-left text-xs font-medium text-primary-600 dark:text-primary-400">{{ t('admin.groups.finalRate') }}</th>
                     <th class="w-10 px-2 py-2"></th>
                   </tr>
@@ -182,22 +166,12 @@
                       <input
                         type="number"
                         step="0.001"
-                        min="0"
+                        min="0.001"
                         autocomplete="off"
-                        :value="entry.rate_multiplier"
+                        :value="entry.rate_multiplier ?? ''"
+                        :placeholder="String(props.group?.rate_multiplier ?? 1)"
                         class="hide-spinner w-20 rounded border border-gray-200 bg-white px-2 py-1 text-center text-sm font-medium transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
                         @change="updateLocalRate(entry.user_id, ($event.target as HTMLInputElement).value)"
-                      />
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2">
-                      <input
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        autocomplete="off"
-                        :value="entry.actual_rate_multiplier ?? entry.rate_multiplier"
-                        class="hide-spinner w-20 rounded border border-gray-200 bg-white px-2 py-1 text-center text-sm font-medium transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
-                        @change="updateLocalActualRate(entry.user_id, ($event.target as HTMLInputElement).value)"
                       />
                     </td>
                     <td v-if="showFinalRate" class="whitespace-nowrap px-3 py-2 font-medium text-primary-600 dark:text-primary-400">
@@ -223,7 +197,6 @@
             :total="localEntries.length"
             :page="currentPage"
             :page-size="pageSize"
-            :page-size-options="[10, 20, 50]"
             @update:page="currentPage = $event"
             @update:pageSize="handlePageSizeChange"
           />
@@ -301,7 +274,6 @@ const searchResults = ref<AdminUser[]>([])
 const showDropdown = ref(false)
 const selectedUser = ref<AdminUser | null>(null)
 const newRate = ref<number | null>(null)
-const newActualRate = ref<number | null>(null)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const batchFactor = ref<number | null>(null)
@@ -323,22 +295,17 @@ const showFinalRate = computed(() => {
 })
 
 // 计算最终倍率预览
-const computeFinalRate = (rate: number) => {
-  if (!batchFactor.value) return rate
-  return parseFloat((rate * batchFactor.value).toFixed(6))
+const computeFinalRate = (rate: number | null | undefined) => {
+  const base = rate ?? props.group?.rate_multiplier ?? 1
+  if (!batchFactor.value) return base
+  return parseFloat((base * batchFactor.value).toFixed(6))
 }
 
 // 检测是否有未保存的修改
 const isDirty = computed(() => {
   if (localEntries.value.length !== serverEntries.value.length) return true
-  const serverMap = new Map(serverEntries.value.map(e => [e.user_id, e]))
-  return localEntries.value.some(e => {
-    const serverEntry = serverMap.get(e.user_id)
-    if (!serverEntry) return true
-    const localActual = e.actual_rate_multiplier ?? e.rate_multiplier
-    const serverActual = serverEntry.actual_rate_multiplier ?? serverEntry.rate_multiplier
-    return serverEntry.rate_multiplier !== e.rate_multiplier || serverActual !== localActual
-  })
+  const serverMap = new Map(serverEntries.value.map(e => [e.user_id, e.rate_multiplier ?? null]))
+  return localEntries.value.some(e => serverMap.get(e.user_id) !== (e.rate_multiplier ?? null))
 })
 
 const paginatedLocalEntries = computed(() => {
@@ -354,7 +321,9 @@ const loadEntries = async () => {
   if (!props.group) return
   loading.value = true
   try {
-    serverEntries.value = await adminAPI.groups.getGroupRateMultipliers(props.group.id)
+    const raw = await adminAPI.groups.getGroupRateMultipliers(props.group.id)
+    // 仅显示已设置 rate_multiplier 的条目；rpm_override 在另一个弹窗管理，保留不动
+    serverEntries.value = raw.filter(e => e.rate_multiplier != null)
     localEntries.value = cloneEntries(serverEntries.value)
     adjustPage()
   } catch (error) {
@@ -380,7 +349,6 @@ watch(() => props.show, (val) => {
     searchResults.value = []
     selectedUser.value = null
     newRate.value = null
-    newActualRate.value = null
     loadEntries()
   }
 })
@@ -420,7 +388,6 @@ const selectUser = (user: AdminUser) => {
 const handleAddLocal = () => {
   if (!selectedUser.value || !newRate.value) return
   const user = selectedUser.value
-  const actualRate = newActualRate.value ?? newRate.value
   const idx = localEntries.value.findIndex(e => e.user_id === user.id)
   const entry: LocalEntry = {
     user_id: user.id,
@@ -429,7 +396,7 @@ const handleAddLocal = () => {
     user_notes: user.notes || '',
     user_status: user.status || 'active',
     rate_multiplier: newRate.value,
-    actual_rate_multiplier: actualRate
+    rpm_override: null
   }
   if (idx >= 0) {
     localEntries.value[idx] = entry
@@ -439,27 +406,20 @@ const handleAddLocal = () => {
   searchQuery.value = ''
   selectedUser.value = null
   newRate.value = null
-  newActualRate.value = null
   adjustPage()
 }
 
 // 本地修改倍率
 const updateLocalRate = (userId: number, value: string) => {
+  const entry = localEntries.value.find(e => e.user_id === userId)
+  if (!entry) return
+  if (value.trim() === '') {
+    entry.rate_multiplier = null
+    return
+  }
   const num = parseFloat(value)
   if (isNaN(num)) return
-  const entry = localEntries.value.find(e => e.user_id === userId)
-  if (entry) {
-    entry.rate_multiplier = num
-  }
-}
-
-const updateLocalActualRate = (userId: number, value: string) => {
-  const num = parseFloat(value)
-  if (isNaN(num)) return
-  const entry = localEntries.value.find(e => e.user_id === userId)
-  if (entry) {
-    entry.actual_rate_multiplier = num
-  }
+  entry.rate_multiplier = num
 }
 
 // 本地删除
@@ -472,8 +432,9 @@ const removeLocal = (userId: number) => {
 const applyBatchFactor = () => {
   if (!batchFactor.value || batchFactor.value <= 0) return
   for (const entry of localEntries.value) {
-    entry.rate_multiplier = parseFloat((entry.rate_multiplier * batchFactor.value).toFixed(6))
-    entry.actual_rate_multiplier = parseFloat((((entry.actual_rate_multiplier ?? entry.rate_multiplier) * batchFactor.value)).toFixed(6))
+    if (entry.rate_multiplier != null) {
+      entry.rate_multiplier = parseFloat((entry.rate_multiplier * batchFactor.value).toFixed(6))
+    }
   }
   batchFactor.value = null
 }
@@ -490,16 +451,17 @@ const handleCancel = () => {
   adjustPage()
 }
 
-// 保存：一次性提交所有数据
+// 保存：一次性提交所有数据（只提交 rate_multiplier；rpm_override 由独立弹窗管理）
 const handleSave = async () => {
   if (!props.group) return
   saving.value = true
   try {
-    const entries = localEntries.value.map(e => ({
-      user_id: e.user_id,
-      rate_multiplier: e.rate_multiplier,
-      actual_rate_multiplier: e.actual_rate_multiplier ?? e.rate_multiplier
-    }))
+    const entries = localEntries.value
+      .filter(e => e.rate_multiplier != null)
+      .map(e => ({
+        user_id: e.user_id,
+        rate_multiplier: e.rate_multiplier as number
+      }))
     await adminAPI.groups.batchSetGroupRateMultipliers(props.group.id, entries)
     appStore.showSuccess(t('admin.groups.rateSaved'))
     emit('success')

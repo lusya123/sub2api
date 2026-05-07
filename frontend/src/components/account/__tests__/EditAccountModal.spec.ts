@@ -26,6 +26,13 @@ vi.mock('@/api/admin', () => ({
     accounts: {
       update: updateAccountMock,
       checkMixedChannelRisk: checkMixedChannelRiskMock
+    },
+    settings: {
+      getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
+      getSettings: vi.fn().mockResolvedValue({})
+    },
+    tlsFingerprintProfiles: {
+      list: vi.fn().mockResolvedValue([])
     }
   }
 }))
@@ -82,6 +89,32 @@ const ModelWhitelistSelectorStub = defineComponent({
   `
 })
 
+const SelectStub = defineComponent({
+  name: 'SelectStub',
+  props: {
+    modelValue: {
+      type: [String, Number, Boolean, null],
+      default: ''
+    },
+    options: {
+      type: Array,
+      default: () => []
+    }
+  },
+  emits: ['update:modelValue'],
+  template: `
+    <select
+      v-bind="$attrs"
+      :value="modelValue"
+      @change="$emit('update:modelValue', $event.target.value)"
+    >
+      <option v-for="option in options" :key="option.value" :value="option.value">
+        {{ option.label }}
+      </option>
+    </select>
+  `
+})
+
 function buildAccount() {
   return {
     id: 1,
@@ -108,32 +141,6 @@ function buildAccount() {
   } as any
 }
 
-function buildAnthropicAPIKeyAccount() {
-  return {
-    id: 2,
-    name: 'Anthropic Key',
-    notes: '',
-    platform: 'anthropic',
-    type: 'apikey',
-    credentials: {
-      api_key: 'sk-ant-test',
-      base_url: 'https://api.anthropic.com'
-    },
-    extra: {
-      virtual_cache_enabled: true,
-      virtual_cache_read_ratio: 0.2
-    },
-    proxy_id: null,
-    concurrency: 1,
-    priority: 1,
-    rate_multiplier: 1,
-    status: 'active',
-    group_ids: [],
-    expires_at: null,
-    auto_pause_on_expired: false
-  } as any
-}
-
 function mountModal(account = buildAccount()) {
   return mount(EditAccountModal, {
     props: {
@@ -145,7 +152,7 @@ function mountModal(account = buildAccount()) {
     global: {
       stubs: {
         BaseDialog: BaseDialogStub,
-        Select: true,
+        Select: SelectStub,
         Icon: true,
         ProxySelector: true,
         GroupSelector: true,
@@ -183,20 +190,51 @@ describe('EditAccountModal', () => {
     })
   })
 
-  it('persists virtual cache settings for anthropic apikey accounts', async () => {
-    const account = buildAnthropicAPIKeyAccount()
+  it('submits OpenAI compact mode and compact-only model mapping', async () => {
+    const account = buildAccount()
+    account.extra = {
+      openai_compact_mode: 'force_on'
+    }
+    account.credentials = {
+      ...account.credentials,
+      compact_model_mapping: {
+        'gpt-5.4': 'gpt-5.4-openai-compact'
+      }
+    }
     updateAccountMock.mockReset()
     checkMixedChannelRiskMock.mockReset()
     checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
     updateAccountMock.mockResolvedValue(account)
 
     const wrapper = mountModal(account)
+
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
-    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
-      virtual_cache_enabled: true,
-      virtual_cache_read_ratio: 0.2
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_compact_mode).toBe('force_on')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.compact_model_mapping).toEqual({
+      'gpt-5.4': 'gpt-5.4-openai-compact'
     })
+  })
+
+  it('submits account-level Codex image generation bridge override', async () => {
+    const account = buildAccount()
+    account.extra = {
+      codex_image_generation_bridge: false,
+      codex_image_generation_bridge_enabled: true
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await wrapper.get('button[data-testid="codex-image-bridge-enabled"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_image_generation_bridge).toBe(true)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_image_generation_bridge_enabled')
   })
 })

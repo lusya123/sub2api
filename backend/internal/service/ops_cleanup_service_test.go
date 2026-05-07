@@ -1,95 +1,64 @@
 package service
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
-
-	"entgo.io/ent/dialect"
-	entsql "entgo.io/ent/dialect/sql"
-	_ "modernc.org/sqlite"
-
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/enttest"
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/stretchr/testify/require"
 )
 
-// TestOpsCleanup_ChannelHealthSamples verifies the ops cleanup loop enforces
-// the fixed 24h retention on channel_health_samples (rows older than 24h are
-// deleted; newer rows survive).
-func TestOpsCleanup_ChannelHealthSamples(t *testing.T) {
-	// Spin up in-memory SQLite backing both ent.Client (for seeding) and raw
-	// *sql.DB (used by deleteOldRowsByID). Must share the underlying DB so
-	// seeded rows are visible to the cleanup query.
-	name := strings.ReplaceAll(t.Name(), "/", "_")
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", name))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	require.NoError(t, err)
+func TestOpsCleanupPlan(t *testing.T) {
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
 
-	drv := entsql.OpenDB(dialect.SQLite, db)
-	client := enttest.NewClient(t, enttest.WithOptions(dbent.Driver(drv)))
-	t.Cleanup(func() { _ = client.Close() })
-
-	ctx := context.Background()
-	now := time.Now().UTC()
-
-	// Three samples: 25h ago (should be deleted), 23h ago and 1h ago (both kept).
-	// bucket_ts values differ so the unique index doesn't collapse them.
-	type seed struct {
-		label     string
-		createdAt time.Time
-		bucketTs  time.Time
-	}
-	seeds := []seed{
-		{"25h-ago", now.Add(-25 * time.Hour), now.Add(-25 * time.Hour).Truncate(time.Minute)},
-		{"23h-ago", now.Add(-23 * time.Hour), now.Add(-23 * time.Hour).Truncate(time.Minute)},
-		{"1h-ago", now.Add(-1 * time.Hour), now.Add(-1 * time.Hour).Truncate(time.Minute)},
-	}
-	for _, s := range seeds {
-		_, err := client.ChannelHealthSample.Create().
-			SetBucketTs(s.bucketTs).
-			SetAccountID(1).
-			SetGroupID(0).
-			SetModel("claude-sonnet-4-5").
-			SetSuccessCount(1).
-			SetErrorCount(0).
-			SetRateLimitedCount(0).
-			SetOverloadedCount(0).
-			SetLatencyP50Ms(100).
-			SetSource("passive").
-			SetCreatedAt(s.createdAt).
-			Save(ctx)
-		require.NoError(t, err, "seed %s", s.label)
+	cases := []struct {
+		name         string
+		days         int
+		wantOK       bool
+		wantTruncate bool
+		wantCutoff   time.Time
+	}{
+		{name: "negative skips", days: -1, wantOK: false},
+		{name: "zero truncates", days: 0, wantOK: true, wantTruncate: true},
+		{name: "positive yields past cutoff", days: 7, wantOK: true, wantCutoff: now.AddDate(0, 0, -7)},
 	}
 
-	// Sanity check: 3 rows seeded.
-	count, err := client.ChannelHealthSample.Query().Count(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 3, count)
-
-	// Run cleanup. Use a minimal simple-mode config so leader-lock / config-
-	// driven paths short-circuit cleanly. channel_health_samples block runs
-	// unconditionally regardless of retention config.
-	cfg := &config.Config{}
-	cfg.RunMode = config.RunModeSimple
-	svc := NewOpsCleanupService(nil, db, nil, cfg)
-	counts, err := svc.runCleanupOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), counts.channelHealthSamples, "exactly one 25h-ago row should be deleted")
-
-	// 23h-ago and 1h-ago survive; 25h-ago gone.
-	remaining, err := client.ChannelHealthSample.Query().All(ctx)
-	require.NoError(t, err)
-	require.Len(t, remaining, 2)
-	var cutoff = now.Add(-24 * time.Hour)
-	for _, r := range remaining {
-		require.True(t, r.CreatedAt.After(cutoff),
-			"kept row created_at=%v must be newer than cutoff=%v", r.CreatedAt, cutoff)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cutoff, truncate, ok := opsCleanupPlan(now, tc.days)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if truncate != tc.wantTruncate {
+				t.Fatalf("truncate = %v, want %v", truncate, tc.wantTruncate)
+			}
+			if !tc.wantTruncate && !cutoff.Equal(tc.wantCutoff) {
+				t.Fatalf("cutoff = %v, want %v", cutoff, tc.wantCutoff)
+			}
+		})
 	}
 }
+
+func TestIsMissingRelationError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil is not missing", err: nil, want: false},
+		{name: "match relation does not exist", err: fakeErr(`pq: relation "ops_error_logs" does not exist`), want: true},
+		{name: "match case-insensitive", err: fakeErr(`ERROR: Relation "x" Does Not Exist`), want: true},
+		{name: "non-matching error", err: fakeErr("connection refused"), want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isMissingRelationError(tc.err); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+type fakeErr string
+
+func (e fakeErr) Error() string { return string(e) }

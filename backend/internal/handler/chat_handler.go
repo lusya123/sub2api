@@ -88,7 +88,7 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 func (h *ChatHandler) chatSignInURL() (string, error) {
 	base := strings.TrimRight(strings.TrimSpace(h.cfg.Lobe.ChatURL), "/")
 	if base == "" {
-		base = lobeOriginFromRedirectURIs(h.cfg.OIDC.RedirectURIs)
+		base = lobeOriginFromRedirectURIs(h.cfg.OIDCServer.RedirectURIs)
 	}
 	if base == "" {
 		base = deriveLobeOriginFromFrontend(h.cfg.Server.FrontendURL)
@@ -133,7 +133,7 @@ func (h *ChatHandler) setOIDCSessionCookie(c *gin.Context, token string, maxAge 
 	if h == nil || h.cfg == nil || strings.TrimSpace(token) == "" {
 		return
 	}
-	name := strings.TrimSpace(h.cfg.OIDC.CookieName)
+	name := strings.TrimSpace(h.cfg.OIDCServer.CookieName)
 	if name == "" {
 		name = "sub2api_access_token"
 	}
@@ -142,7 +142,7 @@ func (h *ChatHandler) setOIDCSessionCookie(c *gin.Context, token string, maxAge 
 		Name:     name,
 		Value:    token,
 		Path:     "/",
-		Domain:   strings.TrimSpace(h.cfg.OIDC.CookieDomain),
+		Domain:   strings.TrimSpace(h.cfg.OIDCServer.CookieDomain),
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   secure,

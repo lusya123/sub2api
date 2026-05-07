@@ -47,16 +47,18 @@
       </template>
 
       <template #table>
-        <DataTable :columns="columns" :data="codes" :loading="loading">
-          <template #cell-code="{ value, row }">
+        <DataTable
+          :columns="columns"
+          :data="codes"
+          :loading="loading"
+          :server-side-sort="true"
+          default-sort-key="id"
+          default-sort-order="desc"
+          @sort="handleSort"
+        >
+          <template #cell-code="{ value }">
             <div class="flex items-center space-x-2">
               <code class="font-mono text-sm text-gray-900 dark:text-gray-100">{{ value }}</code>
-              <span
-                v-if="row.type === 'balance' && Number(row.value) === 5"
-                class="badge badge-warning whitespace-nowrap"
-              >
-                {{ t('admin.redeem.trialBadge') }}
-              </span>
               <button
                 @click="copyToClipboard(value)"
                 :class="[
@@ -233,12 +235,6 @@
                 required
                 class="input"
               />
-            </div>
-            <div
-              v-if="generateForm.type === 'balance' && generateForm.value === 5"
-              class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-300"
-            >
-              {{ t('admin.redeem.trialCodeHint') }}
             </div>
             <!-- 邀请码类型：显示提示信息 -->
             <div v-if="generateForm.type === 'invitation'" class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
@@ -549,6 +545,10 @@ const pagination = reactive({
   total: 0,
   pages: 0
 })
+const sortState = reactive({
+  sort_by: 'id',
+  sort_order: 'desc' as 'asc' | 'desc'
+})
 
 let abortController: AbortController | null = null
 
@@ -577,6 +577,14 @@ watch(
   }
 )
 
+const buildRedeemQueryFilters = () => ({
+  type: (filters.type || undefined) as RedeemCodeType | undefined,
+  status: (filters.status || undefined) as 'used' | 'expired' | 'unused' | undefined,
+  search: searchQuery.value || undefined,
+  sort_by: sortState.sort_by,
+  sort_order: sortState.sort_order
+})
+
 const loadCodes = async () => {
   if (abortController) {
     abortController.abort()
@@ -588,11 +596,7 @@ const loadCodes = async () => {
     const response = await adminAPI.redeem.list(
       pagination.page,
       pagination.page_size,
-      {
-        type: filters.type as RedeemCodeType,
-        status: filters.status as any,
-        search: searchQuery.value || undefined
-      },
+      buildRedeemQueryFilters(),
       {
         signal: currentController.signal
       }
@@ -641,6 +645,13 @@ const handlePageSizeChange = (pageSize: number) => {
   loadCodes()
 }
 
+const handleSort = (key: string, order: 'asc' | 'desc') => {
+  sortState.sort_by = key
+  sortState.sort_order = order
+  pagination.page = 1
+  loadCodes()
+}
+
 const handleGenerateCodes = async () => {
   // 订阅类型必须选择分组
   if (generateForm.type === 'subscription' && !generateForm.group_id) {
@@ -684,10 +695,7 @@ const copyToClipboard = async (text: string) => {
 
 const handleExportCodes = async () => {
   try {
-    const blob = await adminAPI.redeem.exportCodes({
-      type: filters.type as RedeemCodeType,
-      status: filters.status as any
-    })
+    const blob = await adminAPI.redeem.exportCodes(buildRedeemQueryFilters())
 
     // Create download link
     const url = window.URL.createObjectURL(blob)

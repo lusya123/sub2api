@@ -22,7 +22,7 @@ func TestChatSignInURLUsesConfiguredChatURL(t *testing.T) {
 
 func TestChatSignInURLFallsBackToOIDCRedirectOrigin(t *testing.T) {
 	h := &ChatHandler{cfg: &config.Config{}}
-	h.cfg.OIDC.RedirectURIs = []string{"https://chat.example.com/api/auth/callback/generic-oidc"}
+	h.cfg.OIDCServer.RedirectURIs = []string{"https://chat.example.com/api/auth/callback/generic-oidc"}
 
 	got, err := h.chatSignInURL()
 	if err != nil {

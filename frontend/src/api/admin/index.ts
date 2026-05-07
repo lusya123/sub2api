@@ -25,9 +25,15 @@ import apiKeysAPI from './apiKeys'
 import scheduledTestsAPI from './scheduledTests'
 import backupAPI from './backup'
 import tlsFingerprintProfileAPI from './tlsFingerprintProfile'
+import channelsAPI from './channels'
+import channelMonitorAPI from './channelMonitor'
+import channelMonitorTemplateAPI from './channelMonitorTemplate'
+import adminPaymentAPI from './payment'
+import affiliatesAPI from './affiliates'
+import riskControlAPI from './riskControl'
 import auditLogsAPI from './auditLogs'
-import modelMarketplaceAPI from './modelMarketplace'
 import operationsAPI from './operations'
+import modelMarketplaceAPI from './modelMarketplace'
 
 /**
  * Unified admin API object for convenient access
@@ -55,9 +61,15 @@ export const adminAPI = {
   scheduledTests: scheduledTestsAPI,
   backup: backupAPI,
   tlsFingerprintProfiles: tlsFingerprintProfileAPI,
+  channels: channelsAPI,
+  channelMonitor: channelMonitorAPI,
+  channelMonitorTemplate: channelMonitorTemplateAPI,
+  payment: adminPaymentAPI,
+  affiliates: affiliatesAPI,
+  riskControl: riskControlAPI,
   auditLogs: auditLogsAPI,
-  modelMarketplace: modelMarketplaceAPI,
-  operations: operationsAPI
+  operations: operationsAPI,
+  modelMarketplace: modelMarketplaceAPI
 }
 
 export {
@@ -83,9 +95,15 @@ export {
   scheduledTestsAPI,
   backupAPI,
   tlsFingerprintProfileAPI,
+  channelsAPI,
+  channelMonitorAPI,
+  channelMonitorTemplateAPI,
+  adminPaymentAPI,
+  affiliatesAPI,
+  riskControlAPI,
   auditLogsAPI,
-  modelMarketplaceAPI,
-  operationsAPI
+  operationsAPI,
+  modelMarketplaceAPI
 }
 
 export default adminAPI
@@ -95,4 +113,29 @@ export type { BalanceHistoryItem } from './users'
 export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from './errorPassthrough'
 export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type { TLSFingerprintProfile, CreateProfileRequest, UpdateProfileRequest } from './tlsFingerprintProfile'
+export type { ContentModerationConfig, ContentModerationLog, ModerationMode } from './riskControl'
 export type { AdminAuditLog, AdminAuditLogFilters } from './auditLogs'
+export type {
+  OperationArpuPoint,
+  OperationBaselines,
+  OperationChurnHistoryPoint,
+  OperationChurnSnapshot,
+  OperationChurnWaterfall,
+  OperationCoreMetrics,
+  OperationDistributionItem,
+  OperationDistributionSnapshot,
+  OperationFinancialCockpit,
+  OperationFunnelStep,
+  OperationModelHealth,
+  OperationPlanMatrix,
+  OperationProductMatrix,
+  OperationPyramidLevel,
+  OperationRetentionCohort,
+  OperationSnapshot,
+  OperationSnapshotParams,
+  OperationTrendPoint,
+  OperationTrialFunnel,
+  OperationUserListItem,
+  OperationUserLists,
+  OperationUserPyramid
+} from './operations'

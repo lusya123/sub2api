@@ -1,7 +1,5 @@
 docs/claude-relay-service/
-
-# Git worktrees (isolated feature workspaces)
-.worktrees/
+.codex
 
 # ===================
 # Go 后端
@@ -107,14 +105,6 @@ backend/internal/web/dist/*
 # 后端运行时缓存数据
 backend/data/
 
-# 本地导出/批处理数据，可能包含账号、token、API key 等敏感信息
-data/
-kiro-config-downloads/
-kiro-config-downloads-*/
-kiro-cards-*.txt
-tmp_*
-*.csv
-
 # ===================
 # 本地配置文件（包含敏感信息）
 # ===================
@@ -132,17 +122,17 @@ scripts
 .code-review-state
 #openspec/
 code-reviews/
-#AGENTS.md
+AGENTS.md
 backend/cmd/server/server
 deploy/docker-compose.override.yml
 .gocache/
 vite.config.js
 docs/*
+!docs/PAYMENT.md
+!docs/PAYMENT_CN.md
+!docs/ADMIN_PAYMENT_INTEGRATION_API.md
 .serena/
 .codex/
-.codex-skill-staging/
 frontend/coverage/
 aicodex
 output/
-
-.gstack/

@@ -250,8 +250,6 @@ func supportedMarketplaceModels(account *Account) []marketplaceModelCandidate {
 		return modelsFromMappingOrDefault(account.GetModelMapping(), geminiMarketplaceModels(nil))
 	case PlatformAntigravity:
 		return modelsFromMappingOrDefault(account.GetModelMapping(), antigravityMarketplaceModels(nil))
-	case PlatformSora:
-		return openAIModelsToMarketplace(DefaultSoraModels(nil), nil)
 	case PlatformAnthropic:
 		if account.IsOAuth() {
 			return claudeMarketplaceModels(nil)
@@ -309,7 +307,12 @@ func modelsFromMappingOrDefault(mapping map[string]string, defaults []marketplac
 }
 
 func openAIMarketplaceModels(_ map[string]string) []marketplaceModelCandidate {
-	return openAIModelsToMarketplace(openai.DefaultModels, nil)
+	models := openAIModelsToMarketplace(openai.DefaultModels, nil)
+	models = append(models,
+		marketplaceModelCandidate{modelID: "glm-5", displayName: "GLM-5"},
+		marketplaceModelCandidate{modelID: "minimax-m2.5", displayName: "MiniMax M2.5"},
+	)
+	return models
 }
 
 func claudeMarketplaceModels(_ map[string]string) []marketplaceModelCandidate {

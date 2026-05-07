@@ -14,10 +14,10 @@ func TestOIDCAuthorizeRejectsInvalidRedirectURIWithoutRedirect(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	cfg := &config.Config{}
-	cfg.OIDC.Issuer = "https://app.example.com"
-	cfg.OIDC.ClientID = "lobe"
-	cfg.OIDC.ClientSecret = "secret"
-	cfg.OIDC.RedirectURIs = []string{"https://chat.example.com/api/auth/callback/generic-oidc"}
+	cfg.OIDCServer.Issuer = "https://app.example.com"
+	cfg.OIDCServer.ClientID = "lobe"
+	cfg.OIDCServer.ClientSecret = "secret"
+	cfg.OIDCServer.RedirectURIs = []string{"https://chat.example.com/api/auth/callback/generic-oidc"}
 
 	oidcService, err := service.NewOIDCService(cfg, nil, nil)
 	if err != nil {

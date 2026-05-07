@@ -67,7 +67,7 @@ func (a *accountTestProbeExecutor) ProbeOnce(ctx context.Context, groupID int64,
 	var lastErr error
 	for {
 		gid := groupID
-		selection, err := a.gateway.SelectAccountWithLoadAwareness(ctx, &gid, "", model, excluded, "")
+		selection, err := a.gateway.SelectAccountWithLoadAwareness(ctx, &gid, "", model, excluded, "", 0)
 		if err != nil {
 			if lastErr != nil {
 				return lastAccountID, lastStatus, lastLatency, lastErr
