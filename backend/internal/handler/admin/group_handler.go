@@ -187,6 +187,15 @@ func (h *GroupHandler) List(c *gin.Context) {
 		return
 	}
 
+	if isOperatorRequest(c) {
+		outGroups := make([]dto.Group, 0, len(groups))
+		for i := range groups {
+			outGroups = append(outGroups, *dto.GroupFromService(&groups[i]))
+		}
+		response.Paginated(c, outGroups, total, page, pageSize)
+		return
+	}
+
 	outGroups := make([]dto.AdminGroup, 0, len(groups))
 	for i := range groups {
 		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
@@ -213,6 +222,15 @@ func (h *GroupHandler) GetAll(c *gin.Context) {
 		return
 	}
 
+	if isOperatorRequest(c) {
+		outGroups := make([]dto.Group, 0, len(groups))
+		for i := range groups {
+			outGroups = append(outGroups, *dto.GroupFromService(&groups[i]))
+		}
+		response.Success(c, outGroups)
+		return
+	}
+
 	outGroups := make([]dto.AdminGroup, 0, len(groups))
 	for i := range groups {
 		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
@@ -232,6 +250,11 @@ func (h *GroupHandler) GetByID(c *gin.Context) {
 	group, err := h.adminService.GetGroup(c.Request.Context(), groupID)
 	if err != nil {
 		response.ErrorFrom(c, err)
+		return
+	}
+
+	if isOperatorRequest(c) {
+		response.Success(c, dto.GroupFromService(group))
 		return
 	}
 

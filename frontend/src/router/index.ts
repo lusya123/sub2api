@@ -381,6 +381,40 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/operations',
+    name: 'AdminOperations',
+    component: () => import('@/views/admin/OperationDashboardView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Operations',
+      titleKey: 'admin.operations.title',
+      descriptionKey: 'admin.operations.description'
+    }
+  },
+  {
+    path: '/admin/audit-logs',
+    name: 'AdminAuditLogs',
+    component: () => import('@/views/admin/AuditLogsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Audit Logs',
+      titleKey: 'admin.auditLogs.title'
+    }
+  },
+  {
+    path: '/admin/model-marketplace',
+    name: 'AdminModelMarketplace',
+    component: () => import('@/views/admin/ModelMarketplaceView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Model Marketplace',
+      titleKey: 'admin.modelMarketplace.title'
+    }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('@/views/admin/UsersView.vue'),
