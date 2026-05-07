@@ -84,9 +84,12 @@ func ProvideSettingHandler(settingService *service.SettingService, buildInfo Bui
 // ProvideHandlers creates the Handlers struct
 func ProvideHandlers(
 	authHandler *AuthHandler,
+	oidcHandler *OIDCHandler,
 	userHandler *UserHandler,
 	apiKeyHandler *APIKeyHandler,
 	usageHandler *UsageHandler,
+	chatHandler *ChatHandler,
+	lobeConfigHandler *LobeConfigHandler,
 	redeemHandler *RedeemHandler,
 	subscriptionHandler *SubscriptionHandler,
 	announcementHandler *AnnouncementHandler,
@@ -107,9 +110,12 @@ func ProvideHandlers(
 ) *Handlers {
 	return &Handlers{
 		Auth:          authHandler,
+		OIDC:          oidcHandler,
 		User:          userHandler,
 		APIKey:        apiKeyHandler,
 		Usage:         usageHandler,
+		Chat:          chatHandler,
+		LobeConfig:    lobeConfigHandler,
 		Redeem:        redeemHandler,
 		Subscription:  subscriptionHandler,
 		Announcement:  announcementHandler,
@@ -129,15 +135,19 @@ func ProvideHandlers(
 var ProviderSet = wire.NewSet(
 	// Top-level handlers
 	NewAuthHandler,
+	NewOIDCHandler,
 	NewUserHandler,
 	NewAPIKeyHandler,
 	NewUsageHandler,
+	NewChatHandler,
+	NewLobeConfigHandler,
 	NewRedeemHandler,
 	NewSubscriptionHandler,
 	NewAnnouncementHandler,
 	NewGatewayHandler,
 	NewOpenAIGatewayHandler,
 	NewSoraGatewayHandler,
+	NewSoraClientHandler,
 	NewTotpHandler,
 	ProvideSettingHandler,
 

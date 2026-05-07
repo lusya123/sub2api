@@ -85,6 +85,20 @@ func (_c *APIKeyCreate) SetName(v string) *APIKeyCreate {
 	return _c
 }
 
+// SetType sets the "type" field.
+func (_c *APIKeyCreate) SetType(v string) *APIKeyCreate {
+	_c.mutation.SetType(v)
+	return _c
+}
+
+// SetNillableType sets the "type" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableType(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetType(*v)
+	}
+	return _c
+}
+
 // SetGroupID sets the "group_id" field.
 func (_c *APIKeyCreate) SetGroupID(v int64) *APIKeyCreate {
 	_c.mutation.SetGroupID(v)
@@ -383,6 +397,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.GetType(); !ok {
+		v := apikey.DefaultType
+		_c.mutation.SetType(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -447,6 +465,14 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.Name(); ok {
 		if err := apikey.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.GetType(); !ok {
+		return &ValidationError{Name: "type", err: errors.New(`ent: missing required field "APIKey.type"`)}
+	}
+	if v, ok := _c.mutation.GetType(); ok {
+		if err := apikey.TypeValidator(v); err != nil {
+			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "APIKey.type": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -530,6 +556,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := _c.mutation.GetType(); ok {
+		_spec.SetField(apikey.FieldType, field.TypeString, value)
+		_node.Type = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -760,6 +790,18 @@ func (u *APIKeyUpsert) SetName(v string) *APIKeyUpsert {
 // UpdateName sets the "name" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateName() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldName)
+	return u
+}
+
+// SetType sets the "type" field.
+func (u *APIKeyUpsert) SetType(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldType, v)
+	return u
+}
+
+// UpdateType sets the "type" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateType() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldType)
 	return u
 }
 
@@ -1182,6 +1224,20 @@ func (u *APIKeyUpsertOne) SetName(v string) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateName() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateName()
+	})
+}
+
+// SetType sets the "type" field.
+func (u *APIKeyUpsertOne) SetType(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetType(v)
+	})
+}
+
+// UpdateType sets the "type" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateType() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateType()
 	})
 }
 
@@ -1820,6 +1876,20 @@ func (u *APIKeyUpsertBulk) SetName(v string) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateName() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateName()
+	})
+}
+
+// SetType sets the "type" field.
+func (u *APIKeyUpsertBulk) SetType(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetType(v)
+	})
+}
+
+// UpdateType sets the "type" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateType() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateType()
 	})
 }
 

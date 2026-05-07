@@ -238,6 +238,7 @@ func (h *AuthHandler) LinuxDoOAuthCallback(c *gin.Context) {
 	fragment.Set("expires_in", fmt.Sprintf("%d", tokenPair.ExpiresIn))
 	fragment.Set("token_type", "Bearer")
 	fragment.Set("redirect", redirectTo)
+	h.setOIDCSessionCookie(c, tokenPair.AccessToken, tokenPair.ExpiresIn)
 	redirectWithFragment(c, frontendCallback, fragment)
 }
 
@@ -268,6 +269,7 @@ func (h *AuthHandler) CompleteLinuxDoOAuthRegistration(c *gin.Context) {
 		return
 	}
 
+	h.setOIDCSessionCookie(c, tokenPair.AccessToken, tokenPair.ExpiresIn)
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokenPair.AccessToken,
 		"refresh_token": tokenPair.RefreshToken,

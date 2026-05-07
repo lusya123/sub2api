@@ -268,6 +268,26 @@ const DashboardIcon = {
     )
 }
 
+const ChatIcon = {
+  render: () =>
+    h(
+      'svg',
+      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
+      [
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z'
+        }),
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M21 12c0 4.556-4.03 8.25-9 8.25a10.5 10.5 0 01-3.962-.761L3 21l1.511-5.038A7.63 7.63 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z'
+        })
+      ]
+    )
+}
+
 const KeyIcon = {
   render: () =>
     h(
@@ -576,6 +596,7 @@ const modelHealthPageEnabled = computed(
 const userNavItems = computed((): NavItem[] => {
   const items: NavItem[] = [
     { path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
+    { path: '/chat', label: t('nav.chat'), icon: ChatIcon },
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/client-install', label: t('nav.clientInstall'), icon: ChevronDoubleRightIcon },
     ...(modelHealthPageEnabled.value
@@ -611,6 +632,7 @@ const userNavItems = computed((): NavItem[] => {
 // Personal navigation items (for admin's "My Account" section, without Dashboard)
 const personalNavItems = computed((): NavItem[] => {
   const items: NavItem[] = [
+    { path: '/chat', label: t('nav.chat'), icon: ChatIcon },
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/client-install', label: t('nav.clientInstall'), icon: ChevronDoubleRightIcon },
     ...(modelHealthPageEnabled.value
@@ -689,6 +711,7 @@ const adminNavItems = computed((): NavItem[] => {
   // 简单模式下，在系统设置前插入 API密钥
   if (authStore.isSimpleMode) {
     const filtered = baseItems.filter(item => !item.hideInSimpleMode)
+    filtered.push({ path: '/chat', label: t('nav.chat'), icon: ChatIcon })
     filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })
     filtered.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
     // Add admin custom menu items after settings

@@ -841,6 +841,7 @@ func (s *UsageLogRepoSuite) TestDashboardStatsWithRange_Fallback() {
 func (s *UsageLogRepoSuite) TestGetUserDashboardStats() {
 	user := mustCreateUser(s.T(), s.client, &service.User{Email: "userdash@test.com"})
 	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-userdash", Name: "k"})
+	mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-userdash-chat", Name: "[chat] k", Type: service.APIKeyTypeChat})
 	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-userdash"})
 
 	s.createUsageLog(user, apiKey, account, 10, 20, 0.5, time.Now())
@@ -848,6 +849,7 @@ func (s *UsageLogRepoSuite) TestGetUserDashboardStats() {
 	stats, err := s.repo.GetUserDashboardStats(s.ctx, user.ID)
 	s.Require().NoError(err, "GetUserDashboardStats")
 	s.Require().Equal(int64(1), stats.TotalAPIKeys)
+	s.Require().Equal(int64(1), stats.ActiveAPIKeys)
 	s.Require().Equal(int64(1), stats.TotalRequests)
 }
 

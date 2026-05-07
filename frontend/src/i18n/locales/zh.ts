@@ -336,6 +336,7 @@ export default {
   // Navigation
   nav: {
     dashboard: '仪表盘',
+    chat: '网页聊天',
     announcements: '公告',
     apiKeys: 'API 密钥',
     clientInstall: '一键部署',
@@ -367,6 +368,15 @@ export default {
     buySubscription: '充值/订阅',
     docs: '文档',
     sora: 'Sora 创作'
+  },
+
+  chatLaunch: {
+    title: '网页聊天',
+    description: '进入聊天窗口后即可直接对话。',
+    opening: '正在打开聊天窗口...',
+    openingButton: '正在打开...',
+    openButton: '进入聊天',
+    failed: '聊天窗口打开失败，请稍后再试。'
   },
 
   clientInstallPage: {
@@ -540,6 +550,9 @@ export default {
     startUsingApi: '开始使用 API 后，您的使用历史将显示在这里。',
     viewAllUsage: '查看全部',
     quickActions: '快捷操作',
+    startChat: '开始聊天',
+    chatNow: '网页直接对话，无需手动配置密钥',
+    chatOpenFailed: '聊天启动失败，请稍后再试',
     createApiKey: '创建 API 密钥',
     generateNewKey: '生成新的 API 密钥',
     viewUsage: '查看使用记录',

@@ -111,6 +111,12 @@ func registerRoutes(
 	// 公共全球看板路由（无需认证，匿名安全）
 	routes.RegisterPublicGlobeRoutes(r, h.Globe)
 
+	// OIDC issuer routes for LobeChat SSO.
+	routes.RegisterOIDCRoutes(r, h)
+
+	// 内部服务路由：仅供 LobeChat 等同 VPC 服务调用。
+	routes.RegisterInternalRoutes(r, h, cfg)
+
 	// API v1
 	v1 := r.Group("/api/v1")
 

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -88,6 +89,7 @@ func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
 			response.InternalError(c, "Failed to generate token")
 			return
 		}
+		h.setOIDCSessionCookie(c, token, h.authService.GetAccessTokenExpiresIn())
 		response.Success(c, AuthResponse{
 			AccessToken: token,
 			TokenType:   "Bearer",
@@ -95,6 +97,7 @@ func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
 		})
 		return
 	}
+	h.setOIDCSessionCookie(c, tokenPair.AccessToken, tokenPair.ExpiresIn)
 	response.Success(c, AuthResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
@@ -546,6 +549,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	h.setOIDCSessionCookie(c, result.AccessToken, result.ExpiresIn)
 	response.Success(c, RefreshTokenResponse{
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
@@ -578,9 +582,52 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 			// 不影响登出流程
 		}
 	}
+	h.clearOIDCSessionCookie(c)
 
 	response.Success(c, LogoutResponse{
 		Message: "Logged out successfully",
+	})
+}
+
+func (h *AuthHandler) setOIDCSessionCookie(c *gin.Context, token string, maxAge int) {
+	if h == nil || h.cfg == nil || strings.TrimSpace(token) == "" {
+		return
+	}
+	name := strings.TrimSpace(h.cfg.OIDC.CookieName)
+	if name == "" {
+		name = "sub2api_access_token"
+	}
+	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     name,
+		Value:    token,
+		Path:     "/",
+		Domain:   strings.TrimSpace(h.cfg.OIDC.CookieDomain),
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (h *AuthHandler) clearOIDCSessionCookie(c *gin.Context) {
+	if h == nil || h.cfg == nil {
+		return
+	}
+	name := strings.TrimSpace(h.cfg.OIDC.CookieName)
+	if name == "" {
+		name = "sub2api_access_token"
+	}
+	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		Domain:   strings.TrimSpace(h.cfg.OIDC.CookieDomain),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 

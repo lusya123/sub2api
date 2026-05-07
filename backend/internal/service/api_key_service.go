@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -400,6 +401,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		UserID:      userID,
 		Key:         key,
 		Name:        req.Name,
+		Type:        APIKeyTypeUser,
 		GroupID:     req.GroupID,
 		Status:      StatusActive,
 		IPWhitelist: req.IPWhitelist,
@@ -429,11 +431,70 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 // List 获取用户的API Key列表
 func (s *APIKeyService) List(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
+	if strings.TrimSpace(filters.Type) == "" {
+		filters.Type = APIKeyTypeUser
+	}
 	keys, pagination, err := s.apiKeyRepo.ListByUserID(ctx, userID, params, filters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list api keys: %w", err)
 	}
 	return keys, pagination, nil
+}
+
+func (s *APIKeyService) EnsureChatKeyForGroup(ctx context.Context, userID int64, group *Group) (*APIKey, error) {
+	if group == nil {
+		return nil, ErrGroupNotFound
+	}
+	if existing, err := s.findChatKeyForGroup(ctx, userID, group.ID); err == nil {
+		return existing, nil
+	} else if err != nil && !errors.Is(err, ErrAPIKeyNotFound) {
+		return nil, err
+	}
+
+	key, err := s.GenerateKey()
+	if err != nil {
+		return nil, fmt.Errorf("generate chat key: %w", err)
+	}
+
+	apiKey := &APIKey{
+		UserID:      userID,
+		Key:         key,
+		Name:        fmt.Sprintf("[chat] %s", group.Name),
+		Type:        APIKeyTypeChat,
+		GroupID:     &group.ID,
+		Status:      StatusActive,
+		IPWhitelist: []string{},
+		IPBlacklist: []string{},
+	}
+	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
+		if errors.Is(err, ErrAPIKeyExists) {
+			existing, getErr := s.findChatKeyForGroup(ctx, userID, group.ID)
+			if getErr == nil {
+				return existing, nil
+			}
+		}
+		return nil, fmt.Errorf("create chat api key: %w", err)
+	}
+
+	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	s.compileAPIKeyIPRules(apiKey)
+	return apiKey, nil
+}
+
+func (s *APIKeyService) findChatKeyForGroup(ctx context.Context, userID int64, groupID int64) (*APIKey, error) {
+	keys, _, err := s.apiKeyRepo.ListByUserID(ctx, userID, pagination.PaginationParams{Page: 1, PageSize: 1}, APIKeyListFilters{
+		GroupID: &groupID,
+		Type:    APIKeyTypeChat,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get chat api key: %w", err)
+	}
+	if len(keys) == 0 {
+		return nil, ErrAPIKeyNotFound
+	}
+	key := &keys[0]
+	s.compileAPIKeyIPRules(key)
+	return key, nil
 }
 
 func (s *APIKeyService) VerifyOwnership(ctx context.Context, userID int64, apiKeyIDs []int64) ([]int64, error) {

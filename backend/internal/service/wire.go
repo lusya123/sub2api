@@ -452,6 +452,39 @@ func ProvideAPIKeyAuthCacheInvalidator(apiKeyService *APIKeyService) APIKeyAuthC
 	return apiKeyService
 }
 
+// ProvideAPIKeyService wires APIKeyService with the shared billing cache so
+// manual API key rate-limit resets also clear the Redis rate-limit entry.
+func ProvideAPIKeyService(
+	apiKeyRepo APIKeyRepository,
+	userRepo UserRepository,
+	groupRepo GroupRepository,
+	userSubRepo UserSubscriptionRepository,
+	userGroupRateRepo UserGroupRateRepository,
+	cache APIKeyCache,
+	cfg *config.Config,
+	rateLimitCache BillingCache,
+) *APIKeyService {
+	svc := NewAPIKeyService(apiKeyRepo, userRepo, groupRepo, userSubRepo, userGroupRateRepo, cache, cfg)
+	svc.SetRateLimitCacheInvalidator(rateLimitCache)
+	return svc
+}
+
+// ProvideOpenAIOAuthService wires the privacy client factory used by OpenAI
+// training opt-out calls.
+func ProvideOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthClient, privacyClientFactory PrivacyClientFactory) *OpenAIOAuthService {
+	svc := NewOpenAIOAuthService(proxyRepo, oauthClient)
+	svc.SetPrivacyClientFactory(privacyClientFactory)
+	return svc
+}
+
+// ProvideSoraS3Storage registers the S3 refresh hook on SettingService so Sora
+// storage config updates take effect without restarting the process.
+func ProvideSoraS3Storage(settingService *SettingService) *SoraS3Storage {
+	svc := NewSoraS3Storage(settingService)
+	settingService.SetOnS3UpdateCallback(svc.RefreshClient)
+	return svc
+}
+
 // ProvideBackupService creates and starts BackupService
 func ProvideBackupService(
 	settingRepo SettingRepository,
@@ -476,8 +509,9 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 var ProviderSet = wire.NewSet(
 	// Core services
 	NewAuthService,
+	NewOIDCService,
 	NewUserService,
-	NewAPIKeyService,
+	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	NewGroupService,
 	NewAccountService,
@@ -485,6 +519,7 @@ var ProviderSet = wire.NewSet(
 	NewRedeemService,
 	NewPromoService,
 	NewUsageService,
+	NewLobeConfigService,
 	NewDashboardService,
 	NewOperationAnalyticsService,
 	ProvidePricingService,
@@ -494,6 +529,9 @@ var ProviderSet = wire.NewSet(
 	NewAnnouncementService,
 	NewAdminService,
 	NewGatewayService,
+	ProvideSoraS3Storage,
+	NewSoraQuotaService,
+	NewSoraGenerationService,
 	ProvideSoraMediaStorage,
 	ProvideSoraMediaCleanupService,
 	ProvideSoraSDKClient,
@@ -501,7 +539,7 @@ var ProviderSet = wire.NewSet(
 	NewSoraGatewayService,
 	NewOpenAIGatewayService,
 	NewOAuthService,
-	NewOpenAIOAuthService,
+	ProvideOpenAIOAuthService,
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
 	NewCompositeTokenCacheInvalidator,

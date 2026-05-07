@@ -336,6 +336,7 @@ export default {
   // Navigation
   nav: {
     dashboard: 'Dashboard',
+    chat: 'Chat',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
     clientInstall: 'One-Click Deploy',
@@ -367,6 +368,15 @@ export default {
     buySubscription: 'Recharge / Subscription',
     docs: 'Docs',
     sora: 'Sora Studio'
+  },
+
+  chatLaunch: {
+    title: 'Chat',
+    description: 'Open the chat window and start talking immediately.',
+    opening: 'Opening chat...',
+    openingButton: 'Opening...',
+    openButton: 'Open Chat',
+    failed: 'Failed to open chat. Please try again later.'
   },
 
   clientInstallPage: {
@@ -540,6 +550,9 @@ export default {
     startUsingApi: 'Start using the API to see your usage history here.',
     viewAllUsage: 'View all usage',
     quickActions: 'Quick Actions',
+    startChat: 'Start Chat',
+    chatNow: 'Chat on the web without manual key setup',
+    chatOpenFailed: 'Failed to start chat. Please try again later.',
     createApiKey: 'Create API Key',
     generateNewKey: 'Generate a new API key',
     viewUsage: 'View Usage',

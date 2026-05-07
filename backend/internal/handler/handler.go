@@ -40,9 +40,12 @@ type AdminHandlers struct {
 // Handlers contains all HTTP handlers
 type Handlers struct {
 	Auth          *AuthHandler
+	OIDC          *OIDCHandler
 	User          *UserHandler
 	APIKey        *APIKeyHandler
 	Usage         *UsageHandler
+	Chat          *ChatHandler
+	LobeConfig    *LobeConfigHandler
 	Redeem        *RedeemHandler
 	Subscription  *SubscriptionHandler
 	Announcement  *AnnouncementHandler

@@ -58,6 +58,13 @@ func RegisterUserRoutes(
 			groups.GET("/rates", h.APIKey.GetUserGroupRates)
 		}
 
+		// 托管聊天入口：用户不需要在聊天端再次登录或配置 API Key
+		chat := authenticated.Group("/chat")
+		{
+			chat.POST("/launch", h.Chat.CreateLaunch)
+			chat.GET("/launch", h.Chat.Launch)
+		}
+
 		// 使用记录
 		usage := authenticated.Group("/usage")
 		{

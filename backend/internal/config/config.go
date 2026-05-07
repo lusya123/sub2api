@@ -63,8 +63,10 @@ type Config struct {
 	Redis                   RedisConfig                   `mapstructure:"redis"`
 	Ops                     OpsConfig                     `mapstructure:"ops"`
 	JWT                     JWTConfig                     `mapstructure:"jwt"`
+	OIDC                    OIDCConfig                    `mapstructure:"oidc"`
 	Totp                    TotpConfig                    `mapstructure:"totp"`
 	LinuxDo                 LinuxDoConnectConfig          `mapstructure:"linuxdo_connect"`
+	Lobe                    LobeConfig                    `mapstructure:"lobe"`
 	Default                 DefaultConfig                 `mapstructure:"default"`
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
@@ -183,6 +185,12 @@ type LinuxDoConnectConfig struct {
 	UserInfoEmailPath    string `mapstructure:"userinfo_email_path"`
 	UserInfoIDPath       string `mapstructure:"userinfo_id_path"`
 	UserInfoUsernamePath string `mapstructure:"userinfo_username_path"`
+}
+
+type LobeConfig struct {
+	InternalSharedSecret string `mapstructure:"internal_shared_secret"`
+	GatewayBaseURL       string `mapstructure:"gateway_base_url"`
+	ChatURL              string `mapstructure:"chat_url"`
 }
 
 // TokenRefreshConfig OAuth token自动刷新配置
@@ -867,6 +875,15 @@ type JWTConfig struct {
 	RefreshWindowMinutes int `mapstructure:"refresh_window_minutes"`
 }
 
+type OIDCConfig struct {
+	Issuer       string   `mapstructure:"issuer"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	RedirectURIs []string `mapstructure:"redirect_uris"`
+	CookieName   string   `mapstructure:"cookie_name"`
+	CookieDomain string   `mapstructure:"cookie_domain"`
+}
+
 // TotpConfig TOTP 双因素认证配置
 type TotpConfig struct {
 	// EncryptionKey 用于加密 TOTP 密钥的 AES-256 密钥（32 字节 hex 编码）
@@ -1221,6 +1238,11 @@ func setDefaults() {
 	viper.SetDefault("linuxdo_connect.userinfo_id_path", "")
 	viper.SetDefault("linuxdo_connect.userinfo_username_path", "")
 
+	// LobeChat bridge
+	viper.SetDefault("lobe.internal_shared_secret", "")
+	viper.SetDefault("lobe.gateway_base_url", "")
+	viper.SetDefault("lobe.chat_url", "")
+
 	// Database
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
@@ -1265,6 +1287,14 @@ func setDefaults() {
 	viper.SetDefault("jwt.access_token_expire_minutes", 0) // 0 表示回退到 expire_hour
 	viper.SetDefault("jwt.refresh_token_expire_days", 30)  // 30天Refresh Token有效期
 	viper.SetDefault("jwt.refresh_window_minutes", 2)      // 过期前2分钟开始允许刷新
+
+	// OIDC issuer for LobeChat SSO
+	viper.SetDefault("oidc.issuer", "")
+	viper.SetDefault("oidc.client_id", "")
+	viper.SetDefault("oidc.client_secret", "")
+	viper.SetDefault("oidc.redirect_uris", []string{})
+	viper.SetDefault("oidc.cookie_name", "sub2api_access_token")
+	viper.SetDefault("oidc.cookie_domain", "")
 
 	// TOTP
 	viper.SetDefault("totp.encryption_key", "")

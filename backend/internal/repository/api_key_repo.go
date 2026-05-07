@@ -39,6 +39,7 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetUserID(key.UserID).
 		SetKey(key.Key).
 		SetName(key.Name).
+		SetType(apiKeyTypeOrDefault(key.Type)).
 		SetStatus(key.Status).
 		SetNillableGroupID(key.GroupID).
 		SetNillableLastUsedAt(key.LastUsedAt).
@@ -122,6 +123,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldID,
 			apikey.FieldUserID,
 			apikey.FieldGroupID,
+			apikey.FieldType,
 			apikey.FieldStatus,
 			apikey.FieldIPWhitelist,
 			apikey.FieldIPBlacklist,
@@ -293,6 +295,15 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 	q := r.activeQuery().Where(apikey.UserIDEQ(userID))
 
 	// Apply filters
+	switch filters.Type {
+	case "", service.APIKeyTypeUser:
+		q = q.Where(apikey.TypeEQ(service.APIKeyTypeUser))
+	case service.APIKeyTypeChat:
+		q = q.Where(apikey.TypeEQ(service.APIKeyTypeChat))
+	case "all":
+	default:
+		q = q.Where(apikey.TypeEQ(filters.Type))
+	}
 	if filters.Search != "" {
 		q = q.Where(apikey.Or(
 			apikey.NameContainsFold(filters.Search),
@@ -331,6 +342,25 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 	}
 
 	return outKeys, paginationResultFromTotal(int64(total), params), nil
+}
+
+func (r *apiKeyRepository) GetByUserGroupAndType(ctx context.Context, userID int64, groupID int64, keyType string) (*service.APIKey, error) {
+	m, err := r.activeQuery().
+		Where(
+			apikey.UserIDEQ(userID),
+			apikey.GroupIDEQ(groupID),
+			apikey.TypeEQ(apiKeyTypeOrDefault(keyType)),
+		).
+		WithGroup().
+		Order(dbent.Desc(apikey.FieldID)).
+		First(ctx)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return nil, service.ErrAPIKeyNotFound
+		}
+		return nil, err
+	}
+	return apiKeyEntityToService(m), nil
 }
 
 func (r *apiKeyRepository) VerifyOwnership(ctx context.Context, userID int64, apiKeyIDs []int64) ([]int64, error) {
@@ -576,6 +606,7 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		UserID:        m.UserID,
 		Key:           m.Key,
 		Name:          m.Name,
+		Type:          apiKeyTypeOrDefault(m.Type),
 		Status:        m.Status,
 		IPWhitelist:   m.IPWhitelist,
 		IPBlacklist:   m.IPBlacklist,
@@ -603,6 +634,13 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		out.Group = groupEntityToService(m.Edges.Group)
 	}
 	return out
+}
+
+func apiKeyTypeOrDefault(keyType string) string {
+	if keyType == "" {
+		return service.APIKeyTypeUser
+	}
+	return keyType
 }
 
 func userEntityToService(u *dbent.User) *service.User {

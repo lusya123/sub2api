@@ -14,6 +14,11 @@ const (
 	StatusAPIKeyExpired        = "expired"
 )
 
+const (
+	APIKeyTypeUser = "user"
+	APIKeyTypeChat = "chat"
+)
+
 // Rate limit window durations
 const (
 	RateLimitWindow5h = 5 * time.Hour
@@ -32,6 +37,7 @@ type APIKey struct {
 	UserID      int64
 	Key         string
 	Name        string
+	Type        string
 	GroupID     *int64
 	Status      string
 	IPWhitelist []string
@@ -140,4 +146,5 @@ type APIKeyListFilters struct {
 	Search  string
 	Status  string
 	GroupID *int64 // nil=不筛选, 0=无分组, >0=指定分组
+	Type    string // 空值默认只返回 user；"all" 返回全部
 }

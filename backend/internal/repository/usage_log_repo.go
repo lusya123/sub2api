@@ -2309,8 +2309,8 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
-		"SELECT COUNT(*) FROM api_keys WHERE user_id = $1 AND deleted_at IS NULL",
-		[]any{userID},
+		"SELECT COUNT(*) FROM api_keys WHERE user_id = $1 AND type = $2 AND deleted_at IS NULL",
+		[]any{userID, service.APIKeyTypeUser},
 		&stats.TotalAPIKeys,
 	); err != nil {
 		return nil, err
@@ -2318,8 +2318,8 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
-		"SELECT COUNT(*) FROM api_keys WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL",
-		[]any{userID, service.StatusActive},
+		"SELECT COUNT(*) FROM api_keys WHERE user_id = $1 AND type = $2 AND status = $3 AND deleted_at IS NULL",
+		[]any{userID, service.APIKeyTypeUser, service.StatusActive},
 		&stats.ActiveAPIKeys,
 	); err != nil {
 		return nil, err

@@ -17,13 +17,18 @@ import (
 )
 
 type authRepoStub struct {
+	create            func(ctx context.Context, key *APIKey) error
 	getByKeyForAuth   func(ctx context.Context, key string) (*APIKey, error)
+	listByUserID      func(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error)
 	listKeysByUserID  func(ctx context.Context, userID int64) ([]string, error)
 	listKeysByGroupID func(ctx context.Context, groupID int64) ([]string, error)
 }
 
 func (s *authRepoStub) Create(ctx context.Context, key *APIKey) error {
-	panic("unexpected Create call")
+	if s.create == nil {
+		panic("unexpected Create call")
+	}
+	return s.create(ctx, key)
 }
 
 func (s *authRepoStub) GetByID(ctx context.Context, id int64) (*APIKey, error) {
@@ -54,7 +59,10 @@ func (s *authRepoStub) Delete(ctx context.Context, id int64) error {
 }
 
 func (s *authRepoStub) ListByUserID(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
-	panic("unexpected ListByUserID call")
+	if s.listByUserID == nil {
+		panic("unexpected ListByUserID call")
+	}
+	return s.listByUserID(ctx, userID, params, filters)
 }
 
 func (s *authRepoStub) VerifyOwnership(ctx context.Context, userID int64, apiKeyIDs []int64) ([]int64, error) {
@@ -448,4 +456,69 @@ func TestAPIKeyService_GetByKey_SingleflightCollapses(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Equal(t, int32(1), atomic.LoadInt32(&calls))
+}
+
+func TestAPIKeyService_EnsureChatKeyForGroupCreatesWhenMissing(t *testing.T) {
+	groupID := int64(7)
+	var created *APIKey
+	repo := &authRepoStub{
+		listByUserID: func(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
+			require.Equal(t, int64(42), userID)
+			require.Equal(t, APIKeyTypeChat, filters.Type)
+			require.NotNil(t, filters.GroupID)
+			require.Equal(t, groupID, *filters.GroupID)
+			return nil, &pagination.PaginationResult{Total: 0, Page: params.Page, PageSize: params.PageSize, Pages: 0}, nil
+		},
+		create: func(ctx context.Context, key *APIKey) error {
+			created = key
+			key.ID = 99
+			return nil
+		},
+	}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, &authCacheStub{}, &config.Config{
+		Default: config.DefaultConfig{APIKeyPrefix: "sk-test-"},
+	})
+
+	key, err := svc.EnsureChatKeyForGroup(context.Background(), 42, &Group{
+		ID:     groupID,
+		Name:   "Chat Group",
+		Status: StatusActive,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, key)
+	require.Same(t, created, key)
+	require.Equal(t, APIKeyTypeChat, key.Type)
+	require.Equal(t, "[chat] Chat Group", key.Name)
+	require.Equal(t, &groupID, key.GroupID)
+	require.Equal(t, StatusActive, key.Status)
+	require.Contains(t, key.Key, "sk-test-")
+}
+
+func TestAPIKeyService_EnsureChatKeyForGroupReusesExisting(t *testing.T) {
+	groupID := int64(7)
+	existing := APIKey{
+		ID:      9,
+		UserID:  42,
+		Key:     "sk-existing",
+		Type:    APIKeyTypeChat,
+		GroupID: &groupID,
+		Status:  StatusActive,
+	}
+	repo := &authRepoStub{
+		listByUserID: func(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
+			return []APIKey{existing}, &pagination.PaginationResult{Total: 1, Page: params.Page, PageSize: params.PageSize, Pages: 1}, nil
+		},
+		create: func(ctx context.Context, key *APIKey) error {
+			t.Fatal("existing chat key should be reused")
+			return nil
+		},
+	}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, &authCacheStub{}, &config.Config{})
+
+	key, err := svc.EnsureChatKeyForGroup(context.Background(), 42, &Group{ID: groupID, Name: "Chat Group"})
+
+	require.NoError(t, err)
+	require.Equal(t, existing.ID, key.ID)
+	require.Equal(t, existing.Key, key.Key)
 }
