@@ -104,7 +104,7 @@ func registerRoutes(
 ) {
 	// 通用路由（健康检查、状态等）
 	routes.RegisterCommonRoutes(r)
-	routes.RegisterOIDCRoutes(r, h)
+	routes.RegisterOIDCIssuerRoutes(r, h)
 	routes.RegisterInternalRoutes(r, h, cfg)
 	routes.RegisterPublicStatusRoutes(r, h.PublicStatus)
 	routes.RegisterPublicGlobeRoutes(r, h.Globe)

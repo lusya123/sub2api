@@ -21,12 +21,13 @@ import (
 )
 
 var (
-	ErrOIDCNotConfigured = infraerrors.ServiceUnavailable("OIDC_NOT_CONFIGURED", "oidc is not configured")
-	ErrOIDCInvalidClient = infraerrors.Unauthorized("OIDC_INVALID_CLIENT", "invalid oidc client")
-	ErrOIDCInvalidCode   = infraerrors.Unauthorized("OIDC_INVALID_CODE", "invalid or expired authorization code")
+	ErrOIDCIssuerNotConfigured = infraerrors.ServiceUnavailable("OIDC_NOT_CONFIGURED", "oidc is not configured")
+	ErrOIDCIssuerInvalidClient = infraerrors.Unauthorized("OIDC_INVALID_CLIENT", "invalid oidc client")
+	ErrOIDCIssuerInvalidCode   = infraerrors.Unauthorized("OIDC_INVALID_CODE", "invalid or expired authorization code")
 )
 
-type OIDCService struct {
+// OIDCIssuerService implements Sub2API as an OIDC Provider/Issuer.
+type OIDCIssuerService struct {
 	cfg        *config.Config
 	auth       *AuthService
 	userRepo   UserRepository
@@ -45,20 +46,20 @@ type oidcAuthCode struct {
 	ExpiresAt   time.Time
 }
 
-type OIDCTokenResult struct {
+type OIDCIssuerTokenResult struct {
 	AccessToken string
 	IDToken     string
 	ExpiresIn   int
 	User        *User
 }
 
-func NewOIDCService(cfg *config.Config, auth *AuthService, userRepo UserRepository) (*OIDCService, error) {
+func NewOIDCIssuerService(cfg *config.Config, auth *AuthService, userRepo UserRepository) (*OIDCIssuerService, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, fmt.Errorf("generate oidc signing key: %w", err)
 	}
 	sum := sha256.Sum256(key.N.Bytes())
-	return &OIDCService{
+	return &OIDCIssuerService{
 		cfg:        cfg,
 		auth:       auth,
 		userRepo:   userRepo,
@@ -68,60 +69,60 @@ func NewOIDCService(cfg *config.Config, auth *AuthService, userRepo UserReposito
 	}, nil
 }
 
-func (s *OIDCService) Issuer() string {
+func (s *OIDCIssuerService) Issuer() string {
 	if s == nil || s.cfg == nil {
 		return ""
 	}
-	if issuer := strings.TrimRight(strings.TrimSpace(s.cfg.OIDCServer.Issuer), "/"); issuer != "" {
+	if issuer := strings.TrimRight(strings.TrimSpace(s.cfg.OIDCIssuer.Issuer), "/"); issuer != "" {
 		return issuer
 	}
 	return strings.TrimRight(strings.TrimSpace(s.cfg.Server.FrontendURL), "/")
 }
 
-func (s *OIDCService) CookieName() string {
-	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.OIDCServer.CookieName) == "" {
+func (s *OIDCIssuerService) CookieName() string {
+	if s == nil || s.cfg == nil || strings.TrimSpace(s.cfg.OIDCIssuer.CookieName) == "" {
 		return "sub2api_access_token"
 	}
-	return strings.TrimSpace(s.cfg.OIDCServer.CookieName)
+	return strings.TrimSpace(s.cfg.OIDCIssuer.CookieName)
 }
 
-func (s *OIDCService) CookieDomain() string {
+func (s *OIDCIssuerService) CookieDomain() string {
 	if s == nil || s.cfg == nil {
 		return ""
 	}
-	return strings.TrimSpace(s.cfg.OIDCServer.CookieDomain)
+	return strings.TrimSpace(s.cfg.OIDCIssuer.CookieDomain)
 }
 
-func (s *OIDCService) ClientID() string {
+func (s *OIDCIssuerService) ClientID() string {
 	if s == nil || s.cfg == nil {
 		return ""
 	}
-	return strings.TrimSpace(s.cfg.OIDCServer.ClientID)
+	return strings.TrimSpace(s.cfg.OIDCIssuer.ClientID)
 }
 
-func (s *OIDCService) IsConfigured() bool {
-	return s != nil && s.Issuer() != "" && s.ClientID() != "" && strings.TrimSpace(s.cfg.OIDCServer.ClientSecret) != "" && len(s.cfg.OIDCServer.RedirectURIs) > 0
+func (s *OIDCIssuerService) IsConfigured() bool {
+	return s != nil && s.Issuer() != "" && s.ClientID() != "" && strings.TrimSpace(s.cfg.OIDCIssuer.ClientSecret) != "" && len(s.cfg.OIDCIssuer.RedirectURIs) > 0
 }
 
-func (s *OIDCService) ValidateClient(clientID, clientSecret string) error {
+func (s *OIDCIssuerService) ValidateClient(clientID, clientSecret string) error {
 	if !s.IsConfigured() {
-		return ErrOIDCNotConfigured
+		return ErrOIDCIssuerNotConfigured
 	}
 	if clientID != s.ClientID() {
-		return ErrOIDCInvalidClient
+		return ErrOIDCIssuerInvalidClient
 	}
-	expected := strings.TrimSpace(s.cfg.OIDCServer.ClientSecret)
+	expected := strings.TrimSpace(s.cfg.OIDCIssuer.ClientSecret)
 	if subtle.ConstantTimeCompare([]byte(clientSecret), []byte(expected)) != 1 {
-		return ErrOIDCInvalidClient
+		return ErrOIDCIssuerInvalidClient
 	}
 	return nil
 }
 
-func (s *OIDCService) ValidateRedirectURI(redirectURI string) bool {
+func (s *OIDCIssuerService) ValidateRedirectURI(redirectURI string) bool {
 	if s == nil || s.cfg == nil {
 		return false
 	}
-	for _, item := range s.cfg.OIDCServer.RedirectURIs {
+	for _, item := range s.cfg.OIDCIssuer.RedirectURIs {
 		if strings.TrimSpace(item) == redirectURI {
 			return true
 		}
@@ -129,7 +130,7 @@ func (s *OIDCService) ValidateRedirectURI(redirectURI string) bool {
 	return false
 }
 
-func (s *OIDCService) UserFromAccessToken(ctx context.Context, token string) (*User, error) {
+func (s *OIDCIssuerService) UserFromAccessToken(ctx context.Context, token string) (*User, error) {
 	claims, err := s.auth.ValidateToken(token)
 	if err != nil {
 		return nil, err
@@ -138,15 +139,15 @@ func (s *OIDCService) UserFromAccessToken(ctx context.Context, token string) (*U
 	if err != nil {
 		return nil, err
 	}
-	if !user.IsActive() || user.TokenVersion != claims.TokenVersion {
+	if !user.IsActive() || resolvedTokenVersion(user) != claims.TokenVersion {
 		return nil, ErrTokenRevoked
 	}
 	return user, nil
 }
 
-func (s *OIDCService) CreateCode(userID int64, clientID, redirectURI, scope, nonce string) (string, error) {
+func (s *OIDCIssuerService) CreateCode(userID int64, clientID, redirectURI, scope, nonce string) (string, error) {
 	if !s.IsConfigured() {
-		return "", ErrOIDCNotConfigured
+		return "", ErrOIDCIssuerNotConfigured
 	}
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
@@ -167,7 +168,7 @@ func (s *OIDCService) CreateCode(userID int64, clientID, redirectURI, scope, non
 	return code, nil
 }
 
-func (s *OIDCService) ExchangeCode(ctx context.Context, code, clientID, clientSecret, redirectURI string) (*OIDCTokenResult, error) {
+func (s *OIDCIssuerService) ExchangeCode(ctx context.Context, code, clientID, clientSecret, redirectURI string) (*OIDCIssuerTokenResult, error) {
 	if err := s.ValidateClient(clientID, clientSecret); err != nil {
 		return nil, err
 	}
@@ -179,7 +180,7 @@ func (s *OIDCService) ExchangeCode(ctx context.Context, code, clientID, clientSe
 	}
 	s.mu.Unlock()
 	if !ok || time.Now().After(authCode.ExpiresAt) || authCode.ClientID != clientID || authCode.RedirectURI != redirectURI {
-		return nil, ErrOIDCInvalidCode
+		return nil, ErrOIDCIssuerInvalidCode
 	}
 
 	user, err := s.userRepo.GetByID(ctx, authCode.UserID)
@@ -199,7 +200,7 @@ func (s *OIDCService) ExchangeCode(ctx context.Context, code, clientID, clientSe
 		return nil, err
 	}
 
-	return &OIDCTokenResult{
+	return &OIDCIssuerTokenResult{
 		AccessToken: accessToken,
 		IDToken:     idToken,
 		ExpiresIn:   s.auth.GetAccessTokenExpiresIn(),
@@ -207,7 +208,7 @@ func (s *OIDCService) ExchangeCode(ctx context.Context, code, clientID, clientSe
 	}, nil
 }
 
-func (s *OIDCService) JWK() map[string]any {
+func (s *OIDCIssuerService) JWK() map[string]any {
 	n := base64.RawURLEncoding.EncodeToString(s.privateKey.N.Bytes())
 	e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(s.privateKey.E)).Bytes())
 	return map[string]any{
@@ -220,7 +221,7 @@ func (s *OIDCService) JWK() map[string]any {
 	}
 }
 
-func (s *OIDCService) signIDToken(user *User, authCode oidcAuthCode) (string, error) {
+func (s *OIDCIssuerService) signIDToken(user *User, authCode oidcAuthCode) (string, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"iss":                s.Issuer(),
@@ -242,7 +243,7 @@ func (s *OIDCService) signIDToken(user *User, authCode oidcAuthCode) (string, er
 	return token.SignedString(s.privateKey)
 }
 
-func (s *OIDCService) cleanupExpiredCodesLocked() {
+func (s *OIDCIssuerService) cleanupExpiredCodesLocked() {
 	now := time.Now()
 	for code, item := range s.codes {
 		if now.After(item.ExpiresAt) {
@@ -279,6 +280,6 @@ func BuildRedirectWithParams(rawURL string, values url.Values) string {
 	return u.String()
 }
 
-func IsOIDCInvalidAuth(err error) bool {
-	return errors.Is(err, ErrOIDCInvalidClient) || errors.Is(err, ErrOIDCInvalidCode)
+func IsOIDCIssuerInvalidAuth(err error) bool {
+	return errors.Is(err, ErrOIDCIssuerInvalidClient) || errors.Is(err, ErrOIDCIssuerInvalidCode)
 }

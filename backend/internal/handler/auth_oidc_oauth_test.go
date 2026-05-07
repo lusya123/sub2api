@@ -952,7 +952,7 @@ func newOIDCOAuthHandlerAndClient(t *testing.T, invitationEnabled bool, oauthCfg
 			AccessTokenExpireMinutes: 60,
 			RefreshTokenExpireDays:   7,
 		},
-		OIDC: oauthCfg,
+		OIDCConnect: oauthCfg,
 	}
 	return handler, client
 }

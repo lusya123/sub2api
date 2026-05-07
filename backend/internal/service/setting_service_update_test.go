@@ -199,10 +199,10 @@ func TestSettingService_UpdateSettings_PurchaseSubscriptionPersistsModeAndLegacy
 	svc := NewSettingService(repo, &config.Config{})
 
 	err := svc.UpdateSettings(context.Background(), &SystemSettings{
-		PurchaseSubscriptionEnabled:      true,
-		PurchaseSubscriptionMode:         PurchaseSubscriptionModeRedirect,
-		PurchaseSubscriptionEmbeddedURL:  "https://pay.example.com/embed",
-		PurchaseSubscriptionRedirectURL:  "https://pay.example.com/topup",
+		PurchaseSubscriptionEnabled:     true,
+		PurchaseSubscriptionMode:        PurchaseSubscriptionModeRedirect,
+		PurchaseSubscriptionEmbeddedURL: "https://pay.example.com/embed",
+		PurchaseSubscriptionRedirectURL: "https://pay.example.com/topup",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "true", repo.updates[SettingKeyPurchaseSubscriptionEnabled])
@@ -210,6 +210,19 @@ func TestSettingService_UpdateSettings_PurchaseSubscriptionPersistsModeAndLegacy
 	require.Equal(t, "https://pay.example.com/embed", repo.updates[SettingKeyPurchaseSubscriptionEmbeddedURL])
 	require.Equal(t, "https://pay.example.com/topup", repo.updates[SettingKeyPurchaseSubscriptionRedirectURL])
 	require.Equal(t, "https://pay.example.com/embed", repo.updates[SettingKeyPurchaseSubscriptionURL])
+}
+
+func TestSettingService_UpdateSettings_PersistsChatPageURL(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{
+		ChatPageEnabled: true,
+		ChatPageURL:     " https://chat.example.com/ ",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "true", repo.updates[SettingKeyChatPageEnabled])
+	require.Equal(t, "https://chat.example.com/", repo.updates[SettingKeyChatPageURL])
 }
 
 func TestParseDefaultSubscriptions_NormalizesValues(t *testing.T) {

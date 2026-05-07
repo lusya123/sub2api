@@ -217,7 +217,8 @@ type SystemSettings struct {
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 
 	// Chat page feature switch (user-facing chat launch page)
-	ChatPageEnabled bool `json:"chat_page_enabled"`
+	ChatPageEnabled bool   `json:"chat_page_enabled"`
+	ChatPageURL     string `json:"chat_page_url"`
 
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
@@ -290,7 +291,8 @@ type PublicSettings struct {
 
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 
-	ChatPageEnabled bool `json:"chat_page_enabled"`
+	ChatPageEnabled bool   `json:"chat_page_enabled"`
+	ChatPageURL     string `json:"chat_page_url"`
 
 	AffiliateEnabled bool `json:"affiliate_enabled"`
 

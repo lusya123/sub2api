@@ -73,7 +73,7 @@ func TestGetOIDCConnectOAuthConfig_ResolvesEndpointsFromIssuerDiscovery(t *testi
 	baseURL = srv.URL
 
 	cfg := &config.Config{
-		OIDC: config.OIDCConnectConfig{
+		OIDCConnect: config.OIDCConnectConfig{
 			Enabled:             true,
 			ProviderName:        "OIDC",
 			ClientID:            "oidc-client",
@@ -117,7 +117,7 @@ func TestSettingService_ParseSettings_PreservesOptionalOIDCCompatibilityFlags(t 
 
 func TestSettingService_ParseSettings_DefaultsOIDCSecurityFlagsToSafeConfigValues(t *testing.T) {
 	svc := NewSettingService(&settingOIDCRepoStub{values: map[string]string{}}, &config.Config{
-		OIDC: config.OIDCConnectConfig{
+		OIDCConnect: config.OIDCConnectConfig{
 			UsePKCE:                 true,
 			UsePKCEExplicit:         true,
 			ValidateIDToken:         true,
@@ -135,7 +135,7 @@ func TestSettingService_ParseSettings_DefaultsOIDCSecurityFlagsToSafeConfigValue
 
 func TestSettingService_ParseSettings_DefaultsOIDCCompatibilityFlagsToSafeDefaultsWhenSettingsMissing(t *testing.T) {
 	svc := NewSettingService(&settingOIDCRepoStub{values: map[string]string{}}, &config.Config{
-		OIDC: config.OIDCConnectConfig{
+		OIDCConnect: config.OIDCConnectConfig{
 			UsePKCE:         true,
 			ValidateIDToken: true,
 		},
@@ -151,7 +151,7 @@ func TestSettingService_ParseSettings_DefaultsOIDCCompatibilityFlagsToSafeDefaul
 
 func TestGetOIDCConnectOAuthConfig_AllowsCompatibilityFlagsToDisablePKCEAndIDTokenValidation(t *testing.T) {
 	cfg := &config.Config{
-		OIDC: config.OIDCConnectConfig{
+		OIDCConnect: config.OIDCConnectConfig{
 			Enabled:             true,
 			ProviderName:        "OIDC",
 			ClientID:            "oidc-client",
@@ -182,7 +182,7 @@ func TestGetOIDCConnectOAuthConfig_AllowsCompatibilityFlagsToDisablePKCEAndIDTok
 
 func TestGetOIDCConnectOAuthConfig_DefaultsToSecureFlagsWhenSettingsMissing(t *testing.T) {
 	cfg := &config.Config{
-		OIDC: config.OIDCConnectConfig{
+		OIDCConnect: config.OIDCConnectConfig{
 			Enabled:                 true,
 			ProviderName:            "OIDC",
 			ClientID:                "oidc-client",
@@ -218,7 +218,7 @@ func TestGetOIDCConnectOAuthConfig_DefaultsToSecureFlagsWhenSettingsMissing(t *t
 
 func TestGetOIDCConnectOAuthConfig_DefaultsCompatibilityFlagsToSafeValuesWhenSettingsMissing(t *testing.T) {
 	cfg := &config.Config{
-		OIDC: config.OIDCConnectConfig{
+		OIDCConnect: config.OIDCConnectConfig{
 			Enabled:             true,
 			ProviderName:        "OIDC",
 			ClientID:            "oidc-client",

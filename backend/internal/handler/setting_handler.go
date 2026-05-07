@@ -87,6 +87,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 
 		ChatPageEnabled: settings.ChatPageEnabled,
+		ChatPageURL:     settings.ChatPageURL,
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 

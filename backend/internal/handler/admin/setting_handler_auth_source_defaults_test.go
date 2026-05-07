@@ -206,6 +206,55 @@ func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *tes
 	require.Equal(t, true, data["force_email_on_third_party_signup"])
 }
 
+func TestSettingHandler_UpdateSettings_PreservesOmittedOIDCConnectEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{
+		values: map[string]string{
+			service.SettingKeyOIDCConnectEnabled:             "true",
+			service.SettingKeyOIDCConnectProviderName:        "Existing OIDC",
+			service.SettingKeyOIDCConnectClientID:            "existing-client",
+			service.SettingKeyOIDCConnectClientSecret:        "existing-secret",
+			service.SettingKeyOIDCConnectIssuerURL:           "https://issuer.example.com",
+			service.SettingKeyOIDCConnectRedirectURL:         "https://api.example.com/api/v1/auth/oauth/oidc/callback",
+			service.SettingKeyOIDCConnectFrontendRedirectURL: "/auth/oidc/callback",
+			service.SettingKeyOIDCConnectScopes:              "openid email profile",
+			service.SettingKeyOIDCConnectTokenAuthMethod:     "client_secret_post",
+			service.SettingKeyOIDCConnectAllowedSigningAlgs:  "RS256",
+			service.SettingKeyChatPageEnabled:                "true",
+			service.SettingKeyChatPageURL:                    "",
+		},
+	}
+	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil)
+
+	body := map[string]any{
+		"chat_page_enabled": true,
+		"chat_page_url":     "https://chat.example.com",
+	}
+	rawBody, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(rawBody))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.UpdateSettings(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "true", repo.values[service.SettingKeyOIDCConnectEnabled])
+	require.Equal(t, "Existing OIDC", repo.values[service.SettingKeyOIDCConnectProviderName])
+	require.Equal(t, "https://chat.example.com", repo.values[service.SettingKeyChatPageURL])
+
+	var resp response.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	data, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, true, data["oidc_connect_enabled"])
+	require.Equal(t, "Existing OIDC", data["oidc_connect_provider_name"])
+	require.Equal(t, "https://chat.example.com", data["chat_page_url"])
+}
+
 func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedScheduler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &settingHandlerRepoStub{
@@ -368,7 +417,7 @@ func TestSettingHandler_UpdateSettings_DoesNotSolidifyImplicitOIDCSecurityDefaul
 	}
 	svc := service.NewSettingService(repo, &config.Config{
 		Default: config.DefaultConfig{UserConcurrency: 5},
-		OIDC: config.OIDCConnectConfig{
+		OIDCConnect: config.OIDCConnectConfig{
 			Enabled:             true,
 			ProviderName:        "OIDC",
 			ClientID:            "oidc-client",

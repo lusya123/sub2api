@@ -4310,6 +4310,50 @@
             </div>
           </div>
 
+          <!-- Chat Page -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.features.chatPage.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.features.chatPage.description") }}
+              </p>
+            </div>
+            <div class="space-y-6 p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="font-medium text-gray-900 dark:text-white">
+                    {{ t("admin.settings.features.chatPage.enabled") }}
+                  </label>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.features.chatPage.enabledHint") }}
+                  </p>
+                </div>
+                <Toggle v-model="form.chat_page_enabled" />
+              </div>
+
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.features.chatPage.url") }}
+                </label>
+                <input
+                  v-model="form.chat_page_url"
+                  type="url"
+                  class="input font-mono text-sm"
+                  :placeholder="t('admin.settings.features.chatPage.urlPlaceholder')"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.features.chatPage.urlHint") }}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <!-- Custom Menu Items -->
           <div class="card">
             <div
@@ -4787,30 +4831,6 @@
                 </p>
               </div>
               <Toggle v-model="form.available_channels_enabled" />
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t('admin.settings.features.chatPage.title') }}
-            </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {{ t('admin.settings.features.chatPage.description') }}
-            </p>
-          </div>
-          <div class="space-y-5 p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {{ t('admin.settings.features.chatPage.enabled') }}
-                </label>
-                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('admin.settings.features.chatPage.enabledHint') }}
-                </p>
-              </div>
-              <Toggle v-model="form.chat_page_enabled" />
             </div>
           </div>
         </div>
@@ -6625,6 +6645,7 @@ const form = reactive<SettingsForm>({
   available_channels_enabled: false,
   // Chat page feature switch
   chat_page_enabled: true,
+  chat_page_url: "",
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
 });
@@ -7556,6 +7577,10 @@ async function saveSettings() {
     if (!isValidHttpUrl(form.purchase_subscription_redirect_url)) {
       form.purchase_subscription_redirect_url = "";
     }
+    if (!isValidHttpUrl(form.chat_page_url)) {
+      appStore.showError(t("admin.settings.features.chatPage.urlInvalid"));
+      return;
+    }
     if (form.purchase_subscription_enabled) {
       if (
         form.purchase_subscription_mode === "embedded" &&
@@ -7772,6 +7797,7 @@ async function saveSettings() {
       available_channels_enabled: form.available_channels_enabled,
       // Chat page feature switch
       chat_page_enabled: form.chat_page_enabled,
+      chat_page_url: form.chat_page_url.trim(),
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
     };

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,17 +20,19 @@ type ChatHandler struct {
 	cfg         *config.Config
 	authSvc     *service.AuthService
 	userService *service.UserService
+	settingSvc  *service.SettingService
 }
 
 type ChatLaunchResponse struct {
 	URL string `json:"url"`
 }
 
-func NewChatHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService) *ChatHandler {
+func NewChatHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService) *ChatHandler {
 	return &ChatHandler{
 		cfg:         cfg,
 		authSvc:     authService,
 		userService: userService,
+		settingSvc:  settingService,
 	}
 }
 
@@ -57,6 +60,16 @@ func (h *ChatHandler) Launch(c *gin.Context) {
 }
 
 func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
+	chatPageEnabled, chatPageURL, err := h.chatPageSettings(c.Request.Context())
+	if err != nil {
+		response.InternalError(c, "Failed to load chat settings")
+		return "", false
+	}
+	if !chatPageEnabled {
+		response.Forbidden(c, "Chat page is disabled")
+		return "", false
+	}
+
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok || subject.UserID <= 0 {
 		response.Unauthorized(c, "User not authenticated")
@@ -76,7 +89,7 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 	}
 	h.setOIDCSessionCookie(c, token, h.authSvc.GetAccessTokenExpiresIn())
 
-	target, err := h.chatSignInURL()
+	target, err := h.chatSignInURL(c.Request.Context(), chatPageURL)
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return "", false
@@ -85,12 +98,40 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 	return target, true
 }
 
-func (h *ChatHandler) chatSignInURL() (string, error) {
-	base := strings.TrimRight(strings.TrimSpace(h.cfg.Lobe.ChatURL), "/")
-	if base == "" {
-		base = lobeOriginFromRedirectURIs(h.cfg.OIDCServer.RedirectURIs)
+func (h *ChatHandler) chatPageSettings(ctx context.Context) (bool, string, error) {
+	if h == nil || h.settingSvc == nil {
+		return true, "", nil
+	}
+	settings, err := h.settingSvc.GetPublicSettings(ctx)
+	if err != nil {
+		return false, "", err
+	}
+	return settings.ChatPageEnabled, settings.ChatPageURL, nil
+}
+
+func (h *ChatHandler) chatSignInURL(ctx context.Context, configuredChatURL ...string) (string, error) {
+	base := ""
+	if len(configuredChatURL) > 0 {
+		base = strings.TrimSpace(configuredChatURL[0])
 	}
 	if base == "" {
+		enabled, chatPageURL, err := h.chatPageSettings(ctx)
+		if err != nil {
+			return "", err
+		}
+		if !enabled {
+			return "", fmt.Errorf("chat page is disabled")
+		}
+		base = strings.TrimSpace(chatPageURL)
+	}
+	if base == "" && h != nil && h.cfg != nil {
+		base = strings.TrimSpace(h.cfg.Lobe.ChatURL)
+	}
+	base = strings.TrimRight(base, "/")
+	if base == "" && h != nil && h.cfg != nil {
+		base = lobeOriginFromRedirectURIs(h.cfg.OIDCIssuer.RedirectURIs)
+	}
+	if base == "" && h != nil && h.cfg != nil {
 		base = deriveLobeOriginFromFrontend(h.cfg.Server.FrontendURL)
 	}
 	if base == "" {
@@ -133,7 +174,7 @@ func (h *ChatHandler) setOIDCSessionCookie(c *gin.Context, token string, maxAge 
 	if h == nil || h.cfg == nil || strings.TrimSpace(token) == "" {
 		return
 	}
-	name := strings.TrimSpace(h.cfg.OIDCServer.CookieName)
+	name := strings.TrimSpace(h.cfg.OIDCIssuer.CookieName)
 	if name == "" {
 		name = "sub2api_access_token"
 	}
@@ -142,7 +183,7 @@ func (h *ChatHandler) setOIDCSessionCookie(c *gin.Context, token string, maxAge 
 		Name:     name,
 		Value:    token,
 		Path:     "/",
-		Domain:   strings.TrimSpace(h.cfg.OIDCServer.CookieDomain),
+		Domain:   strings.TrimSpace(h.cfg.OIDCIssuer.CookieDomain),
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   secure,

@@ -629,6 +629,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeyChatPageEnabled,
+		SettingKeyChatPageURL,
 		SettingKeyAffiliateEnabled,
 		SettingKeyRiskControlEnabled,
 	}
@@ -648,11 +649,11 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	if raw, ok := settings[SettingKeyOIDCConnectEnabled]; ok {
 		oidcEnabled = raw == "true"
 	} else {
-		oidcEnabled = s.cfg != nil && s.cfg.OIDC.Enabled
+		oidcEnabled = s.cfg != nil && s.cfg.OIDCConnect.Enabled
 	}
 	oidcProviderName := strings.TrimSpace(settings[SettingKeyOIDCConnectProviderName])
 	if oidcProviderName == "" && s.cfg != nil {
-		oidcProviderName = strings.TrimSpace(s.cfg.OIDC.ProviderName)
+		oidcProviderName = strings.TrimSpace(s.cfg.OIDCConnect.ProviderName)
 	}
 	if oidcProviderName == "" {
 		oidcProviderName = "OIDC"
@@ -743,6 +744,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 
 		ChatPageEnabled: !isFalseSettingValue(settings[SettingKeyChatPageEnabled]),
+		ChatPageURL:     strings.TrimSpace(settings[SettingKeyChatPageURL]),
 
 		AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
 
@@ -900,12 +902,13 @@ type PublicSettingsInjectionPayload struct {
 	// Feature flags — MUST match the opt-in/opt-out registry in
 	// frontend/src/utils/featureFlags.ts. Missing a field here is the bug
 	// that hid the "可用渠道" menu on page refresh.
-	ChannelMonitorEnabled                bool `json:"channel_monitor_enabled"`
-	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
-	AvailableChannelsEnabled             bool `json:"available_channels_enabled"`
-	ChatPageEnabled                      bool `json:"chat_page_enabled"`
-	AffiliateEnabled                     bool `json:"affiliate_enabled"`
-	RiskControlEnabled                   bool `json:"risk_control_enabled"`
+	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
+	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
+	AvailableChannelsEnabled             bool   `json:"available_channels_enabled"`
+	ChatPageEnabled                      bool   `json:"chat_page_enabled"`
+	ChatPageURL                          string `json:"chat_page_url"`
+	AffiliateEnabled                     bool   `json:"affiliate_enabled"`
+	RiskControlEnabled                   bool   `json:"risk_control_enabled"`
 }
 
 // GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.
@@ -969,6 +972,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		ChatPageEnabled:                      settings.ChatPageEnabled,
+		ChatPageURL:                          settings.ChatPageURL,
 		AffiliateEnabled:                     settings.AffiliateEnabled,
 		RiskControlEnabled:                   settings.RiskControlEnabled,
 	}, nil
@@ -1296,7 +1300,7 @@ func (s *SettingService) OIDCSecurityWriteDefaults(ctx context.Context) (bool, b
 
 	base := config.OIDCConnectConfig{}
 	if s != nil && s.cfg != nil {
-		base = s.cfg.OIDC
+		base = s.cfg.OIDCConnect
 	}
 
 	rawUsePKCE, hasUsePKCE := rawSettings[SettingKeyOIDCConnectUsePKCE]
@@ -1592,6 +1596,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// Chat page feature switch
 	updates[SettingKeyChatPageEnabled] = strconv.FormatBool(settings.ChatPageEnabled)
+	updates[SettingKeyChatPageURL] = strings.TrimSpace(settings.ChatPageURL)
 
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)
@@ -2233,11 +2238,11 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 	oidcUsePKCEDefault := true
 	oidcValidateIDTokenDefault := true
 	if s != nil && s.cfg != nil {
-		if s.cfg.OIDC.UsePKCEExplicit {
-			oidcUsePKCEDefault = s.cfg.OIDC.UsePKCE
+		if s.cfg.OIDCConnect.UsePKCEExplicit {
+			oidcUsePKCEDefault = s.cfg.OIDCConnect.UsePKCE
 		}
-		if s.cfg.OIDC.ValidateIDTokenExplicit {
-			oidcValidateIDTokenDefault = s.cfg.OIDC.ValidateIDToken
+		if s.cfg.OIDCConnect.ValidateIDTokenExplicit {
+			oidcValidateIDTokenDefault = s.cfg.OIDCConnect.ValidateIDToken
 		}
 	}
 	loginAgreementDocumentsJSON, err := marshalLoginAgreementDocuments(defaultLoginAgreementDocuments())
@@ -2380,6 +2385,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		// Chat page feature (default enabled; opt-out)
 		SettingKeyChatPageEnabled: "true",
+		SettingKeyChatPageURL:     "",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled: "false",
@@ -2548,7 +2554,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// - 支持后台系统设置覆盖并持久化（存储于 DB）
 	oidcBase := config.OIDCConnectConfig{}
 	if s.cfg != nil {
-		oidcBase = s.cfg.OIDC
+		oidcBase = s.cfg.OIDCConnect
 	}
 
 	if raw, ok := settings[SettingKeyOIDCConnectEnabled]; ok {
@@ -2759,6 +2765,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Chat page feature (default: enabled; opt-out)
 	result.ChatPageEnabled = !isFalseSettingValue(settings[SettingKeyChatPageEnabled])
+	result.ChatPageURL = strings.TrimSpace(settings[SettingKeyChatPageURL])
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"
@@ -3361,7 +3368,7 @@ func (s *SettingService) GetOIDCConnectOAuthConfig(ctx context.Context) (config.
 		return config.OIDCConnectConfig{}, infraerrors.ServiceUnavailable("CONFIG_NOT_READY", "config not loaded")
 	}
 
-	effective := s.cfg.OIDC
+	effective := s.cfg.OIDCConnect
 
 	keys := []string{
 		SettingKeyOIDCConnectEnabled,

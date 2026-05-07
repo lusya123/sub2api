@@ -694,10 +694,10 @@ func (h *AuthHandler) getOIDCOAuthConfig(ctx context.Context) (config.OIDCConnec
 	if h == nil || h.cfg == nil {
 		return config.OIDCConnectConfig{}, infraerrors.ServiceUnavailable("CONFIG_NOT_READY", "config not loaded")
 	}
-	if !h.cfg.OIDC.Enabled {
+	if !h.cfg.OIDCConnect.Enabled {
 		return config.OIDCConnectConfig{}, infraerrors.NotFound("OAUTH_DISABLED", "oauth login is disabled")
 	}
-	return h.cfg.OIDC, nil
+	return h.cfg.OIDCConnect, nil
 }
 
 func oidcExchangeCode(

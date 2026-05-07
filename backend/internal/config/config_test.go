@@ -255,10 +255,10 @@ func TestLoadDefaultOIDCSecurityDefaults(t *testing.T) {
 
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.True(t, cfg.OIDC.UsePKCE)
-	require.True(t, cfg.OIDC.ValidateIDToken)
-	require.False(t, cfg.OIDC.UsePKCEExplicit)
-	require.False(t, cfg.OIDC.ValidateIDTokenExplicit)
+	require.True(t, cfg.OIDCConnect.UsePKCE)
+	require.True(t, cfg.OIDCConnect.ValidateIDToken)
+	require.False(t, cfg.OIDCConnect.UsePKCEExplicit)
+	require.False(t, cfg.OIDCConnect.ValidateIDTokenExplicit)
 }
 
 func TestLoadExplicitOIDCSecurityDefaultsFromEnvMarksFlagsExplicit(t *testing.T) {
@@ -268,10 +268,10 @@ func TestLoadExplicitOIDCSecurityDefaultsFromEnvMarksFlagsExplicit(t *testing.T)
 
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.False(t, cfg.OIDC.UsePKCE)
-	require.False(t, cfg.OIDC.ValidateIDToken)
-	require.True(t, cfg.OIDC.UsePKCEExplicit)
-	require.True(t, cfg.OIDC.ValidateIDTokenExplicit)
+	require.False(t, cfg.OIDCConnect.UsePKCE)
+	require.False(t, cfg.OIDCConnect.ValidateIDToken)
+	require.True(t, cfg.OIDCConnect.UsePKCEExplicit)
+	require.True(t, cfg.OIDCConnect.ValidateIDTokenExplicit)
 }
 
 func TestLoadForcedCodexInstructionsTemplate(t *testing.T) {
@@ -425,17 +425,17 @@ func TestValidateOIDCScopesMustContainOpenID(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	cfg.OIDC.Enabled = true
-	cfg.OIDC.ClientID = "oidc-client"
-	cfg.OIDC.ClientSecret = "oidc-secret"
-	cfg.OIDC.IssuerURL = "https://issuer.example.com"
-	cfg.OIDC.AuthorizeURL = "https://issuer.example.com/auth"
-	cfg.OIDC.TokenURL = "https://issuer.example.com/token"
-	cfg.OIDC.JWKSURL = "https://issuer.example.com/jwks"
-	cfg.OIDC.RedirectURL = "https://example.com/api/v1/auth/oauth/oidc/callback"
-	cfg.OIDC.FrontendRedirectURL = "/auth/oidc/callback"
-	cfg.OIDC.Scopes = "profile email"
-	cfg.OIDC.UsePKCE = true
+	cfg.OIDCConnect.Enabled = true
+	cfg.OIDCConnect.ClientID = "oidc-client"
+	cfg.OIDCConnect.ClientSecret = "oidc-secret"
+	cfg.OIDCConnect.IssuerURL = "https://issuer.example.com"
+	cfg.OIDCConnect.AuthorizeURL = "https://issuer.example.com/auth"
+	cfg.OIDCConnect.TokenURL = "https://issuer.example.com/token"
+	cfg.OIDCConnect.JWKSURL = "https://issuer.example.com/jwks"
+	cfg.OIDCConnect.RedirectURL = "https://example.com/api/v1/auth/oauth/oidc/callback"
+	cfg.OIDCConnect.FrontendRedirectURL = "/auth/oidc/callback"
+	cfg.OIDCConnect.Scopes = "profile email"
+	cfg.OIDCConnect.UsePKCE = true
 
 	err = cfg.Validate()
 	if err == nil {
@@ -454,18 +454,18 @@ func TestValidateOIDCAllowsIssuerOnlyEndpointsWithDiscoveryFallback(t *testing.T
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	cfg.OIDC.Enabled = true
-	cfg.OIDC.ClientID = "oidc-client"
-	cfg.OIDC.ClientSecret = "oidc-secret"
-	cfg.OIDC.IssuerURL = "https://issuer.example.com"
-	cfg.OIDC.AuthorizeURL = ""
-	cfg.OIDC.TokenURL = ""
-	cfg.OIDC.JWKSURL = ""
-	cfg.OIDC.RedirectURL = "https://example.com/api/v1/auth/oauth/oidc/callback"
-	cfg.OIDC.FrontendRedirectURL = "/auth/oidc/callback"
-	cfg.OIDC.Scopes = "openid email profile"
-	cfg.OIDC.ValidateIDToken = true
-	cfg.OIDC.UsePKCE = true
+	cfg.OIDCConnect.Enabled = true
+	cfg.OIDCConnect.ClientID = "oidc-client"
+	cfg.OIDCConnect.ClientSecret = "oidc-secret"
+	cfg.OIDCConnect.IssuerURL = "https://issuer.example.com"
+	cfg.OIDCConnect.AuthorizeURL = ""
+	cfg.OIDCConnect.TokenURL = ""
+	cfg.OIDCConnect.JWKSURL = ""
+	cfg.OIDCConnect.RedirectURL = "https://example.com/api/v1/auth/oauth/oidc/callback"
+	cfg.OIDCConnect.FrontendRedirectURL = "/auth/oidc/callback"
+	cfg.OIDCConnect.Scopes = "openid email profile"
+	cfg.OIDCConnect.ValidateIDToken = true
+	cfg.OIDCConnect.UsePKCE = true
 
 	err = cfg.Validate()
 	if err != nil {
@@ -481,20 +481,20 @@ func TestValidateOIDCAllowsExplicitCompatibilityOverridesForPKCEAndIDTokenValida
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	cfg.OIDC.Enabled = true
-	cfg.OIDC.ClientID = "oidc-client"
-	cfg.OIDC.ClientSecret = "oidc-secret"
-	cfg.OIDC.IssuerURL = "https://issuer.example.com"
-	cfg.OIDC.AuthorizeURL = "https://issuer.example.com/auth"
-	cfg.OIDC.TokenURL = "https://issuer.example.com/token"
-	cfg.OIDC.UserInfoURL = "https://issuer.example.com/userinfo"
-	cfg.OIDC.RedirectURL = "https://example.com/api/v1/auth/oauth/oidc/callback"
-	cfg.OIDC.FrontendRedirectURL = "/auth/oidc/callback"
-	cfg.OIDC.Scopes = "openid email profile"
-	cfg.OIDC.UsePKCE = false
-	cfg.OIDC.ValidateIDToken = false
-	cfg.OIDC.JWKSURL = ""
-	cfg.OIDC.AllowedSigningAlgs = ""
+	cfg.OIDCConnect.Enabled = true
+	cfg.OIDCConnect.ClientID = "oidc-client"
+	cfg.OIDCConnect.ClientSecret = "oidc-secret"
+	cfg.OIDCConnect.IssuerURL = "https://issuer.example.com"
+	cfg.OIDCConnect.AuthorizeURL = "https://issuer.example.com/auth"
+	cfg.OIDCConnect.TokenURL = "https://issuer.example.com/token"
+	cfg.OIDCConnect.UserInfoURL = "https://issuer.example.com/userinfo"
+	cfg.OIDCConnect.RedirectURL = "https://example.com/api/v1/auth/oauth/oidc/callback"
+	cfg.OIDCConnect.FrontendRedirectURL = "/auth/oidc/callback"
+	cfg.OIDCConnect.Scopes = "openid email profile"
+	cfg.OIDCConnect.UsePKCE = false
+	cfg.OIDCConnect.ValidateIDToken = false
+	cfg.OIDCConnect.JWKSURL = ""
+	cfg.OIDCConnect.AllowedSigningAlgs = ""
 
 	err = cfg.Validate()
 	if err != nil {

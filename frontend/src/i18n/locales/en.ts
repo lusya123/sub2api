@@ -1377,6 +1377,249 @@ export default {
       failedToLoad: 'Failed to load dashboard statistics'
     },
 
+    operations: {
+      title: 'Operations Dashboard',
+      description: 'Track growth, conversion, retention, churn, product and financial health',
+      failedToLoad: 'Failed to load operations data',
+      empty: 'No data',
+      actions: {
+        usage: 'Usage',
+        subscription: 'Subscriptions'
+      },
+      lists: {
+        silentHighValue: 'Silent High-Value Users',
+        expiringSoon: 'Expiring Subscriptions',
+        newInactive: 'New Users Without First Call'
+      },
+      distribution: {
+        groups: 'Group Spend Distribution',
+        models: 'Model Spend Distribution',
+        apiKeys: 'API Key Spend Distribution',
+        promos: 'Promo and Redeem Distribution'
+      },
+      trend: {
+        activeRevenue: 'Consumption Revenue Trend',
+        conversion: 'First-Call Conversion Trend'
+      },
+      units: {
+        usageSummary: '{requests} requests · {tokens} tokens',
+        conversionSummary: '{count} events · {users} users',
+        daysIdle: 'Idle for {value} days'
+      },
+      v2: {
+        captionPlain: 'Read: ',
+        captionAction: 'Action: ',
+        tabs: {
+          cohort: 'Retention Cohort',
+          distribution: 'Distribution',
+          trend: 'Trend'
+        },
+        modal: {
+          close: 'Close'
+        },
+        pulse: {
+          title: 'Business Pulse',
+          sub: 'Start with revenue, active users, new users, trial users, and paid users.',
+          revenue: 'Consumption Revenue',
+          activeUsers: 'Active Users',
+          newUsers: 'New Users',
+          trialUsers: 'Trial Users',
+          payingUsers: 'Paid Users',
+          spark30d: '30d trend',
+          vsWow: 'vs previous',
+          vsYoy: 'YoY',
+          vs90d: 'vs 90d avg',
+          hint: {
+            revenue: {
+              up: 'Revenue is rising. Check whether growth is broad-based or from a few large users.',
+              down: 'Revenue is down. Check silent high-value users and upstream availability first.',
+              flat: 'Revenue is stable. Continue with conversion and retention structure.'
+            },
+            active: {
+              up: 'Active users are rising. This is a good moment to promote plans or new models.',
+              down: 'Active users are down. Inspect the last-7-day churn waterfall first.',
+              flat: 'Activity is stable. Watch whether new users complete first call.'
+            },
+            new: {
+              up: 'New users increased. Make sure first-call onboarding and trial conversion keep up.',
+              down: 'New users slowed. Check acquisition entry points, invites, and registration.',
+              flat: 'New users are stable. Focus on the first post-signup action.'
+            },
+            trial: {
+              up: 'Trial usage increased. Watch whether trial credits are actually consumed.',
+              down: 'Trial users decreased. Confirm trial issuance and redemption are healthy.',
+              flat: 'Trial volume is stable. Continue with trial-to-paid conversion.'
+            },
+            paying: {
+              up: 'Paid users increased. Review which plans and touchpoints worked.',
+              down: 'Paid users decreased. Check expiring subscriptions and silent high-value users.',
+              flat: 'Paid users are stable. Focus on ARPU and repeat purchase.'
+            }
+          }
+        },
+        funnel: {
+          title: 'Sales Funnel',
+          sub: 'Follow users from signup to first call, trial exhaustion, real payment, and repeat purchase.',
+          chartTitle: 'New User Conversion Funnel',
+          hint: 'Each step shows key actions in the 7-day window after signup.',
+          action: 'Find the steepest drop and fix the corresponding onboarding step.',
+          dropTo: 'Drop to'
+        },
+        trial: {
+          title: 'Trial Credit Conversion',
+          sub: 'Analyze the $5 trial credit from issuance and use to paid conversion.',
+          chartTitle: 'Trial Credit Sub-Funnel',
+          hint: '{issued} trial credits issued, {used} users made calls, {converted} converted to real payment.',
+          action: 'If users redeem but do not use, check client install, API key guidance, and first-call docs.',
+          summaryLabel: 'Note: ',
+          summary: 'Users who consumed trial credit spent {avg} on average; {nonTrial} new users paid without using trial credit.',
+          caveat: 'Trial credit is an acquisition cost, not real revenue; use it to judge activation quality.',
+          cards: {
+            issued: 'Issued',
+            issuedSub: '{value} trial balance each',
+            used: 'Used',
+            usedSub: 'Use rate {rate}',
+            idle: 'Unused',
+            idleSub: 'Idle rate {rate}',
+            exhausted: 'Near Exhausted',
+            exhaustedSub: 'Exhaustion {rate}, threshold {threshold}',
+            converted: 'Converted',
+            convertedSub: 'Conversion {rate}'
+          }
+        },
+        churn: {
+          title: 'Retention and Churn',
+          sub: 'Use personalized call rhythm to identify silent, high-risk, and churned users.',
+          definitionLabel: 'Definition: ',
+          totalRate: 'Confirmed Churn Rate',
+          totalRateSub: 'Global median call interval {p50} days',
+          atRiskRate: 'At-Risk User Rate',
+          atRiskRateSub: '{count} users are silent or high risk',
+          highValueRisk: 'High-Value Risk',
+          highValueRiskSub: 'Historical contribution about ${revenue}',
+          weeklyDelta: 'vs last week {value}',
+          waterfallTitle: 'Churn Waterfall',
+          waterfallHint: '{base} users active last week, {still} still active this week, {lost} reduced.',
+          waterfallAction: 'Separate users who disappeared from those who ran out of balance or subscriptions.',
+          lastWeekActive: 'Last Week Active',
+          stillActive: 'Still Active',
+          completelyGone: 'Gone',
+          halfActivity: 'Activity Halved',
+          balanceExhausted: 'Balance Exhausted',
+          subscriptionEnded: 'Subscription Ended',
+          historyTitle: 'Churn History',
+          historyHint: 'Confirmed churn rate over the last 30 rolling days.',
+          historyAction: 'If the curve jumps, review upstream and product changes on that date.',
+          retentionTitle: 'New User Retention',
+          retentionHint: 'D1, D7, and D30 retention show whether the first experience lasts.',
+          retentionAction: 'Low D1 means fix first call; low D7/D30 means improve value and subscription fit.'
+        },
+        pyramid: {
+          title: 'User Pyramid',
+          sub: 'Segment users by 30-day consumption revenue to see concentration risk.',
+          chartTitle: 'User Value Segments',
+          hint: '{total} users in total, {paid} paid users.',
+          action: 'Protect top users while lifting mid-tier conversion.',
+          insightLabel: 'Insight: ',
+          insight: 'Super + Gold users contribute {top} revenue while representing only {users} users.'
+        },
+        product: {
+          title: 'Product Matrix',
+          sub: 'Observe plan and model scale, ARPU, and consumption revenue.',
+          bcgTitle: 'Plan BCG Matrix',
+          bcgHint: 'X-axis is active users, Y-axis is ARPU, bubble size is revenue.',
+          bcgAction: 'Maintain stars, validate question marks, and consider reworking or removing dogs.',
+          modelTitle: 'Model Health',
+          modelHint: 'Track traffic share, revenue, and user change by model.',
+          modelAction: 'For models with user decline, check availability, pricing, and alternatives.',
+          modelTrafficShare: 'Traffic Share',
+          modelRevenue: 'Revenue',
+          modelUsers: 'Users',
+          modelUsersChange: 'User Change'
+        },
+        financial: {
+          title: 'Financial Cockpit',
+          sub: 'Check whether balances, benefit injection, refunds, and consumption are healthy.',
+          cushionTitle: 'Balance Cushion Health',
+          cushionHint: 'Total user balance {balance}, 30-day average daily cost {cost}, enough for about {months} months.',
+          cushionAction: {
+            danger: 'Balance pool is low. Run recharge or renewal outreach soon.',
+            warning: 'Balance cushion is thin. Watch expiring and high-value users.',
+            healthy: 'Balance cushion is healthy. Keep watching consumption speed.',
+            overloaded: 'Balance is over-deposited. Encourage usage or launch new benefits.'
+          },
+          months: 'mo',
+          healthDanger: 'Low Balance',
+          healthWarning: 'Tight',
+          healthHealthy: 'Healthy',
+          healthOverloaded: 'Over-Deposited',
+          cashflowTitle: 'Cashflow Snapshot',
+          inflow: 'Benefit Injection',
+          outflow: 'Consumption',
+          netFlow: 'Net Flow',
+          cashflowNote: 'This is in-system benefit injection and consumption, not payment gateway settlement.',
+          revenueTitle: 'Benefit Revenue Mix',
+          revenueHint: 'Split admin top-ups, refunds, balance cards, trial credits, and subscription codes.',
+          revenueAction: 'If refunds are high, check tickets and upstream incidents; if trials dominate, watch paid conversion.',
+          adminGroup: 'Admin Top-Up',
+          adminGross: 'Gross Top-Up',
+          adminRefund: '{count} refunds',
+          adminNet: 'Net Top-Up',
+          redeemGroup: 'Redeem Codes',
+          redeemReal: 'Real Balance Cards',
+          redeemTrial: 'Trial Credits',
+          redeemSub: 'Subscription Codes',
+          newSubs: 'New Subscriptions',
+          subUnit: 'items',
+          revTrialNote: 'not real revenue',
+          refundRateNote: 'Refund rate {rate}, refund amount {amount}',
+          revenueCaveat: 'Because there is no standalone payment ledger, this view infers benefit injection from redeem codes and subscriptions.',
+          arpuTitle: 'Paid ARPU Trend',
+          arpuHint: 'Daily average consumption per paid user over the last 30 days.',
+          arpuAction: 'If ARPU falls, inspect plan mix, model pricing, and low-value traffic share.',
+          netInjected: 'Net injected',
+          refundBar: 'Refund offset'
+        },
+        actions: {
+          title: 'Action Summary',
+          sub: 'Put the user groups that need operator intervention in one place.',
+          chartTitle: 'Priority Segments',
+          hint: 'These lists come from churn, subscription, first-call, and high-value silence signals.',
+          action: 'Start with high-value and expiring users, then handle new-user activation.',
+          viewList: 'View List',
+          highRisk: {
+            title: 'High Risk / Churned',
+            sub: 'Risk users needing recovery',
+            modal: 'Prioritize users with high historical contribution and sudden silence.'
+          },
+          atRisk: {
+            title: 'Unusual Silence',
+            sub: 'Call rhythm slowed sharply',
+            modal: 'Send usage reminders, balance reminders, or investigate usage issues.'
+          },
+          newInactive: {
+            title: 'New Users Inactive',
+            sub: 'No first call after 7 days',
+            modal: 'Check whether API key, client install, and first-call tutorials reached them.'
+          },
+          expiring: {
+            title: 'Expiring Soon',
+            sub: 'Subscriptions expiring in 7 days',
+            modal: 'Prioritize renewal reminders for active or historically high-consuming users.'
+          }
+        },
+        details: {
+          title: 'Details',
+          sub: 'Review cohort, distribution, and trend details.'
+        },
+        cohort: {
+          title: 'Retention Cohort Heatmap',
+          hint: 'Observe D0/D1/D7/D30 return usage by signup date.',
+          action: 'Find weak cohorts and review acquisition source plus upstream quality on that day.'
+        }
+      }
+    },
+
     backup: {
       title: 'Database Backup',
       description: 'Full database backup to S3-compatible storage with scheduled backup and restore',
@@ -5118,6 +5361,10 @@ export default {
           description: 'Show the user-facing chat entry in the sidebar and allow logged-in users to open the chat launch page.',
           enabled: 'Enable Chat Page',
           enabledHint: 'When off, the chat sidebar entry is hidden and direct access to /chat redirects away.',
+          url: 'Chat URL',
+          urlPlaceholder: 'https://chat.example.com',
+          urlHint: 'Absolute http(s) URL for the hosted chat app. Leave empty to use the backend lobe.chat_url config.',
+          urlInvalid: 'Chat URL must be an absolute http(s) URL.',
         },
         riskControl: {
           title: 'Risk Control',

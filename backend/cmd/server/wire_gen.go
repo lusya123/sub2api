@@ -83,11 +83,11 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	totpCache := repository.NewTotpCache(redisClient)
 	totpService := service.NewTotpService(userRepository, secretEncryptor, totpCache, settingService, emailService, emailQueueService)
 	authHandler := handler.NewAuthHandler(configConfig, authService, userService, settingService, promoService, redeemService, totpService)
-	oidcService, err := service.NewOIDCService(configConfig, authService, userRepository)
+	oidcIssuerService, err := service.NewOIDCIssuerService(configConfig, authService, userRepository)
 	if err != nil {
 		return nil, err
 	}
-	oidcHandler := handler.NewOIDCHandler(oidcService)
+	oidcIssuerHandler := handler.NewOIDCIssuerHandler(oidcIssuerService)
 	userHandler := handler.NewUserHandler(userService, authService, emailService, emailCache, affiliateService)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 	usageLogRepository := repository.NewUsageLogRepository(client, db)
@@ -97,7 +97,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	adminAuditRepository := repository.NewAdminAuditRepository(db)
 	adminAuditService := service.NewAdminAuditService(adminAuditRepository)
 	usageHandler := handler.NewUsageHandler(usageService, apiKeyService)
-	chatHandler := handler.NewChatHandler(configConfig, authService, userService)
+	chatHandler := handler.NewChatHandler(configConfig, authService, userService, settingService)
 	schedulerCache := repository.ProvideSchedulerCache(redisClient, configConfig)
 	accountRepository := repository.NewAccountRepository(client, db, schedulerCache)
 	usageBillingRepository := repository.NewUsageBillingRepository(client, db)
@@ -271,7 +271,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	globeHandler := public.NewGlobeHandler(globeService)
 	idempotencyCoordinator := service.ProvideIdempotencyCoordinator(idempotencyRepository, configConfig)
 	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
-	handlers := handler.ProvideHandlers(authHandler, oidcHandler, userHandler, apiKeyHandler, usageHandler, chatHandler, lobeConfigHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, publicStatusHandler, globeHandler, idempotencyCoordinator, idempotencyCleanupService)
+	handlers := handler.ProvideHandlers(authHandler, oidcIssuerHandler, userHandler, apiKeyHandler, usageHandler, chatHandler, lobeConfigHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, publicStatusHandler, globeHandler, idempotencyCoordinator, idempotencyCleanupService)
 	jwtAuthMiddleware := middleware.NewJWTAuthMiddleware(authService, userService)
 	adminAuthMiddleware := middleware.NewAdminAuthMiddleware(authService, userService, settingService)
 	apiKeyAuthMiddleware := middleware.NewAPIKeyAuthMiddleware(apiKeyService, subscriptionService, configConfig)

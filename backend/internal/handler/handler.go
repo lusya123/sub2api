@@ -46,7 +46,7 @@ type AdminHandlers struct {
 // Handlers contains all HTTP handlers
 type Handlers struct {
 	Auth             *AuthHandler
-	OIDC             *OIDCHandler
+	OIDCIssuer       *OIDCIssuerHandler
 	User             *UserHandler
 	APIKey           *APIKeyHandler
 	Usage            *UsageHandler

@@ -11,20 +11,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type OIDCHandler struct {
-	oidcService *service.OIDCService
+// OIDCIssuerHandler serves Sub2API's OIDC Provider/Issuer endpoints.
+type OIDCIssuerHandler struct {
+	oidcIssuerService *service.OIDCIssuerService
 }
 
-func NewOIDCHandler(oidcService *service.OIDCService) *OIDCHandler {
-	return &OIDCHandler{oidcService: oidcService}
+func NewOIDCIssuerHandler(oidcIssuerService *service.OIDCIssuerService) *OIDCIssuerHandler {
+	return &OIDCIssuerHandler{oidcIssuerService: oidcIssuerService}
 }
 
-func (h *OIDCHandler) Discovery(c *gin.Context) {
-	if h.oidcService == nil || !h.oidcService.IsConfigured() {
-		response.ErrorFrom(c, service.ErrOIDCNotConfigured)
+func (h *OIDCIssuerHandler) Discovery(c *gin.Context) {
+	if h.oidcIssuerService == nil || !h.oidcIssuerService.IsConfigured() {
+		response.ErrorFrom(c, service.ErrOIDCIssuerNotConfigured)
 		return
 	}
-	issuer := h.oidcService.Issuer()
+	issuer := h.oidcIssuerService.Issuer()
 	c.JSON(http.StatusOK, gin.H{
 		"issuer":                                issuer,
 		"authorization_endpoint":                issuer + "/oauth2/authorize",
@@ -41,17 +42,17 @@ func (h *OIDCHandler) Discovery(c *gin.Context) {
 	})
 }
 
-func (h *OIDCHandler) JWKS(c *gin.Context) {
-	if h.oidcService == nil || !h.oidcService.IsConfigured() {
-		response.ErrorFrom(c, service.ErrOIDCNotConfigured)
+func (h *OIDCIssuerHandler) JWKS(c *gin.Context) {
+	if h.oidcIssuerService == nil || !h.oidcIssuerService.IsConfigured() {
+		response.ErrorFrom(c, service.ErrOIDCIssuerNotConfigured)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"keys": []map[string]any{h.oidcService.JWK()}})
+	c.JSON(http.StatusOK, gin.H{"keys": []map[string]any{h.oidcIssuerService.JWK()}})
 }
 
-func (h *OIDCHandler) Authorize(c *gin.Context) {
-	if h.oidcService == nil || !h.oidcService.IsConfigured() {
-		response.ErrorFrom(c, service.ErrOIDCNotConfigured)
+func (h *OIDCIssuerHandler) Authorize(c *gin.Context) {
+	if h.oidcIssuerService == nil || !h.oidcIssuerService.IsConfigured() {
+		response.ErrorFrom(c, service.ErrOIDCIssuerNotConfigured)
 		return
 	}
 
@@ -60,27 +61,27 @@ func (h *OIDCHandler) Authorize(c *gin.Context) {
 	scope := strings.TrimSpace(c.Query("scope"))
 	state := c.Query("state")
 	nonce := c.Query("nonce")
-	if !h.oidcService.ValidateRedirectURI(redirectURI) {
+	if !h.oidcIssuerService.ValidateRedirectURI(redirectURI) {
 		response.BadRequest(c, "invalid_redirect_uri")
 		return
 	}
-	if c.Query("response_type") != "code" || clientID != h.oidcService.ClientID() || !scopeContains(scope, "openid") {
+	if c.Query("response_type") != "code" || clientID != h.oidcIssuerService.ClientID() || !scopeContains(scope, "openid") {
 		redirectOIDCError(c, redirectURI, state, "invalid_request")
 		return
 	}
 
-	cookie, err := c.Cookie(h.oidcService.CookieName())
+	cookie, err := c.Cookie(h.oidcIssuerService.CookieName())
 	if err != nil || strings.TrimSpace(cookie) == "" {
 		redirectToLogin(c)
 		return
 	}
-	user, err := h.oidcService.UserFromAccessToken(c.Request.Context(), cookie)
+	user, err := h.oidcIssuerService.UserFromAccessToken(c.Request.Context(), cookie)
 	if err != nil {
 		redirectToLogin(c)
 		return
 	}
 
-	code, err := h.oidcService.CreateCode(user.ID, clientID, redirectURI, scope, nonce)
+	code, err := h.oidcIssuerService.CreateCode(user.ID, clientID, redirectURI, scope, nonce)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -93,9 +94,9 @@ func (h *OIDCHandler) Authorize(c *gin.Context) {
 	c.Redirect(http.StatusFound, service.BuildRedirectWithParams(redirectURI, values))
 }
 
-func (h *OIDCHandler) Token(c *gin.Context) {
-	if h.oidcService == nil || !h.oidcService.IsConfigured() {
-		response.ErrorFrom(c, service.ErrOIDCNotConfigured)
+func (h *OIDCIssuerHandler) Token(c *gin.Context) {
+	if h.oidcIssuerService == nil || !h.oidcIssuerService.IsConfigured() {
+		response.ErrorFrom(c, service.ErrOIDCIssuerNotConfigured)
 		return
 	}
 	if err := c.Request.ParseForm(); err != nil {
@@ -108,7 +109,7 @@ func (h *OIDCHandler) Token(c *gin.Context) {
 	}
 
 	clientID, clientSecret := clientCredentials(c)
-	result, err := h.oidcService.ExchangeCode(
+	result, err := h.oidcIssuerService.ExchangeCode(
 		c.Request.Context(),
 		c.PostForm("code"),
 		clientID,
@@ -116,7 +117,7 @@ func (h *OIDCHandler) Token(c *gin.Context) {
 		c.PostForm("redirect_uri"),
 	)
 	if err != nil {
-		if service.IsOIDCInvalidAuth(err) {
+		if service.IsOIDCIssuerInvalidAuth(err) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_grant"})
 			return
 		}
@@ -133,13 +134,13 @@ func (h *OIDCHandler) Token(c *gin.Context) {
 	})
 }
 
-func (h *OIDCHandler) UserInfo(c *gin.Context) {
+func (h *OIDCIssuerHandler) UserInfo(c *gin.Context) {
 	token := bearerToken(c.GetHeader("Authorization"))
 	if token == "" {
 		response.Unauthorized(c, "missing bearer token")
 		return
 	}
-	user, err := h.oidcService.UserFromAccessToken(c.Request.Context(), token)
+	user, err := h.oidcIssuerService.UserFromAccessToken(c.Request.Context(), token)
 	if err != nil {
 		response.Unauthorized(c, "invalid bearer token")
 		return

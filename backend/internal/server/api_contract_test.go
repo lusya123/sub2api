@@ -846,7 +846,7 @@ func TestAPIContracts(t *testing.T) {
 			name: "GET /api/v1/admin/settings falls back to config oauth defaults",
 			setup: func(t *testing.T, deps *contractDeps) {
 				t.Helper()
-				deps.cfg.OIDC = config.OIDCConnectConfig{
+				deps.cfg.OIDCConnect = config.OIDCConnectConfig{
 					Enabled:             true,
 					ProviderName:        "ConfigOIDC",
 					ClientID:            "oidc-config-client",

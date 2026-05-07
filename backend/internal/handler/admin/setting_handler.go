@@ -266,6 +266,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 
 		ChatPageEnabled: settings.ChatPageEnabled,
+		ChatPageURL:     settings.ChatPageURL,
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 	}
@@ -398,7 +399,7 @@ type UpdateSettingsRequest struct {
 	WeChatConnectFrontendRedirectURL string `json:"wechat_connect_frontend_redirect_url"`
 
 	// Generic OIDC OAuth 登录
-	OIDCConnectEnabled              bool   `json:"oidc_connect_enabled"`
+	OIDCConnectEnabled              *bool  `json:"oidc_connect_enabled"`
 	OIDCConnectProviderName         string `json:"oidc_connect_provider_name"`
 	OIDCConnectClientID             string `json:"oidc_connect_client_id"`
 	OIDCConnectClientSecret         string `json:"oidc_connect_client_secret"`
@@ -572,7 +573,8 @@ type UpdateSettingsRequest struct {
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
 
 	// Chat page feature switch (user-facing)
-	ChatPageEnabled *bool `json:"chat_page_enabled"`
+	ChatPageEnabled *bool   `json:"chat_page_enabled"`
+	ChatPageURL     *string `json:"chat_page_url"`
 
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
@@ -919,7 +921,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if req.OIDCConnectEnabled {
+	oidcConnectEnabled := previousSettings.OIDCConnectEnabled
+	if req.OIDCConnectEnabled != nil {
+		oidcConnectEnabled = *req.OIDCConnectEnabled
+	}
+	if oidcConnectEnabled {
 		req.OIDCConnectProviderName = strings.TrimSpace(req.OIDCConnectProviderName)
 		req.OIDCConnectClientID = strings.TrimSpace(req.OIDCConnectClientID)
 		req.OIDCConnectClientSecret = strings.TrimSpace(req.OIDCConnectClientSecret)
@@ -1093,6 +1099,13 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 	if !validateOptionalURL(purchaseRedirectURL, "Purchase Subscription Redirect URL") {
+		return
+	}
+	chatPageURL := previousSettings.ChatPageURL
+	if req.ChatPageURL != nil {
+		chatPageURL = strings.TrimSpace(*req.ChatPageURL)
+	}
+	if !validateOptionalURL(chatPageURL, "Chat Page URL") {
 		return
 	}
 
@@ -1343,7 +1356,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		WeChatConnectScopes:              req.WeChatConnectScopes,
 		WeChatConnectRedirectURL:         req.WeChatConnectRedirectURL,
 		WeChatConnectFrontendRedirectURL: req.WeChatConnectFrontendRedirectURL,
-		OIDCConnectEnabled:               req.OIDCConnectEnabled,
+		OIDCConnectEnabled:               oidcConnectEnabled,
 		OIDCConnectProviderName:          req.OIDCConnectProviderName,
 		OIDCConnectClientID:              req.OIDCConnectClientID,
 		OIDCConnectClientSecret:          req.OIDCConnectClientSecret,
@@ -1543,6 +1556,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ChatPageEnabled
 		}(),
+		ChatPageURL: chatPageURL,
 		AffiliateEnabled: func() bool {
 			if req.AffiliateEnabled != nil {
 				return *req.AffiliateEnabled
@@ -1837,6 +1851,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
 
 		ChatPageEnabled: updatedSettings.ChatPageEnabled,
+		ChatPageURL:     updatedSettings.ChatPageURL,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
@@ -2249,6 +2264,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.ChatPageEnabled != after.ChatPageEnabled {
 		changed = append(changed, "chat_page_enabled")
+	}
+	if before.ChatPageURL != after.ChatPageURL {
+		changed = append(changed, "chat_page_url")
 	}
 	if before.AffiliateEnabled != after.AffiliateEnabled {
 		changed = append(changed, "affiliate_enabled")

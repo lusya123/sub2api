@@ -58,22 +58,24 @@ const (
 const DefaultUpstreamResponseReadMaxBytes int64 = 128 * 1024 * 1024
 
 type Config struct {
-	Server                  ServerConfig                  `mapstructure:"server"`
-	Log                     LogConfig                     `mapstructure:"log"`
-	CORS                    CORSConfig                    `mapstructure:"cors"`
-	Security                SecurityConfig                `mapstructure:"security"`
-	Billing                 BillingConfig                 `mapstructure:"billing"`
-	Turnstile               TurnstileConfig               `mapstructure:"turnstile"`
-	Database                DatabaseConfig                `mapstructure:"database"`
-	Redis                   RedisConfig                   `mapstructure:"redis"`
-	Ops                     OpsConfig                     `mapstructure:"ops"`
-	JWT                     JWTConfig                     `mapstructure:"jwt"`
-	OIDCServer              OIDCServerConfig              `mapstructure:"oidc"`
-	Totp                    TotpConfig                    `mapstructure:"totp"`
-	LinuxDo                 LinuxDoConnectConfig          `mapstructure:"linuxdo_connect"`
-	Lobe                    LobeConfig                    `mapstructure:"lobe"`
-	WeChat                  WeChatConnectConfig           `mapstructure:"wechat_connect"`
-	OIDC                    OIDCConnectConfig             `mapstructure:"oidc_connect"`
+	Server    ServerConfig    `mapstructure:"server"`
+	Log       LogConfig       `mapstructure:"log"`
+	CORS      CORSConfig      `mapstructure:"cors"`
+	Security  SecurityConfig  `mapstructure:"security"`
+	Billing   BillingConfig   `mapstructure:"billing"`
+	Turnstile TurnstileConfig `mapstructure:"turnstile"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	Redis     RedisConfig     `mapstructure:"redis"`
+	Ops       OpsConfig       `mapstructure:"ops"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
+	// OIDCIssuer 是 Sub2API 作为 OIDC Provider/Issuer 暴露给 LobeChat 等客户端的配置。
+	OIDCIssuer OIDCIssuerConfig     `mapstructure:"oidc"`
+	Totp       TotpConfig           `mapstructure:"totp"`
+	LinuxDo    LinuxDoConnectConfig `mapstructure:"linuxdo_connect"`
+	Lobe       LobeConfig           `mapstructure:"lobe"`
+	WeChat     WeChatConnectConfig  `mapstructure:"wechat_connect"`
+	// OIDCConnect 是 Sub2API 作为 OIDC Client/Relying Party 接入第三方登录的配置。
+	OIDCConnect             OIDCConnectConfig             `mapstructure:"oidc_connect"`
 	GitHubOAuth             EmailOAuthProviderConfig      `mapstructure:"github_oauth"`
 	GoogleOAuth             EmailOAuthProviderConfig      `mapstructure:"google_oauth"`
 	Default                 DefaultConfig                 `mapstructure:"default"`
@@ -220,7 +222,8 @@ type WeChatConnectConfig struct {
 	FrontendRedirectURL string `mapstructure:"frontend_redirect_url"`
 }
 
-type OIDCServerConfig struct {
+// OIDCIssuerConfig configures Sub2API's own OIDC issuer/provider endpoints.
+type OIDCIssuerConfig struct {
 	Issuer       string   `mapstructure:"issuer"`
 	ClientID     string   `mapstructure:"client_id"`
 	ClientSecret string   `mapstructure:"client_secret"`
@@ -229,6 +232,7 @@ type OIDCServerConfig struct {
 	CookieDomain string   `mapstructure:"cookie_domain"`
 }
 
+// OIDCConnectConfig configures third-party OIDC login into Sub2API.
 type OIDCConnectConfig struct {
 	Enabled                 bool   `mapstructure:"enabled"`
 	ProviderName            string `mapstructure:"provider_name"` // 显示名: "Keycloak" 等
@@ -1317,25 +1321,25 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.LinuxDo.UserInfoUsernamePath = strings.TrimSpace(cfg.LinuxDo.UserInfoUsernamePath)
 	applyLegacyWeChatConnectEnvCompatibility(&cfg.WeChat)
 	normalizeWeChatConnectConfig(&cfg.WeChat)
-	cfg.OIDC.ProviderName = strings.TrimSpace(cfg.OIDC.ProviderName)
-	cfg.OIDC.ClientID = strings.TrimSpace(cfg.OIDC.ClientID)
-	cfg.OIDC.ClientSecret = strings.TrimSpace(cfg.OIDC.ClientSecret)
-	cfg.OIDC.IssuerURL = strings.TrimSpace(cfg.OIDC.IssuerURL)
-	cfg.OIDC.DiscoveryURL = strings.TrimSpace(cfg.OIDC.DiscoveryURL)
-	cfg.OIDC.AuthorizeURL = strings.TrimSpace(cfg.OIDC.AuthorizeURL)
-	cfg.OIDC.TokenURL = strings.TrimSpace(cfg.OIDC.TokenURL)
-	cfg.OIDC.UserInfoURL = strings.TrimSpace(cfg.OIDC.UserInfoURL)
-	cfg.OIDC.JWKSURL = strings.TrimSpace(cfg.OIDC.JWKSURL)
-	cfg.OIDC.Scopes = strings.TrimSpace(cfg.OIDC.Scopes)
-	cfg.OIDC.RedirectURL = strings.TrimSpace(cfg.OIDC.RedirectURL)
-	cfg.OIDC.FrontendRedirectURL = strings.TrimSpace(cfg.OIDC.FrontendRedirectURL)
-	cfg.OIDC.TokenAuthMethod = strings.ToLower(strings.TrimSpace(cfg.OIDC.TokenAuthMethod))
-	cfg.OIDC.AllowedSigningAlgs = strings.TrimSpace(cfg.OIDC.AllowedSigningAlgs)
-	cfg.OIDC.UserInfoEmailPath = strings.TrimSpace(cfg.OIDC.UserInfoEmailPath)
-	cfg.OIDC.UserInfoIDPath = strings.TrimSpace(cfg.OIDC.UserInfoIDPath)
-	cfg.OIDC.UserInfoUsernamePath = strings.TrimSpace(cfg.OIDC.UserInfoUsernamePath)
-	cfg.OIDC.UsePKCEExplicit = hasExplicitConfigOrEnv("oidc_connect.use_pkce", "OIDC_CONNECT_USE_PKCE")
-	cfg.OIDC.ValidateIDTokenExplicit = hasExplicitConfigOrEnv("oidc_connect.validate_id_token", "OIDC_CONNECT_VALIDATE_ID_TOKEN")
+	cfg.OIDCConnect.ProviderName = strings.TrimSpace(cfg.OIDCConnect.ProviderName)
+	cfg.OIDCConnect.ClientID = strings.TrimSpace(cfg.OIDCConnect.ClientID)
+	cfg.OIDCConnect.ClientSecret = strings.TrimSpace(cfg.OIDCConnect.ClientSecret)
+	cfg.OIDCConnect.IssuerURL = strings.TrimSpace(cfg.OIDCConnect.IssuerURL)
+	cfg.OIDCConnect.DiscoveryURL = strings.TrimSpace(cfg.OIDCConnect.DiscoveryURL)
+	cfg.OIDCConnect.AuthorizeURL = strings.TrimSpace(cfg.OIDCConnect.AuthorizeURL)
+	cfg.OIDCConnect.TokenURL = strings.TrimSpace(cfg.OIDCConnect.TokenURL)
+	cfg.OIDCConnect.UserInfoURL = strings.TrimSpace(cfg.OIDCConnect.UserInfoURL)
+	cfg.OIDCConnect.JWKSURL = strings.TrimSpace(cfg.OIDCConnect.JWKSURL)
+	cfg.OIDCConnect.Scopes = strings.TrimSpace(cfg.OIDCConnect.Scopes)
+	cfg.OIDCConnect.RedirectURL = strings.TrimSpace(cfg.OIDCConnect.RedirectURL)
+	cfg.OIDCConnect.FrontendRedirectURL = strings.TrimSpace(cfg.OIDCConnect.FrontendRedirectURL)
+	cfg.OIDCConnect.TokenAuthMethod = strings.ToLower(strings.TrimSpace(cfg.OIDCConnect.TokenAuthMethod))
+	cfg.OIDCConnect.AllowedSigningAlgs = strings.TrimSpace(cfg.OIDCConnect.AllowedSigningAlgs)
+	cfg.OIDCConnect.UserInfoEmailPath = strings.TrimSpace(cfg.OIDCConnect.UserInfoEmailPath)
+	cfg.OIDCConnect.UserInfoIDPath = strings.TrimSpace(cfg.OIDCConnect.UserInfoIDPath)
+	cfg.OIDCConnect.UserInfoUsernamePath = strings.TrimSpace(cfg.OIDCConnect.UserInfoUsernamePath)
+	cfg.OIDCConnect.UsePKCEExplicit = hasExplicitConfigOrEnv("oidc_connect.use_pkce", "OIDC_CONNECT_USE_PKCE")
+	cfg.OIDCConnect.ValidateIDTokenExplicit = hasExplicitConfigOrEnv("oidc_connect.validate_id_token", "OIDC_CONNECT_VALIDATE_ID_TOKEN")
 	cfg.Dashboard.KeyPrefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
 	cfg.CORS.AllowedOrigins = normalizeStringSlice(cfg.CORS.AllowedOrigins)
 	cfg.Security.ResponseHeaders.AdditionalAllowed = normalizeStringSlice(cfg.Security.ResponseHeaders.AdditionalAllowed)
@@ -2050,83 +2054,83 @@ func (c *Config) Validate() error {
 		}
 		warnIfInsecureURL("wechat_connect.frontend_redirect_url", weChat.FrontendRedirectURL)
 	}
-	if c.OIDC.Enabled {
-		if strings.TrimSpace(c.OIDC.ClientID) == "" {
+	if c.OIDCConnect.Enabled {
+		if strings.TrimSpace(c.OIDCConnect.ClientID) == "" {
 			return fmt.Errorf("oidc_connect.client_id is required when oidc_connect.enabled=true")
 		}
-		if strings.TrimSpace(c.OIDC.IssuerURL) == "" {
+		if strings.TrimSpace(c.OIDCConnect.IssuerURL) == "" {
 			return fmt.Errorf("oidc_connect.issuer_url is required when oidc_connect.enabled=true")
 		}
-		if strings.TrimSpace(c.OIDC.RedirectURL) == "" {
+		if strings.TrimSpace(c.OIDCConnect.RedirectURL) == "" {
 			return fmt.Errorf("oidc_connect.redirect_url is required when oidc_connect.enabled=true")
 		}
-		if strings.TrimSpace(c.OIDC.FrontendRedirectURL) == "" {
+		if strings.TrimSpace(c.OIDCConnect.FrontendRedirectURL) == "" {
 			return fmt.Errorf("oidc_connect.frontend_redirect_url is required when oidc_connect.enabled=true")
 		}
-		if !scopeContainsOpenID(c.OIDC.Scopes) {
+		if !scopeContainsOpenID(c.OIDCConnect.Scopes) {
 			return fmt.Errorf("oidc_connect.scopes must contain openid")
 		}
 
-		method := strings.ToLower(strings.TrimSpace(c.OIDC.TokenAuthMethod))
+		method := strings.ToLower(strings.TrimSpace(c.OIDCConnect.TokenAuthMethod))
 		switch method {
 		case "", "client_secret_post", "client_secret_basic", "none":
 		default:
 			return fmt.Errorf("oidc_connect.token_auth_method must be one of: client_secret_post/client_secret_basic/none")
 		}
 		if (method == "" || method == "client_secret_post" || method == "client_secret_basic") &&
-			strings.TrimSpace(c.OIDC.ClientSecret) == "" {
+			strings.TrimSpace(c.OIDCConnect.ClientSecret) == "" {
 			return fmt.Errorf("oidc_connect.client_secret is required when oidc_connect.enabled=true and token_auth_method is client_secret_post/client_secret_basic")
 		}
-		if c.OIDC.ClockSkewSeconds < 0 || c.OIDC.ClockSkewSeconds > 600 {
+		if c.OIDCConnect.ClockSkewSeconds < 0 || c.OIDCConnect.ClockSkewSeconds > 600 {
 			return fmt.Errorf("oidc_connect.clock_skew_seconds must be between 0 and 600")
 		}
-		if c.OIDC.ValidateIDToken && strings.TrimSpace(c.OIDC.AllowedSigningAlgs) == "" {
+		if c.OIDCConnect.ValidateIDToken && strings.TrimSpace(c.OIDCConnect.AllowedSigningAlgs) == "" {
 			return fmt.Errorf("oidc_connect.allowed_signing_algs is required when oidc_connect.validate_id_token=true")
 		}
 
-		if err := ValidateAbsoluteHTTPURL(c.OIDC.IssuerURL); err != nil {
+		if err := ValidateAbsoluteHTTPURL(c.OIDCConnect.IssuerURL); err != nil {
 			return fmt.Errorf("oidc_connect.issuer_url invalid: %w", err)
 		}
-		if v := strings.TrimSpace(c.OIDC.DiscoveryURL); v != "" {
+		if v := strings.TrimSpace(c.OIDCConnect.DiscoveryURL); v != "" {
 			if err := ValidateAbsoluteHTTPURL(v); err != nil {
 				return fmt.Errorf("oidc_connect.discovery_url invalid: %w", err)
 			}
 		}
-		if v := strings.TrimSpace(c.OIDC.AuthorizeURL); v != "" {
+		if v := strings.TrimSpace(c.OIDCConnect.AuthorizeURL); v != "" {
 			if err := ValidateAbsoluteHTTPURL(v); err != nil {
 				return fmt.Errorf("oidc_connect.authorize_url invalid: %w", err)
 			}
 		}
-		if v := strings.TrimSpace(c.OIDC.TokenURL); v != "" {
+		if v := strings.TrimSpace(c.OIDCConnect.TokenURL); v != "" {
 			if err := ValidateAbsoluteHTTPURL(v); err != nil {
 				return fmt.Errorf("oidc_connect.token_url invalid: %w", err)
 			}
 		}
-		if v := strings.TrimSpace(c.OIDC.UserInfoURL); v != "" {
+		if v := strings.TrimSpace(c.OIDCConnect.UserInfoURL); v != "" {
 			if err := ValidateAbsoluteHTTPURL(v); err != nil {
 				return fmt.Errorf("oidc_connect.userinfo_url invalid: %w", err)
 			}
 		}
-		if v := strings.TrimSpace(c.OIDC.JWKSURL); v != "" {
+		if v := strings.TrimSpace(c.OIDCConnect.JWKSURL); v != "" {
 			if err := ValidateAbsoluteHTTPURL(v); err != nil {
 				return fmt.Errorf("oidc_connect.jwks_url invalid: %w", err)
 			}
 		}
-		if err := ValidateAbsoluteHTTPURL(c.OIDC.RedirectURL); err != nil {
+		if err := ValidateAbsoluteHTTPURL(c.OIDCConnect.RedirectURL); err != nil {
 			return fmt.Errorf("oidc_connect.redirect_url invalid: %w", err)
 		}
-		if err := ValidateFrontendRedirectURL(c.OIDC.FrontendRedirectURL); err != nil {
+		if err := ValidateFrontendRedirectURL(c.OIDCConnect.FrontendRedirectURL); err != nil {
 			return fmt.Errorf("oidc_connect.frontend_redirect_url invalid: %w", err)
 		}
 
-		warnIfInsecureURL("oidc_connect.issuer_url", c.OIDC.IssuerURL)
-		warnIfInsecureURL("oidc_connect.discovery_url", c.OIDC.DiscoveryURL)
-		warnIfInsecureURL("oidc_connect.authorize_url", c.OIDC.AuthorizeURL)
-		warnIfInsecureURL("oidc_connect.token_url", c.OIDC.TokenURL)
-		warnIfInsecureURL("oidc_connect.userinfo_url", c.OIDC.UserInfoURL)
-		warnIfInsecureURL("oidc_connect.jwks_url", c.OIDC.JWKSURL)
-		warnIfInsecureURL("oidc_connect.redirect_url", c.OIDC.RedirectURL)
-		warnIfInsecureURL("oidc_connect.frontend_redirect_url", c.OIDC.FrontendRedirectURL)
+		warnIfInsecureURL("oidc_connect.issuer_url", c.OIDCConnect.IssuerURL)
+		warnIfInsecureURL("oidc_connect.discovery_url", c.OIDCConnect.DiscoveryURL)
+		warnIfInsecureURL("oidc_connect.authorize_url", c.OIDCConnect.AuthorizeURL)
+		warnIfInsecureURL("oidc_connect.token_url", c.OIDCConnect.TokenURL)
+		warnIfInsecureURL("oidc_connect.userinfo_url", c.OIDCConnect.UserInfoURL)
+		warnIfInsecureURL("oidc_connect.jwks_url", c.OIDCConnect.JWKSURL)
+		warnIfInsecureURL("oidc_connect.redirect_url", c.OIDCConnect.RedirectURL)
+		warnIfInsecureURL("oidc_connect.frontend_redirect_url", c.OIDCConnect.FrontendRedirectURL)
 	}
 	if c.Billing.CircuitBreaker.Enabled {
 		if c.Billing.CircuitBreaker.FailureThreshold <= 0 {

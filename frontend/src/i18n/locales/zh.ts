@@ -1398,6 +1398,249 @@ export default {
       failedToLoad: '加载仪表盘数据失败'
     },
 
+    operations: {
+      title: '运营看板',
+      description: '跟踪增长、转化、留存、流失、产品与财务健康度',
+      failedToLoad: '加载运营看板数据失败',
+      empty: '暂无数据',
+      actions: {
+        usage: '使用记录',
+        subscription: '订阅'
+      },
+      lists: {
+        silentHighValue: '沉默高价值用户',
+        expiringSoon: '即将到期订阅',
+        newInactive: '新注册未首调用'
+      },
+      distribution: {
+        groups: '分组消耗分布',
+        models: '模型消耗分布',
+        apiKeys: 'API Key 消耗分布',
+        promos: '优惠与兑换分布'
+      },
+      trend: {
+        activeRevenue: '消耗收入趋势',
+        conversion: '首调用转化趋势'
+      },
+      units: {
+        usageSummary: '{requests} 次请求 · {tokens} tokens',
+        conversionSummary: '{count} 次 · {users} 人',
+        daysIdle: '沉默 {value} 天'
+      },
+      v2: {
+        captionPlain: '看法：',
+        captionAction: '动作：',
+        tabs: {
+          cohort: '留存 cohort',
+          distribution: '分布',
+          trend: '趋势'
+        },
+        modal: {
+          close: '关闭'
+        },
+        pulse: {
+          title: '今日脉搏',
+          sub: '先看当前周期最关键的收入、活跃、新增、体验和付费状态。',
+          revenue: '消耗收入',
+          activeUsers: '活跃用户',
+          newUsers: '新增用户',
+          trialUsers: '体验用户',
+          payingUsers: '付费用户',
+          spark30d: '30 天走势',
+          vsWow: '较上周期',
+          vsYoy: '同比',
+          vs90d: '较 90 天均值',
+          hint: {
+            revenue: {
+              up: '收入正在抬升，优先确认增长来自真实活跃而不是少数大户。',
+              down: '收入走低，先查高价值沉默用户和上游可用性。',
+              flat: '收入基本稳定，继续看转化和留存结构。'
+            },
+            active: {
+              up: '活跃用户增加，适合顺势推新套餐或新模型。',
+              down: '活跃用户下降，优先检查最近 7 天流失瀑布。',
+              flat: '活跃盘面平稳，关注新增用户能否完成首调用。'
+            },
+            new: {
+              up: '新增用户变多，首调用引导和体验券转化要跟上。',
+              down: '新增放缓，检查获客入口、邀请码和注册链路。',
+              flat: '新增稳定，重点提升注册后的第一步转化。'
+            },
+            trial: {
+              up: '体验用户增加，观察体验券是否真正被使用。',
+              down: '体验用户减少，确认体验券发放或领取链路是否正常。',
+              flat: '体验规模稳定，继续看体验后付费。'
+            },
+            paying: {
+              up: '付费用户增加，可以复盘有效套餐和触达路径。',
+              down: '付费用户减少，检查订阅到期与高价值沉默名单。',
+              flat: '付费用户稳定，重点提升客单与复购。'
+            }
+          }
+        },
+        funnel: {
+          title: '销售漏斗',
+          sub: '从注册到首调用、用尽体验券、真实付费和复购逐层观察。',
+          chartTitle: '新用户转化漏斗',
+          hint: '每一层展示选定周期内新用户在 7 天窗口中的关键动作。',
+          action: '重点看掉得最厉害的层级，优先修复对应引导。',
+          dropTo: '转到'
+        },
+        trial: {
+          title: '体验券转化分析',
+          sub: '单独观察 5 元体验券从领取、使用到付费的效率。',
+          chartTitle: '体验券子漏斗',
+          hint: '已发 {issued} 张体验券，{used} 人真正调用，{converted} 人转为真实付费。',
+          action: '如果领取后不使用，优先检查客户端安装、API Key 引导和首调用教程。',
+          summaryLabel: '补充：',
+          summary: '用过体验券的人平均消耗 {avg}；没有走体验券但完成真实付费的新用户有 {nonTrial} 人。',
+          caveat: '体验券是权益成本，不等同真实收入；这里用于判断获客和激活质量。',
+          cards: {
+            issued: '已发放',
+            issuedSub: '每张约 {value} 体验余额',
+            used: '已使用',
+            usedSub: '使用率 {rate}',
+            idle: '未使用',
+            idleSub: '闲置率 {rate}',
+            exhausted: '接近用尽',
+            exhaustedSub: '消耗率 {rate}，阈值 {threshold}',
+            converted: '转付费',
+            convertedSub: '转化率 {rate}'
+          }
+        },
+        churn: {
+          title: '留存与流失',
+          sub: '用个性化调用节奏识别异常沉默、高危流失和确定流失。',
+          definitionLabel: '定义：',
+          totalRate: '确定流失率',
+          totalRateSub: '全局调用间隔中位数 {p50} 天',
+          atRiskRate: '风险用户率',
+          atRiskRateSub: '{count} 人处于异常静默或高危状态',
+          highValueRisk: '高价值风险',
+          highValueRiskSub: '历史贡献约 ${revenue}',
+          weeklyDelta: '较上周 {value}',
+          waterfallTitle: '流失瀑布',
+          waterfallHint: '上周活跃 {base} 人，本周仍活跃 {still} 人，减少 {lost} 人。',
+          waterfallAction: '优先区分是完全消失、余额耗尽还是订阅到期导致。',
+          lastWeekActive: '上周活跃',
+          stillActive: '本周仍活跃',
+          completelyGone: '完全消失',
+          halfActivity: '活跃减半',
+          balanceExhausted: '余额耗尽',
+          subscriptionEnded: '订阅到期',
+          historyTitle: '流失率历史',
+          historyHint: '最近 30 天按日滚动计算确定流失率。',
+          historyAction: '如果曲线突然抬升，回看对应日期的上游和产品变更。',
+          retentionTitle: '新用户留存',
+          retentionHint: 'D1、D7、D30 留存帮助判断首体验是否能持续。',
+          retentionAction: 'D1 低先修注册后首调用，D7/D30 低再看价值感和订阅。'
+        },
+        pyramid: {
+          title: '用户金字塔',
+          sub: '按最近 30 天消耗收入划分用户层级，看收入是否过度集中。',
+          chartTitle: '用户价值分层',
+          hint: '共 {total} 用户，付费用户占 {paid}。',
+          action: '如果顶部用户贡献过高，要给大客户做留存保护，也要拉高中腰部转化。',
+          insightLabel: '洞察：',
+          insight: '超级 + 金牌用户贡献 {top} 收入，但只占 {users} 用户。'
+        },
+        product: {
+          title: '产品矩阵',
+          sub: '按套餐与模型观察用户规模、ARPU 和消耗收入。',
+          bcgTitle: '套餐 BCG 矩阵',
+          bcgHint: '横轴是活跃用户数，纵轴是 ARPU，气泡大小代表收入。',
+          bcgAction: '明星套餐重点维护，问题套餐验证获客，待砍套餐考虑下线或重做。',
+          modelTitle: '模型健康度',
+          modelHint: '观察模型的流量占比、收入和用户变化。',
+          modelAction: '用户下降明显的模型要检查可用性、价格和替代模型。',
+          modelTrafficShare: '流量占比',
+          modelRevenue: '收入',
+          modelUsers: '用户',
+          modelUsersChange: '用户变化'
+        },
+        financial: {
+          title: '财务驾驶舱',
+          sub: '看余额沉淀、权益注入、退款和消耗之间是否健康。',
+          cushionTitle: '余额沉淀健康度',
+          cushionHint: '用户总余额 {balance}，近 30 天日均消耗 {cost}，约可支撑 {months} 个月。',
+          cushionAction: {
+            danger: '余额池偏低，尽快做充值或续费触达。',
+            warning: '余额缓冲偏薄，关注近期到期和高价值用户。',
+            healthy: '余额缓冲健康，继续观察消耗速度。',
+            overloaded: '余额沉淀偏多，考虑促进使用或推出新权益。'
+          },
+          months: '个月',
+          healthDanger: '余额不足',
+          healthWarning: '偏紧',
+          healthHealthy: '健康',
+          healthOverloaded: '沉淀偏多',
+          cashflowTitle: '现金流快照',
+          inflow: '权益注入',
+          outflow: '消耗',
+          netFlow: '净流入',
+          cashflowNote: '这里展示的是系统内权益注入与消耗口径，不等同支付通道真实到账。',
+          revenueTitle: '权益收入构成',
+          revenueHint: '拆分管理员充值、退款、余额卡、体验券和订阅卡密。',
+          revenueAction: '退款率高时优先查工单和上游故障；体验券占比高时看转付费。',
+          adminGroup: '管理员充值',
+          adminGross: '正向充值',
+          adminRefund: '退款 {count} 笔',
+          adminNet: '净充值',
+          redeemGroup: '兑换码兑换',
+          redeemReal: '真实余额卡',
+          redeemTrial: '体验券',
+          redeemSub: '订阅卡密',
+          newSubs: '新增订阅',
+          subUnit: '个',
+          revTrialNote: '不算真实收入',
+          refundRateNote: '退款率 {rate}，退款金额 {amount}',
+          revenueCaveat: '由于没有独立支付流水，这里按兑换码和订阅记录反推权益注入。',
+          arpuTitle: '付费 ARPU 趋势',
+          arpuHint: '最近 30 天按日观察付费用户平均消耗。',
+          arpuAction: 'ARPU 下滑时检查套餐结构、模型价格和低价值流量占比。',
+          netInjected: '净注入',
+          refundBar: '退款抵减'
+        },
+        actions: {
+          title: '行动汇总',
+          sub: '把最需要运营介入的人群放在一起，便于快速跟进。',
+          chartTitle: '优先处理人群',
+          hint: '这些名单来自流失、订阅、首调用和高价值沉默信号。',
+          action: '先看高价值和即将到期，再处理新用户激活。',
+          viewList: '查看名单',
+          highRisk: {
+            title: '高危/已流失',
+            sub: '需要挽回的风险用户',
+            modal: '优先联系历史贡献高、近期突然沉默的用户。'
+          },
+          atRisk: {
+            title: '异常静默',
+            sub: '调用节奏明显变慢',
+            modal: '适合发送使用提醒、余额提醒或排查使用问题。'
+          },
+          newInactive: {
+            title: '新用户未激活',
+            sub: '注册 7 天仍未首调用',
+            modal: '检查 API Key、客户端安装和首调用教程是否触达。'
+          },
+          expiring: {
+            title: '订阅将到期',
+            sub: '未来 7 天到期订阅',
+            modal: '优先提醒仍活跃或历史消耗较高的订阅用户续费。'
+          }
+        },
+        details: {
+          title: '详情面板',
+          sub: '进一步查看 cohort、分布和趋势明细。'
+        },
+        cohort: {
+          title: '留存 cohort 热力图',
+          hint: '按注册日期观察 D0/D1/D7/D30 是否回来使用。',
+          action: '找出留存明显偏低的注册批次，回查当日获客和上游质量。'
+        }
+      }
+    },
+
     backup: {
       title: '数据库备份',
       description: '全量数据库备份到 S3 兼容存储，支持定时备份与恢复',
@@ -5281,6 +5524,10 @@ export default {
           description: '控制用户端侧边栏中的聊天入口，并决定已登录用户是否可以打开聊天启动页。',
           enabled: '启用聊天页面',
           enabledHint: '关闭后用户端侧边栏入口隐藏，直接访问 /chat 会被重定向。',
+          url: '聊天 URL',
+          urlPlaceholder: 'https://chat.example.com',
+          urlHint: '托管聊天应用的完整 http(s) 地址。留空时使用后端 lobe.chat_url 配置。',
+          urlInvalid: '聊天 URL 必须是完整的 http(s) URL。',
         },
         riskControl: {
           title: '风控中心',
