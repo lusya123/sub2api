@@ -99,6 +99,8 @@ func calculateVirtualCache(totalInputTokens int, readRatio float64) VirtualCache
 
 // applyVirtualCacheToUsageJSON rewrites the usage map (from SSE event JSON) with
 // virtual cache tokens. Returns true if the map was modified.
+//
+//nolint:unused // Exercised by unit-tag tests; production currently applies virtual cache through typed usage paths.
 func applyVirtualCacheToUsageJSON(usage map[string]any, readRatio float64) bool {
 	if usage == nil {
 		return false
@@ -108,7 +110,7 @@ func applyVirtualCacheToUsageJSON(usage map[string]any, readRatio float64) bool 
 	cacheRead, _ := usage["cache_read_input_tokens"].(float64)
 	cacheCreation, _ := usage["cache_creation_input_tokens"].(float64)
 	if cacheRead > 0 || cacheCreation > 0 {
-		return false // real cache data exists, don't override
+		return false
 	}
 
 	inputTokens, _ := usage["input_tokens"].(float64)

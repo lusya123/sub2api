@@ -203,6 +203,31 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:     false,
 	}
 
+	// GLM-5 official fallback pricing.
+	s.fallbackPrices["glm-5"] = &ModelPricing{
+		InputPricePerToken:         1.0e-6, // $1 per MTok
+		OutputPricePerToken:        3.2e-6, // $3.2 per MTok
+		CacheCreationPricePerToken: 0,
+		CacheReadPricePerToken:     0.2e-6, // $0.2 per MTok
+		SupportsCacheBreakdown:     false,
+	}
+
+	// MiniMax M2.5 standard and highspeed fallback pricing.
+	s.fallbackPrices["minimax-m2.5"] = &ModelPricing{
+		InputPricePerToken:         0.3e-6,   // $0.3 per MTok
+		OutputPricePerToken:        1.2e-6,   // $1.2 per MTok
+		CacheCreationPricePerToken: 0.375e-6, // $0.375 per MTok
+		CacheReadPricePerToken:     0.03e-6,  // $0.03 per MTok
+		SupportsCacheBreakdown:     false,
+	}
+	s.fallbackPrices["minimax-m2.5-highspeed"] = &ModelPricing{
+		InputPricePerToken:         0.6e-6,   // $0.6 per MTok
+		OutputPricePerToken:        2.4e-6,   // $2.4 per MTok
+		CacheCreationPricePerToken: 0.375e-6, // same as standard
+		CacheReadPricePerToken:     0.03e-6,  // same as standard
+		SupportsCacheBreakdown:     false,
+	}
+
 	// OpenAI GPT-5.4（业务指定价格）
 	s.fallbackPrices["gpt-5.4"] = &ModelPricing{
 		InputPricePerToken:             2.5e-6,  // $2.5 per MTok
@@ -291,6 +316,15 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
 		return s.fallbackPrices["gemini-3.1-pro"]
+	}
+	if strings.Contains(modelLower, "glm") {
+		return s.fallbackPrices["glm-5"]
+	}
+	if strings.Contains(modelLower, "minimax") {
+		if strings.Contains(modelLower, "highspeed") {
+			return s.fallbackPrices["minimax-m2.5-highspeed"]
+		}
+		return s.fallbackPrices["minimax-m2.5"]
 	}
 
 	// OpenAI 仅匹配已知 GPT-5/Codex 族，避免未知 OpenAI 型号误计价。

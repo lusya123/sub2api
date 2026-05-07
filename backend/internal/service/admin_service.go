@@ -704,8 +704,11 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	// 校验用户专属分组倍率：必须 > 0（nil 合法，表示清除专属倍率）
 	if input.GroupRates != nil {
 		for groupID, rate := range input.GroupRates {
+			if groupID <= 0 {
+				return nil, infraerrors.BadRequest("INVALID_GROUP_ID", fmt.Sprintf("group_id must be > 0 (group_id=%d)", groupID))
+			}
 			if rate != nil && *rate <= 0 {
-				return nil, fmt.Errorf("rate_multiplier must be > 0 (group_id=%d)", groupID)
+				return nil, infraerrors.BadRequest("INVALID_RATE_MULTIPLIER", fmt.Sprintf("rate_multiplier must be > 0 (group_id=%d)", groupID))
 			}
 		}
 	}
@@ -765,6 +768,10 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if input.GroupRates != nil && s.userGroupRateRepo != nil {
 		if err := s.userGroupRateRepo.SyncUserGroupRates(ctx, user.ID, input.GroupRates); err != nil {
 			logger.LegacyPrintf("service.admin", "failed to sync user group rates: user_id=%d err=%v", user.ID, err)
+		} else if rates, err := s.userGroupRateRepo.GetByUserID(ctx, user.ID); err != nil {
+			logger.LegacyPrintf("service.admin", "failed to load user group rates after sync: user_id=%d err=%v", user.ID, err)
+		} else {
+			user.GroupRates = rates
 		}
 	}
 

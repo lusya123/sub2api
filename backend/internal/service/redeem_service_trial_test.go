@@ -139,7 +139,7 @@ func TestRedeemService_Redeem_RejectsRepeatedTrialCodeUsage(t *testing.T) {
 		hasUsedTrial: true,
 	}
 	userRepo := &mockUserRepo{}
-	svc := NewRedeemService(redeemRepo, userRepo, nil, nil, nil, newRedeemServiceTestEntClient(t), nil)
+	svc := NewRedeemService(redeemRepo, userRepo, nil, nil, nil, newRedeemServiceTestEntClient(t), nil, nil)
 
 	_, err := svc.Redeem(context.Background(), 42, "TRIAL-ONLY")
 	require.ErrorIs(t, err, ErrTrialRedeemUsed)
@@ -170,7 +170,7 @@ func TestRedeemService_Redeem_NormalBalanceCodeNotBlockedByTrialHistory(t *testi
 		},
 	}
 
-	svc := NewRedeemService(redeemRepo, userRepo, nil, nil, nil, newRedeemServiceTestEntClient(t), nil)
+	svc := NewRedeemService(redeemRepo, userRepo, nil, nil, nil, newRedeemServiceTestEntClient(t), nil, nil)
 
 	got, err := svc.Redeem(context.Background(), 7, "NORMAL-TOPUP")
 	require.NoError(t, err)

@@ -482,7 +482,6 @@ func TestAPIContracts(t *testing.T) {
 					"total_output_tokens": 35,
 					"total_cache_tokens": 3,
 					"total_tokens": 53,
-					"total_cost": 0.75,
 					"total_actual_cost": 0.75,
 					"average_duration_ms": 200
 				}
@@ -545,10 +544,9 @@ func TestAPIContracts(t *testing.T) {
 							"output_cost": 0,
 							"cache_creation_cost": 0,
 							"cache_read_cost": 0,
-						"total_cost": 0.5,
 						"actual_cost": 0.5,
-						"rate_multiplier": 1,
 						"billing_type": 0,
+							"show_cost_breakdown": true,
 							"stream": true,
 							"duration_ms": 100,
 							"first_token_ms": 50,
@@ -765,6 +763,9 @@ func TestAPIContracts(t *testing.T) {
 					"hide_ccs_import_button": false,
 					"purchase_subscription_enabled": false,
 					"purchase_subscription_url": "",
+					"purchase_subscription_mode": "embedded",
+					"purchase_subscription_redirect_url": "",
+					"purchase_subscription_embedded_url": "",
 					"table_default_page_size": 20,
 						"table_page_size_options": [10, 20, 50, 100],
 					"min_claude_code_version": "",
@@ -819,6 +820,8 @@ func TestAPIContracts(t *testing.T) {
 					"balance_low_notify_recharge_url": "",
 					"account_quota_notify_emails": [],
 					"channel_monitor_enabled": true,
+					"chat_page_enabled": true,
+					"chat_page_url": "",
 					"channel_monitor_default_interval_seconds": 60,
 					"available_channels_enabled": false,
 					"risk_control_enabled": false,
@@ -957,6 +960,9 @@ func TestAPIContracts(t *testing.T) {
 					"hide_ccs_import_button": false,
 					"purchase_subscription_enabled": false,
 					"purchase_subscription_url": "",
+					"purchase_subscription_mode": "embedded",
+					"purchase_subscription_redirect_url": "",
+					"purchase_subscription_embedded_url": "",
 					"table_default_page_size": 20,
 					"table_page_size_options": [10, 20, 50],
 					"custom_menu_items": [],
@@ -1030,6 +1036,8 @@ func TestAPIContracts(t *testing.T) {
 					"balance_low_notify_recharge_url": "",
 					"account_quota_notify_emails": [],
 					"channel_monitor_enabled": true,
+					"chat_page_enabled": true,
+					"chat_page_url": "",
 					"channel_monitor_default_interval_seconds": 60,
 					"available_channels_enabled": false,
 					"risk_control_enabled": false,
@@ -1817,6 +1825,10 @@ func (stubRedeemCodeRepo) ListByUserPaginated(ctx context.Context, userID int64,
 
 func (stubRedeemCodeRepo) SumPositiveBalanceByUser(ctx context.Context, userID int64) (float64, error) {
 	return 0, errors.New("not implemented")
+}
+
+func (stubRedeemCodeRepo) HasUsedTrialCodeByUser(ctx context.Context, userID int64) (bool, error) {
+	return false, errors.New("not implemented")
 }
 
 type stubUserSubscriptionRepo struct {

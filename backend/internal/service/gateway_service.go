@@ -7845,6 +7845,23 @@ func (s *GatewayService) getUserGroupRateMultiplier(ctx context.Context, userID,
 	return resolver.Resolve(ctx, userID, groupID, groupDefaultMultiplier)
 }
 
+func (s *GatewayService) getUserGroupActualRateMultiplier(ctx context.Context, userID, groupID int64, groupActualMultiplier float64) float64 {
+	if s == nil {
+		return groupActualMultiplier
+	}
+	resolver := s.userGroupRateResolver
+	if resolver == nil {
+		resolver = newUserGroupRateResolver(
+			s.userGroupRateRepo,
+			s.userGroupRateCache,
+			resolveUserGroupRateCacheTTL(s.cfg),
+			&s.userGroupRateSF,
+			"service.gateway",
+		)
+	}
+	return resolver.ResolveActual(ctx, userID, groupID, groupActualMultiplier)
+}
+
 // RecordUsageInput 记录使用量的输入参数
 type RecordUsageInput struct {
 	Result             *ForwardResult
@@ -8366,14 +8383,18 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 
 	// 获取费率倍数（优先级：用户专属 > 分组默认 > 系统默认）
 	multiplier := 1.0
+	actualMultiplier := 1.0
 	if s.cfg != nil {
 		multiplier = s.cfg.Default.RateMultiplier
+		actualMultiplier = s.cfg.Default.RateMultiplier
 	}
 	if apiKey.GroupID != nil && apiKey.Group != nil {
 		groupDefault := apiKey.Group.RateMultiplier
 		multiplier = s.getUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
+		actualMultiplier = s.getUserGroupActualRateMultiplier(ctx, user.ID, *apiKey.GroupID, apiKey.Group.EffectiveActualRateMultiplier())
 	}
 	imageMultiplier := resolveImageRateMultiplier(apiKey, multiplier)
+	imageActualMultiplier := resolveImageRateMultiplier(apiKey, actualMultiplier)
 
 	// 确定计费模型
 	billingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
@@ -8391,7 +8412,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	}
 
 	// 计算费用
-	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
+	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, actualMultiplier, imageActualMultiplier, opts)
 
 	// 判断计费方式：订阅模式 vs 余额模式
 	isSubscriptionBilling := subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
@@ -8403,7 +8424,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	// 创建使用日志
 	accountRateMultiplier := account.BillingRateMultiplier()
 	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
-		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost, opts)
+		requestedModel, multiplier, actualMultiplier, imageMultiplier, imageActualMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost, opts)
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
 	if apiKey.GroupID != nil {
@@ -8589,7 +8610,9 @@ func (s *GatewayService) buildRecordUsageLog(
 	subscription *UserSubscription,
 	requestedModel string,
 	multiplier float64,
+	actualMultiplier float64,
 	imageMultiplier float64,
+	imageActualMultiplier float64,
 	accountRateMultiplier float64,
 	billingType int8,
 	cacheTTLOverridden bool,
@@ -8636,6 +8659,9 @@ func (s *GatewayService) buildRecordUsageLog(
 	}
 	if result.ImageCount > 0 {
 		usageLog.RateMultiplier = imageMultiplier
+		usageLog.ActualRateMultiplier = &imageActualMultiplier
+	} else {
+		usageLog.ActualRateMultiplier = &actualMultiplier
 	}
 	if cost != nil {
 		usageLog.InputCost = cost.InputCost
