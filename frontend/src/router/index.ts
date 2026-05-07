@@ -9,6 +9,7 @@ import { useAppStore } from '@/stores/app'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { resolveDocumentTitle } from './title'
 
 /**
@@ -155,6 +156,15 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/globe',
+    name: 'GlobeShowcase',
+    component: () => import('@/views/globe/GlobeShowcaseView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Live Globe'
+    }
+  },
+  {
     path: '/legal/:documentId',
     name: 'LegalDocument',
     component: () => import('@/views/public/LegalDocumentView.vue'),
@@ -202,7 +212,8 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: false,
       title: 'Chat',
       titleKey: 'chatLaunch.title',
-      descriptionKey: 'chatLaunch.description'
+      descriptionKey: 'chatLaunch.description',
+      requiresChatPage: true
     }
   },
   {
@@ -400,6 +411,16 @@ const routes: RouteRecordRaw[] = [
       title: 'Operations',
       titleKey: 'admin.operations.title',
       descriptionKey: 'admin.operations.description'
+    }
+  },
+  {
+    path: '/admin/globe',
+    name: 'AdminGlobe',
+    component: () => import('@/views/admin/GlobeView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Live Globe'
     }
   },
   {
@@ -720,7 +741,7 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/legal', '/status']
+const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/legal', '/status', '/globe']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',
@@ -840,6 +861,11 @@ router.beforeEach((to, _from, next) => {
       next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
       return
     }
+  }
+
+  if (to.meta.requiresChatPage && !isFeatureFlagEnabled(FeatureFlags.chatPage)) {
+    next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+    return
   }
 
   // 简易模式下限制访问某些页面

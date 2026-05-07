@@ -213,6 +213,9 @@ type SystemSettings struct {
 	// Available Channels feature switch (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 
+	// Chat page feature switch (user-facing chat launch page)
+	ChatPageEnabled bool `json:"chat_page_enabled"`
+
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
 
@@ -280,6 +283,8 @@ type PublicSettings struct {
 	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
 
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+
+	ChatPageEnabled bool `json:"chat_page_enabled"`
 
 	AffiliateEnabled bool `json:"affiliate_enabled"`
 

@@ -293,6 +293,7 @@ export interface PublicSettings {
   home_content: string
   hide_ccs_import_button: boolean
   payment_enabled: boolean
+  chat_page_enabled: boolean
   purchase_subscription_enabled?: boolean
   purchase_subscription_mode?: PurchaseSubscriptionMode
   purchase_subscription_embedded_url?: string

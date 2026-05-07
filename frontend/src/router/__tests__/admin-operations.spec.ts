@@ -17,6 +17,16 @@ describe('admin operations route', () => {
     expect(route?.meta.requiresAuth).toBe(false)
   })
 
+  it('registers the public and admin live globe pages', () => {
+    const publicRoute = router.getRoutes().find((item) => item.path === '/globe')
+    const adminRoute = router.getRoutes().find((item) => item.path === '/admin/globe')
+
+    expect(publicRoute?.name).toBe('GlobeShowcase')
+    expect(publicRoute?.meta.requiresAuth).toBe(false)
+    expect(adminRoute?.name).toBe('AdminGlobe')
+    expect(adminRoute?.meta.requiresAdmin).toBe(true)
+  })
+
   it('registers the admin model marketplace and legacy model-health redirect', () => {
     const marketplace = router.getRoutes().find((item) => item.path === '/admin/model-marketplace')
     const modelHealth = router.getRoutes().find((item) => item.path === '/admin/model-health')

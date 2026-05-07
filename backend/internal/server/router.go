@@ -105,6 +105,7 @@ func registerRoutes(
 	routes.RegisterOIDCRoutes(r, h)
 	routes.RegisterInternalRoutes(r, h, cfg)
 	routes.RegisterPublicStatusRoutes(r, h.PublicStatus)
+	routes.RegisterPublicGlobeRoutes(r, h.Globe)
 
 	// API v1
 	v1 := r.Group("/api/v1")

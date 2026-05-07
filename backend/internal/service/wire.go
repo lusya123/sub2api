@@ -507,6 +507,7 @@ var ProviderSet = wire.NewSet(
 	ProvideStatusPageService,
 	NewModelMarketplaceService,
 	ProvideChannelHealthProber,
+	ProvideGlobeService,
 	ProvideIdempotencyCoordinator,
 	ProvideSystemOperationLockService,
 	ProvideIdempotencyCleanupService,
