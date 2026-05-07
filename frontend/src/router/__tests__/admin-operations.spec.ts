@@ -33,6 +33,7 @@ describe('admin operations route', () => {
 
     expect(marketplace?.meta.requiresAuth).toBe(true)
     expect(marketplace?.meta.requiresAdmin).toBe(true)
+    expect(marketplace?.meta.requiresSuperAdmin).toBe(true)
     expect(modelHealth?.redirect).toBe('/admin/model-marketplace')
   })
 })

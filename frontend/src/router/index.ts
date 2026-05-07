@@ -10,12 +10,17 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
+import {
+  adminHomePath,
+  adminSettingsOrHomePath,
+  applyAdminAccessPolicy
+} from '@/modules/adminAccess'
 import { resolveDocumentTitle } from './title'
 
 /**
  * Route definitions with lazy loading
  */
-const routes: RouteRecordRaw[] = [
+const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
   // ==================== Setup Routes ====================
   {
     path: '/setup',
@@ -713,7 +718,7 @@ const routes: RouteRecordRaw[] = [
       title: '404 Not Found'
     }
   }
-]
+])
 
 /**
  * Create router instance
@@ -800,6 +805,7 @@ router.beforeEach(async (to, _from, next) => {
   // Check if route requires authentication
   const requiresAuth = to.meta.requiresAuth !== false // Default to true
   const requiresAdmin = to.meta.requiresAdmin === true
+  const requiresSuperAdmin = to.meta.requiresSuperAdmin === true
 
   // If route doesn't require auth, allow access
   if (!requiresAuth) {
@@ -807,12 +813,12 @@ router.beforeEach(async (to, _from, next) => {
     if (authStore.isAuthenticated && (to.path === '/login' || to.path === '/register')) {
       // In backend mode, non-admin users should NOT be redirected away from login
       // (they are blocked from all protected routes, so redirecting would cause a loop)
-      if (appStore.backendModeEnabled && !authStore.isAdmin) {
+      if (appStore.backendModeEnabled && !authStore.canAccessAdmin) {
         next()
         return
       }
       // Admin users go to admin dashboard, regular users go to user dashboard
-      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+      next(adminHomePath(authStore.canAccessAdmin))
       return
     }
     // Backend mode: block public pages for unauthenticated users (except login, key-usage, setup)
@@ -838,18 +844,22 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   // Check admin requirement
-  if (requiresAdmin && !authStore.isAdmin) {
+  if (requiresAdmin && !authStore.canAccessAdmin) {
     // User is authenticated but not admin, redirect to user dashboard
     next('/dashboard')
     return
   }
 
+  if (requiresSuperAdmin && !authStore.isAdmin) {
+    next(adminHomePath(authStore.canAccessAdmin))
+    return
+  }
 
   // Check payment requirement (internal payment system only)
   if (to.meta.requiresPayment) {
     const paymentEnabled = appStore.cachedPublicSettings?.payment_enabled
     if (!paymentEnabled) {
-      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+      next(adminHomePath(authStore.canAccessAdmin))
       return
     }
   }
@@ -857,7 +867,7 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresRiskControl) {
     const riskControlEnabled = appStore.cachedPublicSettings?.risk_control_enabled === true
     if (!riskControlEnabled) {
-      next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+      next(adminSettingsOrHomePath({ isAdmin: authStore.isAdmin, isOperator: authStore.isOperator }))
       return
     }
   }
@@ -867,7 +877,7 @@ router.beforeEach(async (to, _from, next) => {
       await appStore.fetchPublicSettings()
     }
     if (!isFeatureFlagEnabled(FeatureFlags.chatPage)) {
-      next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+      next(adminSettingsOrHomePath({ isAdmin: authStore.isAdmin, isOperator: authStore.isOperator }))
       return
     }
   }
@@ -884,14 +894,14 @@ router.beforeEach(async (to, _from, next) => {
 
     if (restrictedPaths.some((path) => to.path.startsWith(path))) {
       // 简易模式下访问受限页面,重定向到仪表板
-      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+      next(adminHomePath(authStore.canAccessAdmin))
       return
     }
   }
 
-  // Backend mode: admin gets full access, non-admin blocked
+  // Backend mode: admin/operator get admin access, non-admin blocked
   if (appStore.backendModeEnabled) {
-    if (authStore.isAuthenticated && authStore.isAdmin) {
+    if (authStore.isAuthenticated && authStore.canAccessAdmin) {
       next()
       return
     }

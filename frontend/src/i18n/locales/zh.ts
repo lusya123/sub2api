@@ -1993,6 +1993,7 @@ export default {
       statusFilter: '状态筛选',
       allStatuses: '全部状态',
       admin: '管理员',
+      operator: '普通管理员',
       user: '用户',
       disabled: '禁用',
       email: '邮箱',
@@ -2066,8 +2067,14 @@ export default {
       deleteConfirm: "确定要删除用户 '{email}' 吗？此操作无法撤销。",
       roles: {
         admin: '管理员',
+        operator: '普通管理员',
         user: '用户'
       },
+      delegateOperator: '指定为普通管理员',
+      revokeOperator: '取消普通管理员',
+      operatorDelegated: '已指定为普通管理员',
+      operatorRevoked: '已取消普通管理员',
+      failedToUpdateRole: '更新管理员权限失败',
       form: {
         emailLabel: '邮箱',
         emailPlaceholder: '请输入邮箱',

@@ -6,6 +6,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { authAPI, isTotp2FARequired, type LoginResponse } from '@/api'
+import { canAccessAdminRole, isAdminRole, isOperatorRole } from '@/modules/adminAccess'
 import type { User, LoginRequest, RegisterRequest, AuthResponse } from '@/types'
 
 const AUTH_TOKEN_KEY = 'auth_token'
@@ -87,15 +88,15 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const isAdmin = computed(() => {
-    return user.value?.role === 'admin'
+    return isAdminRole(user.value?.role)
   })
 
   const isOperator = computed(() => {
-    return user.value?.role === 'operator'
+    return isOperatorRole(user.value?.role)
   })
 
   const canAccessAdmin = computed(() => {
-    return isAdmin.value || isOperator.value
+    return canAccessAdminRole(user.value?.role)
   })
 
   const isSimpleMode = computed(() => runMode.value === 'simple')

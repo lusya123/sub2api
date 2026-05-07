@@ -1967,6 +1967,7 @@ export default {
       searchGroups: 'Search groups...',
       fuzzySearch: 'Fuzzy search',
       admin: 'Admin',
+      operator: 'Operator',
       user: 'User',
       disabled: 'Disabled',
       email: 'Email',
@@ -2115,8 +2116,14 @@ export default {
       totalRecharged: 'Total Recharged',
       roles: {
         admin: 'Admin',
+        operator: 'Operator',
         user: 'User'
       },
+      delegateOperator: 'Delegate Operator',
+      revokeOperator: 'Revoke Operator',
+      operatorDelegated: 'Operator role delegated',
+      operatorRevoked: 'Operator role revoked',
+      failedToUpdateRole: 'Failed to update role',
       // Settings Dropdowns
       filterSettings: 'Filter Settings',
       columnSettings: 'Column Settings',

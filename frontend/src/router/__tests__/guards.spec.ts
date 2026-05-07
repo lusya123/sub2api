@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import { adminHomePath, canAccessAdminState } from '@/modules/adminAccess'
 
 // Mock 导航加载状态
 vi.mock('@/composables/useNavigationLoading', () => {
@@ -50,6 +51,7 @@ vi.mock('@/api/auth', () => ({
 interface MockAuthState {
   isAuthenticated: boolean
   isAdmin: boolean
+  isOperator?: boolean
   isSimpleMode: boolean
   backendModeEnabled: boolean
   hasPendingAuthSession: boolean
@@ -65,6 +67,8 @@ function simulateGuard(
 ): string | null {
   const requiresAuth = toMeta.requiresAuth !== false
   const requiresAdmin = toMeta.requiresAdmin === true
+  const requiresSuperAdmin = toMeta.requiresSuperAdmin === true
+  const canAccessAdmin = canAccessAdminState(authState)
 
   // 不需要认证的路由
   if (!requiresAuth) {
@@ -72,10 +76,10 @@ function simulateGuard(
       authState.isAuthenticated &&
       (toPath === '/login' || toPath === '/register')
     ) {
-      if (authState.backendModeEnabled && !authState.isAdmin) {
+      if (authState.backendModeEnabled && !canAccessAdmin) {
         return null
       }
-      return authState.isAdmin ? '/admin/dashboard' : '/dashboard'
+      return adminHomePath(canAccessAdmin)
     }
     if (authState.backendModeEnabled && !authState.isAuthenticated) {
       const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
@@ -104,8 +108,12 @@ function simulateGuard(
   }
 
   // 需要管理员但不是管理员
-  if (requiresAdmin && !authState.isAdmin) {
+  if (requiresAdmin && !canAccessAdmin) {
     return '/dashboard'
+  }
+
+  if (requiresSuperAdmin && !authState.isAdmin) {
+    return adminHomePath(canAccessAdmin)
   }
 
   // 简易模式限制
@@ -118,13 +126,13 @@ function simulateGuard(
       '/redeem',
     ]
     if (restrictedPaths.some((path) => toPath.startsWith(path))) {
-      return authState.isAdmin ? '/admin/dashboard' : '/dashboard'
+      return adminHomePath(canAccessAdmin)
     }
   }
 
-  // Backend mode: admin gets full access, non-admin blocked
+  // Backend mode: admin/operator get admin access, non-admin blocked
   if (authState.backendModeEnabled) {
-    if (authState.isAuthenticated && authState.isAdmin) {
+    if (authState.isAuthenticated && canAccessAdmin) {
       return null
     }
     const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
@@ -388,6 +396,39 @@ describe('路由守卫逻辑', () => {
       }
       const redirect = simulateGuard('/admin/dashboard', { requiresAdmin: true }, authState)
       expect(redirect).toBeNull()
+    })
+
+    it('operator: allowed admin pages are accessible', () => {
+      const authState: MockAuthState = {
+        isAuthenticated: true,
+        isAdmin: false,
+        isOperator: true,
+        isSimpleMode: false,
+        backendModeEnabled: true,
+        hasPendingAuthSession: false,
+      }
+
+      expect(simulateGuard('/admin/dashboard', { requiresAdmin: true }, authState)).toBeNull()
+      expect(simulateGuard('/admin/operations', { requiresAdmin: true }, authState)).toBeNull()
+      expect(simulateGuard('/admin/users', { requiresAdmin: true }, authState)).toBeNull()
+    })
+
+    it('operator: super admin pages redirect to admin dashboard', () => {
+      const authState: MockAuthState = {
+        isAuthenticated: true,
+        isAdmin: false,
+        isOperator: true,
+        isSimpleMode: false,
+        backendModeEnabled: true,
+        hasPendingAuthSession: false,
+      }
+
+      const redirect = simulateGuard(
+        '/admin/settings',
+        { requiresAdmin: true, requiresSuperAdmin: true },
+        authState
+      )
+      expect(redirect).toBe('/admin/dashboard')
     })
 
     it('admin: /login redirects to /admin/dashboard', () => {

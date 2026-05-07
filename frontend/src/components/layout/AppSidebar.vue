@@ -24,7 +24,7 @@
     <!-- Navigation -->
     <nav class="sidebar-nav scrollbar-hide">
       <!-- Admin View: Admin menu first, then personal menu -->
-      <template v-if="isAdmin">
+      <template v-if="canAccessAdmin">
         <!-- Admin Section -->
         <div class="sidebar-section">
           <template v-for="item in adminNavItems" :key="item.path">
@@ -231,6 +231,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
+import { isOperatorAdminPath } from '@/modules/adminAccess'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 import {
@@ -287,6 +288,7 @@ const adminSettingsStore = useAdminSettingsStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
 const isAdmin = computed(() => authStore.isAdmin)
+const canAccessAdmin = computed(() => authStore.canAccessAdmin)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const purchaseMode = computed(() =>
   normalizePurchaseSubscriptionMode(appStore.cachedPublicSettings?.purchase_subscription_mode)
@@ -773,6 +775,7 @@ const customMenuItemsForUser = computed(() => {
 })
 
 const customMenuItemsForAdmin = computed(() => {
+  if (!isAdmin.value) return []
   return adminSettingsStore.customMenuItems
     .filter((item) => item.visibility === 'admin')
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -837,6 +840,10 @@ const adminNavItems = computed((): NavItem[] => {
   ]
 
   const visible = applyFeatureFlags(baseItems)
+
+  if (!isAdmin.value) {
+    return visible.filter(item => isOperatorAdminPath(item.path))
+  }
 
   // 简单模式下，在系统设置前插入 API密钥
   if (authStore.isSimpleMode) {
