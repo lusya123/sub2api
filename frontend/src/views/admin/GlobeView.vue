@@ -15,12 +15,32 @@
       </div>
 
       <div class="ga-pills">
-        <div class="ga-pill" :class="{ ok: connected }">
+        <div class="ga-mode-toggle" role="tablist" aria-label="Globe data mode">
+          <button
+            type="button"
+            :class="{ active: globeMode === 'live' }"
+            :aria-pressed="globeMode === 'live'"
+            @click="setGlobeMode('live')"
+            title="显示最近实时请求"
+          >
+            LIVE
+          </button>
+          <button
+            type="button"
+            :class="{ active: globeMode === 'all_time' }"
+            :aria-pressed="globeMode === 'all_time'"
+            @click="setGlobeMode('all_time')"
+            title="显示历史上所有已解析 IP"
+          >
+            ALL-TIME
+          </button>
+        </div>
+        <div class="ga-pill" :class="{ ok: connected || globeMode === 'all_time', archive: globeMode === 'all_time' }">
           <span class="dot"></span>
-          <span>{{ connected ? 'STREAM LIVE' : 'STREAM OFFLINE' }}</span>
+          <span>{{ statusLabel }}</span>
         </div>
         <div class="ga-pill">
-          <span>Δ {{ snapshot?.interval_ms || 1500 }}ms</span>
+          <span>{{ globeMode === 'all_time' ? 'ALL HISTORY' : `Δ ${snapshot?.interval_ms || 1500}ms` }}</span>
         </div>
         <div class="ga-pill">
           <span>RESOLVED {{ summary?.geo_coverage?.resolved_ips ?? '—' }}/{{ summary?.geo_coverage?.total_distinct_ips ?? '—' }}</span>
@@ -68,10 +88,10 @@
         </div>
 
         <div class="ga-block">
-          <div class="ga-block-h">LIVE TICK</div>
+          <div class="ga-block-h">{{ activeSnapshotTitle }}</div>
           <div class="ga-stat accent">
             <div class="ga-stat-n">+{{ snapshot?.total_calls || 0 }}</div>
-            <div class="ga-stat-l">CALLS · LAST {{ snapshot?.window_ms || 1500 }}MS</div>
+            <div class="ga-stat-l">CALLS · {{ activeWindowLabel }}</div>
           </div>
           <div class="ga-stat">
             <div class="ga-stat-n">{{ snapshot?.unique_ips || 0 }}</div>
@@ -105,20 +125,20 @@
       <!-- Right rail -->
       <aside class="ga-side ga-side-r">
         <div class="ga-block">
-          <div class="ga-block-h">TOP COUNTRIES · 24H</div>
+          <div class="ga-block-h">{{ topCountriesTitle }}</div>
           <ul class="ga-leader">
-            <li v-for="(c, i) in summary?.top_countries || []" :key="c.cc">
+            <li v-for="(c, i) in topCountries" :key="c.cc">
               <span class="rk">{{ String(i + 1).padStart(2, '0') }}</span>
               <span class="cc">{{ flag(c.cc) }} {{ c.cc }}</span>
               <span class="nm">{{ c.country }}</span>
-              <span class="bar"><span :style="{ width: pct(c.calls, summary?.top_countries?.[0]?.calls || 1) + '%' }"></span></span>
+              <span class="bar"><span :style="{ width: pct(c.calls, topCountries[0]?.calls || 1) + '%' }"></span></span>
               <span class="n">{{ formatN(c.calls) }}</span>
             </li>
           </ul>
         </div>
 
         <div class="ga-block">
-          <div class="ga-block-h">LIVE ORIGINS · LAST TICK</div>
+          <div class="ga-block-h">{{ originsTitle }}</div>
           <ul class="ga-leader sm">
             <li v-for="a in (snapshot?.arcs || []).slice(0, 12)" :key="`${a.cc}:${a.region || ''}:${a.city || a.country}:${a.lat}:${a.lng}`">
               <span class="cc">{{ flag(a.cc) }} {{ a.cc || '—' }}</span>
@@ -139,9 +159,30 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import GlobeStage from '@/components/globe/GlobeStage.vue'
-import { useGlobeStream } from '@/composables/useGlobeStream'
+import { useGlobeStream, type GlobeDataMode } from '@/composables/useGlobeStream'
 
-const { snapshot, summary, connected } = useGlobeStream()
+const globeMode = ref<GlobeDataMode>('live')
+const { snapshot, summary, connected } = useGlobeStream({ mode: globeMode })
+
+function setGlobeMode(mode: GlobeDataMode) {
+  globeMode.value = mode
+}
+
+const statusLabel = computed(() => {
+  if (globeMode.value === 'all_time') return 'HISTORICAL SNAPSHOT'
+  return connected.value ? 'STREAM LIVE' : 'STREAM OFFLINE'
+})
+const activeWindowLabel = computed(() => {
+  if (globeMode.value === 'all_time') return 'ALL HISTORY'
+  return `LAST ${snapshot.value?.window_ms || 1500}MS`
+})
+const topCountries = computed(() => {
+  if (globeMode.value === 'all_time') return (snapshot.value?.countries || []).slice(0, 12)
+  return summary.value?.top_countries || []
+})
+const activeSnapshotTitle = computed(() => globeMode.value === 'all_time' ? 'HISTORICAL SNAPSHOT' : 'LIVE TICK')
+const topCountriesTitle = computed(() => globeMode.value === 'all_time' ? 'TOP COUNTRIES · ALL-TIME' : 'TOP COUNTRIES · 24H')
+const originsTitle = computed(() => globeMode.value === 'all_time' ? 'ORIGINS · ALL-TIME' : 'LIVE ORIGINS · LAST TICK')
 
 const now = ref('')
 let nowTimer: number | null = null
@@ -239,6 +280,32 @@ function flag(cc: string) {
 }
 .ga-pill-link:hover { color: #ffd87a; border-color: rgba(255,216,122,0.6); }
 .ga-pills { display: flex; gap: 10px; }
+.ga-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.025);
+  padding: 3px;
+}
+.ga-mode-toggle button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(184, 200, 220, 0.62);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+.ga-mode-toggle button:hover {
+  color: #fff;
+}
+.ga-mode-toggle button.active {
+  color: #ffd87a;
+  background: rgba(255,216,122,0.1);
+}
 .ga-pill {
   display: inline-flex;
   align-items: center;
@@ -254,10 +321,16 @@ function flag(cc: string) {
   background: #ff8b6f;
 }
 .ga-pill.ok { border-color: rgba(95,199,255,0.4); color: #9be7ff; }
+.ga-pill.archive { border-color: rgba(255,216,122,0.36); color: #ffd87a; }
 .ga-pill.ok .dot {
   background: #5fc7ff;
   box-shadow: 0 0 6px #5fc7ff;
   animation: ga-pulse 1.4s ease-in-out infinite;
+}
+.ga-pill.archive .dot {
+  background: #ffd87a;
+  box-shadow: 0 0 6px #ffd87a;
+  animation: none;
 }
 @keyframes ga-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 

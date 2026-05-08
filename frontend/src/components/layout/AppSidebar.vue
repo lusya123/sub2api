@@ -731,6 +731,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   }
   items.push(
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
+    { path: '/client-install', label: t('nav.clientInstall'), icon: ChevronDoubleRightIcon },
     { path: '/chat', label: t('nav.chat'), icon: GlobeIcon, featureFlag: flagChatPage },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/status', label: t('nav.modelStatus'), icon: SignalIcon, featureFlag: flagModelHealthPage },

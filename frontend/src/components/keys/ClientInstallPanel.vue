@@ -169,7 +169,11 @@ function safeT(
   params?: Record<string, string>
 ): string {
   try {
-    return params ? t(key, params) : t(key)
+    const translated = params ? t(key, params) : t(key)
+    if (translated === key) {
+      return interpolate(isZhLocale.value ? fallbacks.zh : fallbacks.en, params)
+    }
+    return translated
   } catch (error) {
     console.warn(`[ClientInstallPanel] Failed to translate ${key}, using fallback.`, error)
     return interpolate(isZhLocale.value ? fallbacks.zh : fallbacks.en, params)

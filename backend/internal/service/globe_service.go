@@ -67,6 +67,7 @@ type GlobeCountry struct {
 // GlobeSnapshot is the unit of data pushed via SSE every tick.
 type GlobeSnapshot struct {
 	GeneratedAt    time.Time      `json:"generated_at"`
+	Mode           string         `json:"mode,omitempty"`
 	WindowMs       int64          `json:"window_ms"`
 	IntervalMs     int64          `json:"interval_ms"`
 	Arcs           []GlobeArc     `json:"arcs"`
@@ -121,6 +122,7 @@ type GlobeService struct {
 	mu        sync.RWMutex
 	subs      map[chan *GlobeSnapshot]struct{}
 	lastSnap  atomic.Pointer[GlobeSnapshot]
+	cachedAll atomic.Pointer[GlobeSnapshot]
 	cachedSum atomic.Pointer[GlobeSummary]
 
 	// config
@@ -145,6 +147,8 @@ type GlobeService struct {
 const (
 	snapshotInterval       = 5 * time.Minute
 	snapshotReplayMaxCalls = 1
+	globeSnapshotModeLive  = "live"
+	globeSnapshotModeAll   = "all_time"
 )
 
 // NewGlobeService is the wire constructor. db can be nil — the service will
@@ -239,8 +243,30 @@ func (s *GlobeService) Snapshot() *GlobeSnapshot {
 // tick failed during a slow production-DB startup, build once inline so the
 // browser does not stay on an empty cached frame until the next 5-minute tick.
 func (s *GlobeService) SnapshotWithContext(ctx context.Context) *GlobeSnapshot {
+	return s.SnapshotWithContextMode(ctx, globeSnapshotModeLive)
+}
+
+// SnapshotWithContextMode serves one-shot HTTP callers. The default "live"
+// mode returns the latest streaming frame; "all_time" rebuilds a cached
+// lifetime frame so the admin board can display every resolved IP that has
+// ever requested the service.
+func (s *GlobeService) SnapshotWithContextMode(ctx context.Context, mode string) *GlobeSnapshot {
 	if s == nil {
 		return emptySnapshot()
+	}
+	if normalizeGlobeSnapshotMode(mode) == globeSnapshotModeAll {
+		if cached := s.cachedAll.Load(); cached != nil && time.Since(cached.GeneratedAt) < 30*time.Second {
+			return cached
+		}
+		snap, err := s.buildAllTimeSnapshot(ctx)
+		if err != nil {
+			if cached := s.cachedAll.Load(); cached != nil {
+				return cached
+			}
+			return emptySnapshotWithMode(globeSnapshotModeAll)
+		}
+		s.cachedAll.Store(snap)
+		return snap
 	}
 	if snap := s.lastSnap.Load(); snap != nil && (len(snap.Arcs) > 0 || snap.TotalCalls > 0 || snap.UniqueIPs > 0) {
 		return snap
@@ -322,21 +348,34 @@ func (s *GlobeService) tick(ctx context.Context) {
 }
 
 func (s *GlobeService) buildSnapshot(ctx context.Context) (*GlobeSnapshot, error) {
+	return s.buildSnapshotForMode(ctx, globeSnapshotModeLive)
+}
+
+func (s *GlobeService) buildAllTimeSnapshot(ctx context.Context) (*GlobeSnapshot, error) {
+	return s.buildSnapshotForMode(ctx, globeSnapshotModeAll)
+}
+
+func (s *GlobeService) buildSnapshotForMode(ctx context.Context, mode string) (*GlobeSnapshot, error) {
 	now := s.now()
+	mode = normalizeGlobeSnapshotMode(mode)
 	winMs := int64(s.interval / time.Millisecond)
+	if mode == globeSnapshotModeAll {
+		winMs = 0
+	}
 
 	if s.db == nil {
 		return &GlobeSnapshot{
 			GeneratedAt:    now,
+			Mode:           mode,
 			WindowMs:       winMs,
-			IntervalMs:     winMs,
+			IntervalMs:     int64(s.interval / time.Millisecond),
 			ServerLocation: defaultServerPoint(),
 		}, nil
 	}
 
 	// Snapshot refreshes every 5 minutes and reflects real calls from that
 	// window. Geo cache is only used to attach route geometry to recent usage.
-	const q = `
+	q := `
 SELECT
   ul.ip_address,
   COALESCE(g.country,        ''),
@@ -348,14 +387,21 @@ SELECT
   COUNT(*) AS calls
 FROM usage_logs ul
 JOIN ip_geo_cache g ON g.ip = ul.ip_address
-WHERE ul.created_at > NOW() - ($1 * interval '1 millisecond')
-  AND ul.ip_address IS NOT NULL
+WHERE ul.ip_address IS NOT NULL
   AND g.country_code <> ''
   AND NOT (COALESCE(g.lat, 0) = 0 AND COALESCE(g.lng, 0) = 0)
+`
+	args := []any{}
+	if mode == globeSnapshotModeLive {
+		q += `  AND ul.created_at > NOW() - ($1 * interval '1 millisecond')
+`
+		args = append(args, winMs)
+	}
+	q += `
 GROUP BY ul.ip_address, g.country, g.country_code, g.region, g.city, g.lat, g.lng
 ORDER BY MAX(ul.created_at) DESC, calls DESC`
 
-	rows, err := s.db.QueryContext(ctx, q, winMs)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -415,8 +461,9 @@ ORDER BY MAX(ul.created_at) DESC, calls DESC`
 
 	snap := &GlobeSnapshot{
 		GeneratedAt:    now,
+		Mode:           mode,
 		WindowMs:       winMs,
-		IntervalMs:     winMs,
+		IntervalMs:     int64(s.interval / time.Millisecond),
 		Arcs:           arcs,
 		Countries:      countries,
 		TotalCalls:     totalCalls,
@@ -428,17 +475,22 @@ ORDER BY MAX(ul.created_at) DESC, calls DESC`
 	if row := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM ip_geo_cache`); row != nil {
 		_ = row.Scan(&snap.GeoCacheSize)
 	}
-	if row := s.db.QueryRowContext(ctx, `
+	unresolvedQ := `
 SELECT COUNT(DISTINCT ul.ip_address)
 FROM usage_logs ul
 LEFT JOIN ip_geo_cache g ON g.ip = ul.ip_address
-WHERE ul.created_at > NOW() - ($1 * interval '1 millisecond')
-  AND ul.ip_address IS NOT NULL
+WHERE ul.ip_address IS NOT NULL
   AND (
     g.ip IS NULL
     OR COALESCE(g.country_code, '') = ''
     OR (COALESCE(g.lat, 0) = 0 AND COALESCE(g.lng, 0) = 0)
-  )`, winMs); row != nil {
+  )`
+	unresolvedArgs := []any{}
+	if mode == globeSnapshotModeLive {
+		unresolvedQ += ` AND ul.created_at > NOW() - ($1 * interval '1 millisecond')`
+		unresolvedArgs = append(unresolvedArgs, winMs)
+	}
+	if row := s.db.QueryRowContext(ctx, unresolvedQ, unresolvedArgs...); row != nil {
 		_ = row.Scan(&snap.UnresolvedIPs)
 	}
 
@@ -718,12 +770,33 @@ func envBool(key string) bool {
 // ----- helpers --------------------------------------------------------------
 
 func emptySnapshot() *GlobeSnapshot {
+	return emptySnapshotWithMode(globeSnapshotModeLive)
+}
+
+func emptySnapshotWithMode(mode string) *GlobeSnapshot {
 	return &GlobeSnapshot{
 		GeneratedAt:    time.Now(),
+		Mode:           normalizeGlobeSnapshotMode(mode),
 		IntervalMs:     int64(snapshotInterval / time.Millisecond),
-		WindowMs:       int64(snapshotInterval / time.Millisecond),
+		WindowMs:       defaultSnapshotWindowMs(mode),
 		ServerLocation: defaultServerPoint(),
 	}
+}
+
+func normalizeGlobeSnapshotMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "all", "all-time", "all_time", "history", "historical":
+		return globeSnapshotModeAll
+	default:
+		return globeSnapshotModeLive
+	}
+}
+
+func defaultSnapshotWindowMs(mode string) int64 {
+	if normalizeGlobeSnapshotMode(mode) == globeSnapshotModeAll {
+		return 0
+	}
+	return int64(snapshotInterval / time.Millisecond)
 }
 
 func emptySummary() *GlobeSummary {

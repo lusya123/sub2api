@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
+    locale: { value: 'zh' },
     t: (key: string, params?: Record<string, string>) => {
       if (!params) return key
       return `${key}:${Object.values(params).join(',')}`
@@ -52,23 +53,17 @@ describe('ClientInstallPanel', () => {
       }
     })
 
-    const openclawButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.clients.openclaw.label')
-    )
+    const openclawButton = wrapper.findAll('button').find((button) => button.text().includes('OpenClaw'))
     expect(openclawButton).toBeDefined()
     await openclawButton!.trigger('click')
     await nextTick()
 
-    const opusButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.models.opus46')
-    )
+    const opusButton = wrapper.findAll('button').find((button) => button.text().includes('Opus 4.6'))
     expect(opusButton).toBeDefined()
     await opusButton!.trigger('click')
     await nextTick()
 
-    const windowsButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.os.windows')
-    )
+    const windowsButton = wrapper.findAll('button').find((button) => button.text().includes('Windows'))
     expect(windowsButton).toBeDefined()
     await windowsButton!.trigger('click')
     await nextTick()
@@ -91,18 +86,14 @@ describe('ClientInstallPanel', () => {
       }
     })
 
-    const openclawButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.clients.openclaw.label')
-    )
+    const openclawButton = wrapper.findAll('button').find((button) => button.text().includes('OpenClaw'))
     expect(openclawButton).toBeDefined()
     await openclawButton!.trigger('click')
     await nextTick()
 
     expect(wrapper.text()).toContain('/install-openclaw.sh')
 
-    const claudeButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.clients.claude.label')
-    )
+    const claudeButton = wrapper.findAll('button').find((button) => button.text().includes('Claude Code'))
     expect(claudeButton).toBeDefined()
     await claudeButton!.trigger('click')
     await nextTick()
@@ -126,9 +117,7 @@ describe('ClientInstallPanel', () => {
       }
     })
 
-    const windowsButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.os.windows')
-    )
+    const windowsButton = wrapper.findAll('button').find((button) => button.text().includes('Windows'))
     expect(windowsButton).toBeDefined()
     await windowsButton!.trigger('click')
     await nextTick()
@@ -136,9 +125,7 @@ describe('ClientInstallPanel', () => {
     expect(wrapper.text()).toContain("$env:XDT_API_URL='https://example.com'")
     expect(wrapper.text()).toContain('/install-claude-ccswitch-win.ps1')
 
-    const openclawButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.clients.openclaw.label')
-    )
+    const openclawButton = wrapper.findAll('button').find((button) => button.text().includes('OpenClaw'))
     expect(openclawButton).toBeDefined()
     await openclawButton!.trigger('click')
     await nextTick()
@@ -146,9 +133,7 @@ describe('ClientInstallPanel', () => {
     expect(wrapper.text()).toContain("$env:OPENCLAW_BASE_URL='https://example.com'")
     expect(wrapper.text()).toContain('/install-openclaw-win.ps1')
 
-    const claudeButton = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.clientInstallModal.clients.claude.label')
-    )
+    const claudeButton = wrapper.findAll('button').find((button) => button.text().includes('Claude Code'))
     expect(claudeButton).toBeDefined()
     await claudeButton!.trigger('click')
     await nextTick()

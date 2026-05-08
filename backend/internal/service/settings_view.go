@@ -134,6 +134,7 @@ type SystemSettings struct {
 	PurchaseSubscriptionEmbeddedURL string
 	PurchaseSubscriptionRedirectURL string
 	PurchaseSubscriptionURL         string
+	ModelHealthPageEnabled          bool
 	TableDefaultPageSize            int
 	TablePageSizeOptions            []int
 	CustomMenuItems                 string // JSON array of custom menu items
@@ -251,6 +252,7 @@ type PublicSettings struct {
 	PurchaseSubscriptionEmbeddedURL string
 	PurchaseSubscriptionRedirectURL string
 	PurchaseSubscriptionURL         string
+	ModelHealthPageEnabled          bool
 	TableDefaultPageSize            int
 	TablePageSizeOptions            []int
 	CustomMenuItems                 string // JSON array of custom menu items

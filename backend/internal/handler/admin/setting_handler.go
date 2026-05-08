@@ -196,6 +196,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PurchaseSubscriptionEmbeddedURL:        settings.PurchaseSubscriptionEmbeddedURL,
 		PurchaseSubscriptionRedirectURL:        settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:                settings.PurchaseSubscriptionURL,
+		ModelHealthPageEnabled:                 settings.ModelHealthPageEnabled,
 		TableDefaultPageSize:                   settings.TableDefaultPageSize,
 		TablePageSizeOptions:                   settings.TablePageSizeOptions,
 		CustomMenuItems:                        dto.ParseCustomMenuItems(settings.CustomMenuItems),
@@ -447,6 +448,7 @@ type UpdateSettingsRequest struct {
 	PurchaseSubscriptionEmbeddedURL *string               `json:"purchase_subscription_embedded_url"`
 	PurchaseSubscriptionRedirectURL *string               `json:"purchase_subscription_redirect_url"`
 	PurchaseSubscriptionURL         *string               `json:"purchase_subscription_url"`
+	ModelHealthPageEnabled          *bool                 `json:"model_health_page_enabled"`
 	TableDefaultPageSize            int                   `json:"table_default_page_size"`
 	TablePageSizeOptions            []int                 `json:"table_page_size_options"`
 	CustomMenuItems                 *[]dto.CustomMenuItem `json:"custom_menu_items"`
@@ -1401,29 +1403,35 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
 		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
 		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
-		TableDefaultPageSize:             req.TableDefaultPageSize,
-		TablePageSizeOptions:             req.TablePageSizeOptions,
-		CustomMenuItems:                  customMenuJSON,
-		CustomEndpoints:                  customEndpointsJSON,
-		DefaultConcurrency:               req.DefaultConcurrency,
-		DefaultBalance:                   req.DefaultBalance,
-		AffiliateRebateRate:              affiliateRebateRate,
-		AffiliateRebateFreezeHours:       affiliateRebateFreezeHours,
-		AffiliateRebateDurationDays:      affiliateRebateDurationDays,
-		AffiliateRebatePerInviteeCap:     affiliateRebatePerInviteeCap,
-		DefaultUserRPMLimit:              req.DefaultUserRPMLimit,
-		DefaultSubscriptions:             defaultSubscriptions,
-		EnableModelFallback:              req.EnableModelFallback,
-		FallbackModelAnthropic:           req.FallbackModelAnthropic,
-		FallbackModelOpenAI:              req.FallbackModelOpenAI,
-		FallbackModelGemini:              req.FallbackModelGemini,
-		FallbackModelAntigravity:         req.FallbackModelAntigravity,
-		EnableIdentityPatch:              req.EnableIdentityPatch,
-		IdentityPatchPrompt:              req.IdentityPatchPrompt,
-		MinClaudeCodeVersion:             req.MinClaudeCodeVersion,
-		MaxClaudeCodeVersion:             req.MaxClaudeCodeVersion,
-		AllowUngroupedKeyScheduling:      req.AllowUngroupedKeyScheduling,
-		BackendModeEnabled:               req.BackendModeEnabled,
+		ModelHealthPageEnabled: func() bool {
+			if req.ModelHealthPageEnabled != nil {
+				return *req.ModelHealthPageEnabled
+			}
+			return previousSettings.ModelHealthPageEnabled
+		}(),
+		TableDefaultPageSize:         req.TableDefaultPageSize,
+		TablePageSizeOptions:         req.TablePageSizeOptions,
+		CustomMenuItems:              customMenuJSON,
+		CustomEndpoints:              customEndpointsJSON,
+		DefaultConcurrency:           req.DefaultConcurrency,
+		DefaultBalance:               req.DefaultBalance,
+		AffiliateRebateRate:          affiliateRebateRate,
+		AffiliateRebateFreezeHours:   affiliateRebateFreezeHours,
+		AffiliateRebateDurationDays:  affiliateRebateDurationDays,
+		AffiliateRebatePerInviteeCap: affiliateRebatePerInviteeCap,
+		DefaultUserRPMLimit:          req.DefaultUserRPMLimit,
+		DefaultSubscriptions:         defaultSubscriptions,
+		EnableModelFallback:          req.EnableModelFallback,
+		FallbackModelAnthropic:       req.FallbackModelAnthropic,
+		FallbackModelOpenAI:          req.FallbackModelOpenAI,
+		FallbackModelGemini:          req.FallbackModelGemini,
+		FallbackModelAntigravity:     req.FallbackModelAntigravity,
+		EnableIdentityPatch:          req.EnableIdentityPatch,
+		IdentityPatchPrompt:          req.IdentityPatchPrompt,
+		MinClaudeCodeVersion:         req.MinClaudeCodeVersion,
+		MaxClaudeCodeVersion:         req.MaxClaudeCodeVersion,
+		AllowUngroupedKeyScheduling:  req.AllowUngroupedKeyScheduling,
+		BackendModeEnabled:           req.BackendModeEnabled,
 		OpsMonitoringEnabled: func() bool {
 			if req.OpsMonitoringEnabled != nil {
 				return *req.OpsMonitoringEnabled
@@ -1783,6 +1791,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PurchaseSubscriptionEmbeddedURL:        updatedSettings.PurchaseSubscriptionEmbeddedURL,
 		PurchaseSubscriptionRedirectURL:        updatedSettings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:                updatedSettings.PurchaseSubscriptionURL,
+		ModelHealthPageEnabled:                 updatedSettings.ModelHealthPageEnabled,
 		TableDefaultPageSize:                   updatedSettings.TableDefaultPageSize,
 		TablePageSizeOptions:                   updatedSettings.TablePageSizeOptions,
 		CustomMenuItems:                        dto.ParseCustomMenuItems(updatedSettings.CustomMenuItems),
@@ -2197,6 +2206,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.PurchaseSubscriptionURL != after.PurchaseSubscriptionURL {
 		changed = append(changed, "purchase_subscription_url")
+	}
+	if before.ModelHealthPageEnabled != after.ModelHealthPageEnabled {
+		changed = append(changed, "model_health_page_enabled")
 	}
 	if before.TableDefaultPageSize != after.TableDefaultPageSize {
 		changed = append(changed, "table_default_page_size")

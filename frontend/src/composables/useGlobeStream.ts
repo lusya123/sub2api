@@ -9,7 +9,7 @@
  * density from each fresh snapshot's `arcs` array.
  */
 
-import { ref, shallowRef, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, onMounted, onBeforeUnmount, unref, watch, type Ref } from 'vue'
 
 const GLOBE_REFRESH_MS = 5 * 60 * 1000
 const WATCHDOG_STALE_MS = GLOBE_REFRESH_MS + 15_000
@@ -42,6 +42,7 @@ export interface ServerPoint {
 
 export interface GlobeSnapshot {
   generated_at: string
+  mode?: GlobeDataMode
   window_ms: number
   interval_ms: number
   arcs: GlobeArc[]
@@ -63,7 +64,13 @@ export interface GlobeSummary {
   geo_coverage: { total_distinct_ips?: number; resolved_ips?: number; coverage_pct?: number }
 }
 
-export function useGlobeStream() {
+export type GlobeDataMode = 'live' | 'all_time'
+
+interface UseGlobeStreamOptions {
+  mode?: Ref<GlobeDataMode> | GlobeDataMode
+}
+
+export function useGlobeStream(options: UseGlobeStreamOptions = {}) {
   const snapshot = shallowRef<GlobeSnapshot | null>(null)
   const summary = shallowRef<GlobeSummary | null>(null)
   const connected = ref(false)
@@ -76,6 +83,11 @@ export function useGlobeStream() {
 
   // Resolve API base — same origin in production, proxy in dev.
   const base = '/api/public/globe'
+  const getMode = (): GlobeDataMode => unref(options.mode) || 'live'
+  const snapshotURL = () => {
+    const mode = getMode()
+    return mode === 'all_time' ? `${base}/snapshot?mode=all_time` : `${base}/snapshot`
+  }
 
   const isSuccess = (json: any) => json && (json.code === 0 || json.code === 200) && json.data
   const normalizeSnapshot = (payload: any): GlobeSnapshot | null => {
@@ -89,8 +101,8 @@ export function useGlobeStream() {
       unique_ips: Number(data.unique_ips || 0),
       unresolved_ips: Number(data.unresolved_ips || 0),
       geo_cache_size: Number(data.geo_cache_size || 0),
-      interval_ms: Number(data.interval_ms || GLOBE_REFRESH_MS),
-      window_ms: Number(data.window_ms || GLOBE_REFRESH_MS),
+      interval_ms: Number(data.interval_ms ?? GLOBE_REFRESH_MS),
+      window_ms: Number(data.window_ms ?? GLOBE_REFRESH_MS),
       generated_at: data.generated_at || new Date().toISOString(),
     } as GlobeSnapshot
   }
@@ -108,19 +120,40 @@ export function useGlobeStream() {
   }
 
   const fetchSnapshotOnce = async () => {
+    const requestedMode = getMode()
     try {
-      const res = await fetch(`${base}/snapshot`, { headers: { 'Accept': 'application/json' } })
+      const res = await fetch(snapshotURL(), { headers: { 'Accept': 'application/json' } })
       const json = await res.json()
       if (isSuccess(json)) {
+        if (getMode() !== requestedMode) return
         snapshot.value = normalizeSnapshot(json.data)
-        lastEventAt.value = Date.now()
+        if (requestedMode === 'live') {
+          lastEventAt.value = Date.now()
+        } else {
+          connected.value = false
+          lastEventAt.value = 0
+        }
       }
     } catch {
       /* swallow */
     }
   }
 
+  const stopSSE = () => {
+    es?.close()
+    es = null
+    connected.value = false
+  }
+
+  const stopPolling = () => {
+    if (pollTimer !== null) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
   const startSSE = () => {
+    stopSSE()
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
       return startPolling()
     }
@@ -130,6 +163,7 @@ export function useGlobeStream() {
         connected.value = true
       })
       es.addEventListener('snapshot', (ev: MessageEvent) => {
+        if (getMode() !== 'live') return
         try {
           const data = normalizeSnapshot(JSON.parse(ev.data))
           if (data) {
@@ -157,26 +191,39 @@ export function useGlobeStream() {
     pollTimer = window.setInterval(fetchSnapshotOnce, GLOBE_REFRESH_MS)
   }
 
+  const startSnapshotFeed = () => {
+    stopPolling()
+    stopSSE()
+    if (getMode() === 'live') {
+      startSSE()
+    } else {
+      startPolling()
+    }
+  }
+
   onMounted(() => {
-    startSSE()
+    startSnapshotFeed()
     fetchSummary()
     summaryTimer = window.setInterval(fetchSummary, GLOBE_REFRESH_MS)
     // Watchdog: if no 5-minute frame arrives, kick polling as a safety net.
     watchdog = window.setInterval(() => {
       const now = Date.now()
-      if (lastEventAt.value && now - lastEventAt.value > WATCHDOG_STALE_MS) {
+      if (getMode() === 'live' && lastEventAt.value && now - lastEventAt.value > WATCHDOG_STALE_MS) {
         startPolling()
       }
     }, 30_000)
   })
 
+  watch(
+    () => getMode(),
+    () => {
+      startSnapshotFeed()
+    },
+  )
+
   onBeforeUnmount(() => {
-    es?.close()
-    es = null
-    if (pollTimer !== null) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
+    stopSSE()
+    stopPolling()
     if (summaryTimer !== null) {
       clearInterval(summaryTimer)
       summaryTimer = null

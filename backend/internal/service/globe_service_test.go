@@ -176,6 +176,45 @@ func TestGlobeServiceSnapshotDoesNotSerializeRawIP(t *testing.T) {
 	}
 }
 
+func TestGlobeServiceBuildsAllTimeSnapshot(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery(`(?s)FROM usage_logs ul\s+JOIN ip_geo_cache g ON g\.ip = ul\.ip_address\s+WHERE ul\.ip_address IS NOT NULL.*ORDER BY MAX\(ul\.created_at\) DESC, calls DESC`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"ip_address", "country", "country_code", "region", "city", "lat", "lng", "calls",
+		}).
+			AddRow("203.0.113.7", "Kenya", "KE", "Nairobi County", "Nairobi", -1.2921, 36.8219, 5).
+			AddRow("198.51.100.9", "United States", "US", "California", "San Jose", 37.3382, -121.8863, 2))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM ip_geo_cache`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+	mock.ExpectQuery(`(?s)SELECT COUNT\(DISTINCT ul\.ip_address\).*LEFT JOIN ip_geo_cache g ON g\.ip = ul\.ip_address`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	s := NewGlobeService(db)
+	s.now = func() time.Time { return time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC) }
+
+	snap := s.SnapshotWithContextMode(context.Background(), "all_time")
+	if snap.Mode != globeSnapshotModeAll {
+		t.Fatalf("expected all-time mode, got %q", snap.Mode)
+	}
+	if snap.WindowMs != 0 {
+		t.Fatalf("all-time snapshot should use open-ended window, got %d", snap.WindowMs)
+	}
+	if len(snap.Arcs) != 2 || snap.TotalCalls != 7 || snap.UniqueIPs != 2 {
+		t.Fatalf("unexpected all-time snapshot: %+v", snap)
+	}
+	if snap.Countries[0].CountryCode != "KE" || snap.Countries[1].CountryCode != "US" {
+		t.Fatalf("expected countries sorted by calls, got %+v", snap.Countries)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sql expectations: %v", err)
+	}
+}
+
 func TestGlobeServiceGeoBackfillDisabledByDefault(t *testing.T) {
 	s := NewGlobeService(nil)
 	if s.geoBackfillOn {

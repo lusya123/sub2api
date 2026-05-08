@@ -274,6 +274,7 @@ let manualRotX = DEFAULT_ROT_X
 let autoRotY = 0
 let lastInteractionAt = 0
 let lastFrameTime = 0
+let lastSnapshotMode: string | null = null
 
 // ──────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -559,6 +560,39 @@ function disposeObject3D(obj: THREE.Object3D) {
   })
 }
 
+function resetTrafficState() {
+  if (arcsGroup) {
+    for (const a of liveArcs) {
+      arcsGroup.remove(a.line)
+      a.line.geometry.dispose()
+      a.material.dispose()
+    }
+    for (const route of persistentRoutes.values()) {
+      arcsGroup.remove(route.line)
+      route.line.geometry.dispose()
+      route.material.dispose()
+    }
+    for (const marker of cityMarkers.values()) {
+      arcsGroup.remove(marker.mesh)
+      marker.mesh.geometry.dispose()
+      ;(marker.mesh.material as THREE.Material).dispose()
+    }
+  }
+  if (pinsGroup) {
+    for (const p of countryPins.values()) {
+      pinsGroup.remove(p.mesh)
+      p.mesh.geometry.dispose()
+      ;(p.mesh.material as THREE.Material).dispose()
+    }
+  }
+  liveArcs.length = 0
+  persistentRoutes.clear()
+  cityMarkers.clear()
+  countryPins.clear()
+  countryAggs.clear()
+  visibleLabels.value = []
+}
+
 function serverPointKey(point: ServerPoint): string {
   return `${point.lat.toFixed(4)}:${point.lng.toFixed(4)}:${point.label}`
 }
@@ -738,6 +772,11 @@ function upsertPersistentRoute(server: ServerPoint, arc: GlobeArc) {
 }
 
 function ingestSnapshot(snap: GlobeSnapshot) {
+  const mode = snap.mode || 'live'
+  if (lastSnapshotMode && lastSnapshotMode !== mode) {
+    resetTrafficState()
+  }
+  lastSnapshotMode = mode
   const server = props.serverPoint || snap.server_location
   if (!server) return
   syncServerPin(server)
@@ -1333,22 +1372,7 @@ onBeforeUnmount(() => {
   resizeObs = null
 
   // Drop GPU resources.
-  for (const a of liveArcs) {
-    a.line.geometry.dispose()
-    a.material.dispose()
-  }
-  liveArcs.length = 0
-  for (const route of persistentRoutes.values()) {
-    route.line.geometry.dispose()
-    route.material.dispose()
-  }
-  persistentRoutes.clear()
-  for (const marker of cityMarkers.values()) {
-    marker.mesh.geometry.dispose()
-    ;(marker.mesh.material as THREE.Material).dispose()
-  }
-  cityMarkers.clear()
-  countryPins.clear()
+  resetTrafficState()
   if (usCityBoundaryGroup) {
     for (const child of [...usCityBoundaryGroup.children]) {
       usCityBoundaryGroup.remove(child)

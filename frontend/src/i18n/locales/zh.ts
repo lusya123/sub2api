@@ -344,6 +344,7 @@ export default {
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',
+    clientInstall: '一键部署',
     chat: '聊天',
     usage: '使用记录',
     redeem: '兑换',
@@ -389,6 +390,17 @@ export default {
     channelMonitor: '渠道监控',
     channelStatus: '渠道状态',
     riskControl: '风控中心',
+  },
+
+  clientInstallPage: {
+    title: '一键部署',
+    description: '按 API Key 一键生成 Claude Code 与 OpenClaw 部署命令。',
+    noKeysTitle: '暂无可部署的 API Key',
+    noKeysDescription: '请先创建并分配 Anthropic 或 Antigravity 分组的 API Key。',
+    selectKeyTitle: '选择 API Key',
+    selectKeyDescription: '左侧选择要部署到客户端中的 API Key，右侧会实时生成对应命令。',
+    searchPlaceholder: '搜索密钥名称、分组或 Key',
+    panelDescription: '当前分组：{group}'
   },
 
   // Auth
@@ -741,6 +753,44 @@ export default {
         title: 'OpenCode 配置示例',
         subtitle: 'opencode.json',
         hint: '配置文件路径：~/.config/opencode/opencode.json（或 opencode.jsonc），不存在需手动创建。可使用默认 provider（openai/anthropic/google）或自定义 provider_id。API Key 支持直接配置或通过客户端 /connect 命令配置。示例仅供参考，模型与选项可按需调整。'
+      }
+    },
+    clientInstallModal: {
+      clients: {
+        claude: {
+          label: 'Claude Code',
+          description: '安装 Claude Code 与 CC Switch，并自动导入当前供应商。'
+        },
+        openclaw: {
+          label: 'OpenClaw',
+          description: '安装官方 OpenClaw，并把当前密钥设为默认认证。'
+        }
+      },
+      os: {
+        unix: 'macOS',
+        windows: 'Windows'
+      },
+      models: {
+        sonnet46: 'Sonnet 4.6',
+        opus46: 'Opus 4.6',
+        haiku45: 'Haiku 4.5'
+      },
+      unsupportedTitle: '当前分组暂不支持此安装方式',
+      unsupportedDescription: '只有 Anthropic 和 Antigravity 分组会生成 Claude Code / OpenClaw 一键安装命令。',
+      modelTitle: 'OpenClaw 默认模型',
+      commandTitle: '一键命令',
+      copy: '复制',
+      copied: '已复制',
+      claudeDescription: '为当前 API Key 生成 Claude Code 一键安装命令。脚本会安装 Claude Code，确保增强版 CC Switch 可用，自动导入并切换到当前供应商。',
+      openclawDescription: '为当前 API Key 生成 OpenClaw 一键部署命令。脚本会安装官方 openclaw npm 包，并写入 ~/.openclaw 配置。',
+      claudeNote: '命令里的 XDT_TOKEN/XDT_API_URL 只用于本次安装脚本传参。脚本会安装官方 Claude Code，导入并切换 CC Switch 供应商，然后启动 claude。',
+      openclawWindowsNote: 'OpenClaw 官方仍更推荐在 Windows 上通过 WSL2 使用。这里提供的是原生 PowerShell 部署命令，并要求 Node.js 22.16+；如果系统策略或 Node 环境受限，优先考虑 WSL。',
+      openclawNote: 'OpenClaw 脚本安装的是官方 openclaw npm 包，并把默认模型和认证信息写入 ~/.openclaw。脚本会优先准备 Node.js 22.16+，包下载优先使用 npmmirror。',
+      summary: {
+        claudeUnix: 'Claude Code · macOS / Linux / WSL · CC Switch 自动导入',
+        claudeWindows: 'Claude Code · Windows PowerShell',
+        openclawUnix: 'OpenClaw · macOS / Linux / WSL · 默认模型 {model}',
+        openclawWindows: 'OpenClaw · Windows PowerShell · 默认模型 {model}'
       }
     },
     customKeyLabel: '自定义密钥',
@@ -7154,6 +7204,12 @@ export default {
         revoked: '已撤销',
       },
     },
+  },
+
+  status: {
+    title: '模型状态',
+    subtitle: '查看公开模型与渠道的实时健康状态。',
+    empty: '暂无可展示的模型状态'
   },
 
 }

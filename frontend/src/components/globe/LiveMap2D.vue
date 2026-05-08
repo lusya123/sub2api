@@ -260,9 +260,18 @@ let staticMapOverlayLayer: HTMLCanvasElement | null = null
 let persistentRoutesLayer: HTMLCanvasElement | null = null
 let lastPaintTime = 0
 let lastLabelUpdateTime = 0
+let lastSnapshotMode: string | null = null
 const viewTransform: ViewTransform = { scale: 1, x: 0, y: 0 }
 let dragPointerId: number | null = null
 let dragStart: { x: number; y: number; tx: number; ty: number } | null = null
+
+function resetTrafficState() {
+  liveArcs.length = 0
+  persistentRoutes.clear()
+  invalidatePersistentRoutesLayer()
+  cityHits.clear()
+  countryAggs.clear()
+}
 
 // ── Mount ────────────────────────────────────────────────────────────────
 onMounted(async () => {
@@ -278,11 +287,7 @@ onBeforeUnmount(() => {
   if (raf) cancelAnimationFrame(raf)
   resizeObs?.disconnect()
   resizeObs = null
-  liveArcs.length = 0
-  persistentRoutes.clear()
-  invalidatePersistentRoutesLayer()
-  cityHits.clear()
-  countryAggs.clear()
+  resetTrafficState()
   dragPointerId = null
   dragStart = null
 })
@@ -360,11 +365,7 @@ function setupCanvas() {
   // Re-rasterise paths at the new scale.
   rebuildPaths()
   if (props.snapshot) {
-    liveArcs.length = 0
-    persistentRoutes.clear()
-    invalidatePersistentRoutesLayer()
-    cityHits.clear()
-    countryAggs.clear()
+    resetTrafficState()
     ingestSnapshot(props.snapshot)
   }
 }
@@ -724,6 +725,11 @@ function buildProjectedRoute(fromLat: number, fromLng: number, toLat: number, to
 // ── Snapshot ingestion ───────────────────────────────────────────────────
 function ingestSnapshot(snap: GlobeSnapshot) {
   if (!projection) return
+  const mode = snap.mode || 'live'
+  if (lastSnapshotMode && lastSnapshotMode !== mode) {
+    resetTrafficState()
+  }
+  lastSnapshotMode = mode
   const server = props.serverPoint || snap.server_location
   if (!server) return
   const serverScreen = projection([server.lng, server.lat])

@@ -209,6 +209,18 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
     }
   },
   {
+    path: '/client-install',
+    name: 'ClientInstall',
+    component: () => import('@/views/user/ClientInstallView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Client Install',
+      titleKey: 'clientInstallPage.title',
+      descriptionKey: 'clientInstallPage.description'
+    }
+  },
+  {
     path: '/chat',
     name: 'ChatLaunch',
     component: () => import('@/views/user/ChatLaunchView.vue'),

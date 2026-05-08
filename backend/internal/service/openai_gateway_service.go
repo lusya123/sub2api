@@ -353,6 +353,15 @@ type OpenAIGatewayService struct {
 	codexSnapshotThrottle               *accountWriteThrottle
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
+	channelHealthEnqueuer               ChannelHealthEnqueuer
+}
+
+// SetChannelHealthRecorder injects the passive health sample sink used by the
+// public model status page. Runtime wiring passes an async recorder.
+func (s *OpenAIGatewayService) SetChannelHealthRecorder(r ChannelHealthEnqueuer) {
+	if s != nil {
+		s.channelHealthEnqueuer = r
+	}
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -2808,6 +2817,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		reasoningEffort := extractOpenAIReasoningEffort(reqBody, originalModel)
 		serviceTier := extractOpenAIServiceTier(reqBody)
 
+		emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
+
 		forwardResult := &OpenAIForwardResult{
 			RequestID:       resp.Header.Get("x-request-id"),
 			Usage:           *usage,
@@ -3050,6 +3061,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if usage == nil {
 		usage = &OpenAIUsage{}
 	}
+
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, reqModel, resp.StatusCode, startTime)
 
 	forwardResult := &OpenAIForwardResult{
 		RequestID:       resp.Header.Get("x-request-id"),

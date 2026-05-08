@@ -344,6 +344,7 @@ export default {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
+    clientInstall: 'One-Click Deploy',
     chat: 'Chat',
     usage: 'Usage',
     redeem: 'Redeem',
@@ -389,6 +390,17 @@ export default {
     channelMonitor: 'Channel Monitor',
     channelStatus: 'Channel Status',
     riskControl: 'Risk Control',
+  },
+
+  clientInstallPage: {
+    title: 'One-Click Deploy',
+    description: 'Generate one-click Claude Code and OpenClaw deployment commands from an API key.',
+    noKeysTitle: 'No deployable API keys',
+    noKeysDescription: 'Create an API key assigned to an Anthropic or Antigravity group first.',
+    selectKeyTitle: 'Select API Key',
+    selectKeyDescription: 'Choose the API key on the left. The deployment command on the right updates immediately.',
+    searchPlaceholder: 'Search by key name, group, or API key',
+    panelDescription: 'Current group: {group}'
   },
 
   // Auth
@@ -738,6 +750,44 @@ export default {
         title: 'OpenCode Example',
         subtitle: 'opencode.json',
         hint: 'Config path: ~/.config/opencode/opencode.json (or opencode.jsonc), create if not exists. Use default providers (openai/anthropic/google) or custom provider_id. API Key can be configured directly or via /connect command. This is an example, adjust models and options as needed.',
+      },
+    },
+    clientInstallModal: {
+      clients: {
+        claude: {
+          label: 'Claude Code',
+          description: 'Install Claude Code and CC Switch, then import this provider automatically.',
+        },
+        openclaw: {
+          label: 'OpenClaw',
+          description: 'Install the official OpenClaw package and set this API key as default auth.',
+        },
+      },
+      os: {
+        unix: 'macOS',
+        windows: 'Windows',
+      },
+      models: {
+        sonnet46: 'Sonnet 4.6',
+        opus46: 'Opus 4.6',
+        haiku45: 'Haiku 4.5',
+      },
+      unsupportedTitle: 'This group is not supported',
+      unsupportedDescription: 'Only Anthropic and Antigravity groups generate Claude Code / OpenClaw one-click install commands.',
+      modelTitle: 'Default OpenClaw Model',
+      commandTitle: 'Install Command',
+      copy: 'Copy',
+      copied: 'Copied',
+      claudeDescription: 'Generate a one-click Claude Code deployment command for this API key. The script installs Claude Code, ensures the enhanced CC Switch build is available, imports this provider, and switches to it automatically.',
+      openclawDescription: 'Generate a one-click OpenClaw deployment command for this API key. The script installs the official openclaw npm package and writes config into ~/.openclaw.',
+      claudeNote: 'XDT_TOKEN/XDT_API_URL are only temporary inputs for this installer run. The script installs official Claude Code, imports and switches the CC Switch provider, then starts claude.',
+      openclawWindowsNote: 'OpenClaw officially still recommends WSL2 on Windows. A native PowerShell deployment command is provided here and requires Node.js 22.16+; prefer WSL if local policy or Node setup causes issues.',
+      openclawNote: 'The OpenClaw script installs the official openclaw npm package and writes the default model plus auth config into ~/.openclaw. It also prepares Node.js 22.16+ and prefers npmmirror for downloads.',
+      summary: {
+        claudeUnix: 'Claude Code · macOS / Linux / WSL · CC Switch auto import',
+        claudeWindows: 'Claude Code · Windows PowerShell',
+        openclawUnix: 'OpenClaw · macOS / Linux / WSL · Default model {model}',
+        openclawWindows: 'OpenClaw · Windows PowerShell · Default model {model}',
       },
     },
     customKeyLabel: 'Custom Key',
@@ -6970,6 +7020,12 @@ export default {
         revoked: 'Revoked',
       },
     },
+  },
+
+  status: {
+    title: 'Model Status',
+    subtitle: 'View real-time health for public models and channels.',
+    empty: 'No model status is available yet'
   },
 
 }

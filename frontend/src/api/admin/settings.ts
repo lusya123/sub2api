@@ -384,6 +384,7 @@ export interface SystemSettings {
   purchase_subscription_embedded_url: string;
   purchase_subscription_redirect_url: string;
   purchase_subscription_url: string;
+  model_health_page_enabled: boolean;
   table_default_page_size: number;
   table_page_size_options: number[];
   backend_mode_enabled: boolean;
@@ -609,6 +610,7 @@ export interface UpdateSettingsRequest {
   purchase_subscription_embedded_url?: string;
   purchase_subscription_redirect_url?: string;
   purchase_subscription_url?: string;
+  model_health_page_enabled?: boolean;
   table_default_page_size?: number;
   table_page_size_options?: number[];
   backend_mode_enabled?: boolean;

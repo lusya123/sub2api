@@ -60,6 +60,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		PurchaseSubscriptionEmbeddedURL:  settings.PurchaseSubscriptionEmbeddedURL,
 		PurchaseSubscriptionRedirectURL:  settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:          settings.PurchaseSubscriptionURL,
+		ModelHealthPageEnabled:           settings.ModelHealthPageEnabled,
 		TableDefaultPageSize:             settings.TableDefaultPageSize,
 		TablePageSizeOptions:             settings.TablePageSizeOptions,
 		CustomMenuItems:                  dto.ParseUserVisibleMenuItems(settings.CustomMenuItems),

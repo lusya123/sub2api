@@ -350,9 +350,11 @@ func ProvideScheduledTestRunnerService(
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,
+	prober *ChannelHealthProber,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
 	svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg)
+	svc.SetChannelHealthProber(prober)
 	svc.Start()
 	return svc
 }
@@ -506,6 +508,8 @@ var ProviderSet = wire.NewSet(
 	NewTLSFingerprintProfileService,
 	NewDigestSessionStore,
 	NewChannelHealthRecorder,
+	ProvideAsyncChannelHealthRecorder,
+	ProvideChannelHealthWiring,
 	ProvideStatusPageService,
 	NewModelMarketplaceService,
 	ProvideChannelHealthProber,
@@ -569,6 +573,34 @@ func ProvideChannelMonitorRunner(svc *ChannelMonitorService, settingService *Set
 
 func ProvideStatusPageService(entClient *dbent.Client, settingRepo SettingRepository) *StatusPageService {
 	return NewStatusPageService(entClient).WithSettingRepo(settingRepo)
+}
+
+type ChannelHealthWiring struct{}
+
+func ProvideAsyncChannelHealthRecorder(recorder *ChannelHealthRecorder) *AsyncChannelHealthRecorder {
+	return NewAsyncChannelHealthRecorder(recorder, 0)
+}
+
+func ProvideChannelHealthWiring(
+	asyncRecorder *AsyncChannelHealthRecorder,
+	gateway *GatewayService,
+	openAIGateway *OpenAIGatewayService,
+	antigravityGateway *AntigravityGatewayService,
+	geminiMessagesCompat *GeminiMessagesCompatService,
+) *ChannelHealthWiring {
+	if gateway != nil {
+		gateway.SetChannelHealthRecorder(asyncRecorder)
+	}
+	if openAIGateway != nil {
+		openAIGateway.SetChannelHealthRecorder(asyncRecorder)
+	}
+	if antigravityGateway != nil {
+		antigravityGateway.SetChannelHealthRecorder(asyncRecorder)
+	}
+	if geminiMessagesCompat != nil {
+		geminiMessagesCompat.SetChannelHealthRecorder(asyncRecorder)
+	}
+	return &ChannelHealthWiring{}
 }
 
 func ProvideChannelHealthProber(

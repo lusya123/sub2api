@@ -120,6 +120,7 @@ type SystemSettings struct {
 	PurchaseSubscriptionEmbeddedURL string           `json:"purchase_subscription_embedded_url"`
 	PurchaseSubscriptionRedirectURL string           `json:"purchase_subscription_redirect_url"`
 	PurchaseSubscriptionURL         string           `json:"purchase_subscription_url"`
+	ModelHealthPageEnabled          bool             `json:"model_health_page_enabled"`
 	TableDefaultPageSize            int              `json:"table_default_page_size"`
 	TablePageSizeOptions            []int            `json:"table_page_size_options"`
 	CustomMenuItems                 []CustomMenuItem `json:"custom_menu_items"`
@@ -264,6 +265,7 @@ type PublicSettings struct {
 	PurchaseSubscriptionEmbeddedURL  string                   `json:"purchase_subscription_embedded_url"`
 	PurchaseSubscriptionRedirectURL  string                   `json:"purchase_subscription_redirect_url"`
 	PurchaseSubscriptionURL          string                   `json:"purchase_subscription_url"`
+	ModelHealthPageEnabled           bool                     `json:"model_health_page_enabled"`
 	TableDefaultPageSize             int                      `json:"table_default_page_size"`
 	TablePageSizeOptions             []int                    `json:"table_page_size_options"`
 	CustomMenuItems                  []CustomMenuItem         `json:"custom_menu_items"`

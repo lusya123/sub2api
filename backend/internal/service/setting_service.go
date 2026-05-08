@@ -590,6 +590,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyPurchaseSubscriptionURL,
 		SettingKeyPurchaseSubscriptionEmbeddedURL,
 		SettingKeyPurchaseSubscriptionRedirectURL,
+		SettingKeyModelHealthPageEnabled,
 		SettingKeyTableDefaultPageSize,
 		SettingKeyTablePageSizeOptions,
 		SettingKeyCustomMenuItems,
@@ -718,6 +719,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
 		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
 		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
+		ModelHealthPageEnabled:           !isFalseSettingValue(settings[SettingKeyModelHealthPageEnabled]),
 		TableDefaultPageSize:             tableDefaultPageSize,
 		TablePageSizeOptions:             tablePageSizeOptions,
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
@@ -878,6 +880,7 @@ type PublicSettingsInjectionPayload struct {
 	PurchaseSubscriptionEmbeddedURL  string                   `json:"purchase_subscription_embedded_url,omitempty"`
 	PurchaseSubscriptionRedirectURL  string                   `json:"purchase_subscription_redirect_url,omitempty"`
 	PurchaseSubscriptionURL          string                   `json:"purchase_subscription_url"`
+	ModelHealthPageEnabled           bool                     `json:"model_health_page_enabled"`
 	TableDefaultPageSize             int                      `json:"table_default_page_size"`
 	TablePageSizeOptions             []int                    `json:"table_page_size_options"`
 	CustomMenuItems                  json.RawMessage          `json:"custom_menu_items"`
@@ -947,6 +950,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		PurchaseSubscriptionEmbeddedURL:  settings.PurchaseSubscriptionEmbeddedURL,
 		PurchaseSubscriptionRedirectURL:  settings.PurchaseSubscriptionRedirectURL,
 		PurchaseSubscriptionURL:          settings.PurchaseSubscriptionURL,
+		ModelHealthPageEnabled:           settings.ModelHealthPageEnabled,
 		TableDefaultPageSize:             settings.TableDefaultPageSize,
 		TablePageSizeOptions:             settings.TablePageSizeOptions,
 		CustomMenuItems:                  filterUserVisibleMenuItems(settings.CustomMenuItems),
@@ -1523,6 +1527,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyPurchaseSubscriptionEmbeddedURL] = strings.TrimSpace(settings.PurchaseSubscriptionEmbeddedURL)
 	updates[SettingKeyPurchaseSubscriptionRedirectURL] = strings.TrimSpace(settings.PurchaseSubscriptionRedirectURL)
 	updates[SettingKeyPurchaseSubscriptionURL] = strings.TrimSpace(settings.PurchaseSubscriptionEmbeddedURL)
+	updates[SettingKeyModelHealthPageEnabled] = strconv.FormatBool(settings.ModelHealthPageEnabled)
 	tableDefaultPageSize, tablePageSizeOptions := normalizeTablePreferences(
 		settings.TableDefaultPageSize,
 		settings.TablePageSizeOptions,
@@ -2267,6 +2272,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyPurchaseSubscriptionURL:                  "",
 		SettingKeyPurchaseSubscriptionEmbeddedURL:          "",
 		SettingKeyPurchaseSubscriptionRedirectURL:          "",
+		SettingKeyModelHealthPageEnabled:                   "true",
 		SettingKeyTableDefaultPageSize:                     "20",
 		SettingKeyTablePageSizeOptions:                     "[10,20,50,100]",
 		SettingKeyCustomMenuItems:                          "[]",
@@ -2459,6 +2465,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		PurchaseSubscriptionEmbeddedURL:  purchaseEmbeddedURL,
 		PurchaseSubscriptionRedirectURL:  purchaseRedirectURL,
 		PurchaseSubscriptionURL:          purchaseEmbeddedURL,
+		ModelHealthPageEnabled:           !isFalseSettingValue(settings[SettingKeyModelHealthPageEnabled]),
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
 		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",

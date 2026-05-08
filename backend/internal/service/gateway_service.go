@@ -570,6 +570,16 @@ type GatewayService struct {
 	debugGatewayBodyFile  atomic.Pointer[os.File] // non-nil when SUB2API_DEBUG_GATEWAY_BODY is set
 	tlsFPProfileService   *TLSFingerprintProfileService
 	balanceNotifyService  *BalanceNotifyService
+	channelHealthEnqueuer ChannelHealthEnqueuer
+}
+
+// SetChannelHealthRecorder injects the passive health sample sink used by the
+// public model status page. Runtime wiring passes an async recorder so gateway
+// responses are never blocked by health-sample writes.
+func (s *GatewayService) SetChannelHealthRecorder(r ChannelHealthEnqueuer) {
+	if s != nil {
+		s.channelHealthEnqueuer = r
+	}
 }
 
 // NewGatewayService creates a new GatewayService
@@ -4924,6 +4934,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 	}
 
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, originalModel, resp.StatusCode, startTime)
+
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-request-id"),
 		Usage:            *usage,
@@ -5175,6 +5187,8 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
+
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, input.OriginalModel, resp.StatusCode, input.StartTime)
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-request-id"),
@@ -5680,6 +5694,8 @@ func (s *GatewayService) forwardBedrock(
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
+
+	emitChannelHealthSample(c, s.channelHealthEnqueuer, account, reqModel, resp.StatusCode, startTime)
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-amzn-requestid"),

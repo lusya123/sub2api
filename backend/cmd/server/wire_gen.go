@@ -92,10 +92,6 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 	usageLogRepository := repository.NewUsageLogRepository(client, db)
 	usageService := service.NewUsageService(usageLogRepository, userRepository, client, apiKeyAuthCacheInvalidator)
-	operationAnalyticsRepository := repository.NewOperationAnalyticsRepository(db)
-	operationAnalyticsService := service.NewOperationAnalyticsService(operationAnalyticsRepository)
-	adminAuditRepository := repository.NewAdminAuditRepository(db)
-	adminAuditService := service.NewAdminAuditService(adminAuditRepository)
 	usageHandler := handler.NewUsageHandler(usageService, apiKeyService)
 	chatHandler := handler.NewChatHandler(configConfig, authService, userService, settingService)
 	schedulerCache := repository.ProvideSchedulerCache(redisClient, configConfig)
@@ -112,8 +108,6 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 		return nil, err
 	}
 	billingService := service.NewBillingService(configConfig, pricingService)
-	modelMarketplaceService := service.NewModelMarketplaceService(accountRepository, billingService)
-	statusPageService := service.ProvideStatusPageService(client, settingRepository)
 	geminiQuotaService := service.NewGeminiQuotaService(configConfig, settingRepository)
 	tempUnschedCache := repository.NewTempUnschedCache(redisClient)
 	timeoutCounterCache := repository.NewTimeoutCounterCache(redisClient)
@@ -214,6 +208,9 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	defaultLoadBalancer := payment.ProvideDefaultLoadBalancer(client, encryptionKey)
 	paymentService := service.NewPaymentService(client, registry, defaultLoadBalancer, redeemService, subscriptionService, paymentConfigService, userRepository, groupRepository, affiliateService)
 	settingHandler := admin.NewSettingHandler(settingService, emailService, turnstileService, opsService, paymentConfigService, paymentService)
+	operationAnalyticsRepository := repository.NewOperationAnalyticsRepository(db)
+	operationAnalyticsService := service.NewOperationAnalyticsService(operationAnalyticsRepository)
+	operationHandler := admin.NewOperationHandler(operationAnalyticsService)
 	opsHandler := admin.NewOpsHandler(opsService)
 	updateCache := repository.NewUpdateCache(redisClient)
 	gitHubReleaseClient := repository.ProvideGitHubReleaseClient(configConfig)
@@ -240,15 +237,18 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	scheduledTestResultRepository := repository.NewScheduledTestResultRepository(db)
 	scheduledTestService := service.ProvideScheduledTestService(scheduledTestPlanRepository, scheduledTestResultRepository)
 	scheduledTestHandler := admin.NewScheduledTestHandler(scheduledTestService)
+	adminAuditRepository := repository.NewAdminAuditRepository(db)
+	adminAuditService := service.NewAdminAuditService(adminAuditRepository)
+	auditHandler := admin.NewAuditHandler(adminAuditService)
+	refundInspectionHandler := admin.NewRefundInspectionHandler(redeemService, userService, subscriptionService, usageService)
 	channelHandler := admin.NewChannelHandler(channelService, billingService)
 	channelMonitorHandler := admin.NewChannelMonitorHandler(channelMonitorService)
 	channelMonitorRequestTemplateRepository := repository.NewChannelMonitorRequestTemplateRepository(client, db)
 	channelMonitorRequestTemplateService := service.NewChannelMonitorRequestTemplateService(channelMonitorRequestTemplateRepository)
 	channelMonitorRequestTemplateHandler := admin.NewChannelMonitorRequestTemplateHandler(channelMonitorRequestTemplateService)
+	modelMarketplaceService := service.NewModelMarketplaceService(accountRepository, billingService)
+	statusPageService := service.ProvideStatusPageService(client, settingRepository)
 	modelMarketplaceHandler := admin.NewModelMarketplaceHandler(modelMarketplaceService, statusPageService)
-	operationHandler := admin.NewOperationHandler(operationAnalyticsService)
-	auditHandler := admin.NewAuditHandler(adminAuditService)
-	refundInspectionHandler := admin.NewRefundInspectionHandler(redeemService, userService, subscriptionService, usageService)
 	contentModerationRepository := repository.NewContentModerationRepository(db)
 	contentModerationHashCache := repository.NewContentModerationHashCache(redisClient)
 	contentModerationService := service.NewContentModerationService(settingRepository, contentModerationRepository, contentModerationHashCache, groupRepository, userRepository, apiKeyAuthCacheInvalidator, emailService)
@@ -285,13 +285,14 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	tokenRefreshService := service.ProvideTokenRefreshService(accountRepository, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, compositeTokenCacheInvalidator, schedulerCache, configConfig, tempUnschedCache, privacyClientFactory, proxyRepository, oAuthRefreshAPI)
 	accountExpiryService := service.ProvideAccountExpiryService(accountRepository)
 	subscriptionExpiryService := service.ProvideSubscriptionExpiryService(userSubscriptionRepository)
-	scheduledTestRunnerService := service.ProvideScheduledTestRunnerService(scheduledTestPlanRepository, scheduledTestService, accountTestService, rateLimitService, configConfig)
 	channelHealthRecorder := service.NewChannelHealthRecorder(client)
 	channelHealthProber := service.ProvideChannelHealthProber(client, channelHealthRecorder, accountTestService, settingRepository, gatewayService)
-	scheduledTestRunnerService.SetChannelHealthProber(channelHealthProber)
+	scheduledTestRunnerService := service.ProvideScheduledTestRunnerService(scheduledTestPlanRepository, scheduledTestService, accountTestService, rateLimitService, channelHealthProber, configConfig)
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService)
 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService)
-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, accountExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner)
+	asyncChannelHealthRecorder := service.ProvideAsyncChannelHealthRecorder(channelHealthRecorder)
+	channelHealthWiring := service.ProvideChannelHealthWiring(asyncChannelHealthRecorder, gatewayService, openAIGatewayService, antigravityGatewayService, geminiMessagesCompatService)
+	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, accountExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, asyncChannelHealthRecorder, channelHealthWiring)
 	application := &Application{
 		Server:  httpServer,
 		Cleanup: v,
@@ -346,8 +347,11 @@ func provideCleanup(
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
+	asyncHealthRecorder *service.AsyncChannelHealthRecorder,
+	channelHealthWiring *service.ChannelHealthWiring,
 ) func() {
 	return func() {
+		_ = channelHealthWiring
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -490,6 +494,12 @@ func provideCleanup(
 			{"ChannelMonitorRunner", func() error {
 				if channelMonitorRunner != nil {
 					channelMonitorRunner.Stop()
+				}
+				return nil
+			}},
+			{"AsyncChannelHealthRecorder", func() error {
+				if asyncHealthRecorder != nil {
+					return asyncHealthRecorder.Shutdown(5 * time.Second)
 				}
 				return nil
 			}},

@@ -39,7 +39,7 @@ func (h *GlobeHandler) Snapshot(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "public, max-age=1")
-	response.Success(c, h.svc.SnapshotWithContext(c.Request.Context()))
+	response.Success(c, h.svc.SnapshotWithContextMode(c.Request.Context(), c.Query("mode")))
 }
 
 // Summary serves GET /api/public/globe/summary.
