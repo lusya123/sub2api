@@ -88,12 +88,46 @@ type AdminAuditLogList struct {
 	PageSize int
 }
 
+type AdminAuditBalanceSummaryItem struct {
+	ActorUserID     int64     `json:"actor_user_id"`
+	ActorEmail      string    `json:"actor_email"`
+	ActorRole       string    `json:"actor_role"`
+	AddAmount       float64   `json:"add_amount"`
+	SubtractAmount  float64   `json:"subtract_amount"`
+	NetAmount       float64   `json:"net_amount"`
+	AddCount        int64     `json:"add_count"`
+	SubtractCount   int64     `json:"subtract_count"`
+	SetCount        int64     `json:"set_count"`
+	TotalCount      int64     `json:"total_count"`
+	TargetUserCount int64     `json:"target_user_count"`
+	FirstAt         time.Time `json:"first_at"`
+	LastAt          time.Time `json:"last_at"`
+}
+
+type AdminAuditBalanceSummaryTotal struct {
+	ActorCount      int     `json:"actor_count"`
+	AddAmount       float64 `json:"add_amount"`
+	SubtractAmount  float64 `json:"subtract_amount"`
+	NetAmount       float64 `json:"net_amount"`
+	AddCount        int64   `json:"add_count"`
+	SubtractCount   int64   `json:"subtract_count"`
+	SetCount        int64   `json:"set_count"`
+	TotalCount      int64   `json:"total_count"`
+	TargetUserCount int64   `json:"target_user_count"`
+}
+
+type AdminAuditBalanceSummary struct {
+	Items  []AdminAuditBalanceSummaryItem `json:"items"`
+	Totals AdminAuditBalanceSummaryTotal  `json:"totals"`
+}
+
 var ErrAdminAuditLogNotFound = infraerrors.NotFound("ADMIN_AUDIT_LOG_NOT_FOUND", "audit log not found")
 
 type AdminAuditRepository interface {
 	Insert(ctx context.Context, input *AdminAuditLogInput) error
 	List(ctx context.Context, filter *AdminAuditLogFilter) (*AdminAuditLogList, error)
 	GetByID(ctx context.Context, id int64) (*AdminAuditLog, error)
+	BalanceSummary(ctx context.Context, filter *AdminAuditLogFilter) (*AdminAuditBalanceSummary, error)
 }
 
 type AdminAuditService struct {
@@ -141,6 +175,17 @@ func (s *AdminAuditService) GetByID(ctx context.Context, id int64) (*AdminAuditL
 		return nil, ErrAdminAuditLogNotFound
 	}
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *AdminAuditService) BalanceSummary(ctx context.Context, filter *AdminAuditLogFilter) (*AdminAuditBalanceSummary, error) {
+	if s == nil || s.repo == nil {
+		return &AdminAuditBalanceSummary{Items: []AdminAuditBalanceSummaryItem{}}, nil
+	}
+	if filter == nil {
+		filter = &AdminAuditLogFilter{}
+	}
+	normalizeAuditFilter(filter)
+	return s.repo.BalanceSummary(ctx, filter)
 }
 
 func normalizeAuditFilter(filter *AdminAuditLogFilter) {

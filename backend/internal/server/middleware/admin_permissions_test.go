@@ -83,3 +83,7 @@ func (r *captureAdminAuditRepo) List(ctx context.Context, filter *service.AdminA
 func (r *captureAdminAuditRepo) GetByID(ctx context.Context, id int64) (*service.AdminAuditLog, error) {
 	return nil, service.ErrAdminAuditLogNotFound
 }
+
+func (r *captureAdminAuditRepo) BalanceSummary(ctx context.Context, filter *service.AdminAuditLogFilter) (*service.AdminAuditBalanceSummary, error) {
+	return &service.AdminAuditBalanceSummary{}, nil
+}

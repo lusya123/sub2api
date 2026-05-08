@@ -126,6 +126,95 @@ FROM admin_audit_logs
 	return &logs[0], nil
 }
 
+func (r *adminAuditRepository) BalanceSummary(ctx context.Context, filter *service.AdminAuditLogFilter) (*service.AdminAuditBalanceSummary, error) {
+	if r == nil || r.db == nil {
+		return &service.AdminAuditBalanceSummary{Items: []service.AdminAuditBalanceSummaryItem{}}, nil
+	}
+	where, args := buildAdminAuditBalanceSummaryWhere(filter)
+	var distinctTargetUsers int64
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT l.target_id) FROM admin_audit_logs l"+where, args...).Scan(&distinctTargetUsers); err != nil {
+		return nil, err
+	}
+	const amountExpr = `
+CASE
+	WHEN COALESCE(l.request_body->>'balance', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+	THEN (l.request_body->>'balance')::numeric
+	ELSE 0
+END`
+	querySQL := fmt.Sprintf(`
+WITH balance_logs AS (
+	SELECT
+		l.actor_user_id,
+		l.actor_email,
+		l.actor_role,
+		l.target_id,
+		l.created_at,
+		COALESCE(l.request_body->>'operation', '') AS operation,
+		%s AS amount
+	FROM admin_audit_logs l
+	%s
+)
+SELECT
+	actor_user_id,
+	actor_email,
+	actor_role,
+	COALESCE(SUM(CASE WHEN operation = 'add' THEN amount ELSE 0 END), 0)::float8 AS add_amount,
+	COALESCE(SUM(CASE WHEN operation = 'subtract' THEN amount ELSE 0 END), 0)::float8 AS subtract_amount,
+	COALESCE(SUM(CASE WHEN operation = 'add' THEN amount WHEN operation = 'subtract' THEN -amount ELSE 0 END), 0)::float8 AS net_amount,
+	COUNT(*) FILTER (WHERE operation = 'add') AS add_count,
+	COUNT(*) FILTER (WHERE operation = 'subtract') AS subtract_count,
+	COUNT(*) FILTER (WHERE operation = 'set') AS set_count,
+	COUNT(*) AS total_count,
+	COUNT(DISTINCT target_id) AS target_user_count,
+	MIN(created_at) AS first_at,
+	MAX(created_at) AS last_at
+FROM balance_logs
+GROUP BY actor_user_id, actor_email, actor_role
+ORDER BY total_count DESC, (COALESCE(SUM(CASE WHEN operation IN ('add', 'subtract') THEN amount ELSE 0 END), 0)) DESC, actor_user_id ASC`, amountExpr, where)
+
+	rows, err := r.db.QueryContext(ctx, querySQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := &service.AdminAuditBalanceSummary{Items: []service.AdminAuditBalanceSummaryItem{}}
+	for rows.Next() {
+		var item service.AdminAuditBalanceSummaryItem
+		if err := rows.Scan(
+			&item.ActorUserID,
+			&item.ActorEmail,
+			&item.ActorRole,
+			&item.AddAmount,
+			&item.SubtractAmount,
+			&item.NetAmount,
+			&item.AddCount,
+			&item.SubtractCount,
+			&item.SetCount,
+			&item.TotalCount,
+			&item.TargetUserCount,
+			&item.FirstAt,
+			&item.LastAt,
+		); err != nil {
+			return nil, err
+		}
+		result.Totals.AddAmount += item.AddAmount
+		result.Totals.SubtractAmount += item.SubtractAmount
+		result.Totals.NetAmount += item.NetAmount
+		result.Totals.AddCount += item.AddCount
+		result.Totals.SubtractCount += item.SubtractCount
+		result.Totals.SetCount += item.SetCount
+		result.Totals.TotalCount += item.TotalCount
+		result.Items = append(result.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	result.Totals.ActorCount = len(result.Items)
+	result.Totals.TargetUserCount = distinctTargetUsers
+	return result, nil
+}
+
 type adminAuditScanner interface {
 	Scan(dest ...any) error
 }
@@ -377,5 +466,53 @@ func buildAdminAuditWhere(filter *service.AdminAuditLogFilter) (string, []any) {
 	if len(clauses) == 0 {
 		return "", args
 	}
+	return " WHERE " + strings.Join(clauses, " AND "), args
+}
+
+func buildAdminAuditBalanceSummaryWhere(filter *service.AdminAuditLogFilter) (string, []any) {
+	if filter == nil {
+		filter = &service.AdminAuditLogFilter{}
+	}
+	clauses := []string{
+		"l.route_template = '/api/v1/admin/users/:id/balance'",
+		"l.method = 'POST'",
+		"l.success = true",
+	}
+	args := make([]any, 0, 8)
+	add := func(clause string, value any) {
+		args = append(args, value)
+		clauses = append(clauses, fmt.Sprintf(clause, len(args)))
+	}
+
+	if filter.StartTime != nil {
+		add("l.created_at >= $%d", filter.StartTime)
+	}
+	if filter.EndTime != nil {
+		add("l.created_at <= $%d", filter.EndTime)
+	}
+	if filter.ActorUserID != nil {
+		add("l.actor_user_id = $%d", *filter.ActorUserID)
+	}
+	if filter.ActorRole != "" {
+		add("l.actor_role = $%d", filter.ActorRole)
+	}
+	if filter.TargetID != nil {
+		add("l.target_id = $%d", *filter.TargetID)
+	}
+	if filter.Query != "" {
+		args = append(args, filter.Query)
+		queryIdx := len(args)
+		args = append(args, "%"+filter.Query+"%")
+		likeIdx := len(args)
+		clauses = append(clauses, fmt.Sprintf(`(
+				to_tsvector('simple', COALESCE(l.summary,'') || ' ' || COALESCE(l.actor_email,'') || ' ' || COALESCE(l.actor_role,'') || ' ' || COALESCE(l.target_id::text,'') || ' ' || COALESCE(l.actor_user_id::text,'') || ' ' || COALESCE(l.request_body::text,'')) @@ plainto_tsquery('simple', $%d)
+				OR l.summary ILIKE $%d
+				OR l.actor_email ILIKE $%d
+				OR l.actor_role ILIKE $%d
+				OR l.target_id::text ILIKE $%d
+				OR l.actor_user_id::text ILIKE $%d
+			)`, queryIdx, likeIdx, likeIdx, likeIdx, likeIdx, likeIdx))
+	}
+
 	return " WHERE " + strings.Join(clauses, " AND "), args
 }

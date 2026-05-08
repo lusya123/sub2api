@@ -128,6 +128,7 @@ func registerAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	audits.Use(middleware.SuperAdminOnly())
 	{
 		audits.GET("", h.Admin.Audit.List)
+		audits.GET("/balance-summary", h.Admin.Audit.BalanceSummary)
 		audits.GET("/:id", h.Admin.Audit.GetByID)
 	}
 }

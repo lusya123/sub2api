@@ -57,3 +57,43 @@ func TestAdminAuditRepositoryListHydratesUserRefs(t *testing.T) {
 	}, result.Logs[0].UserRefs)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestAdminAuditRepositoryBalanceSummary(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &adminAuditRepository{db: db}
+	firstAt := time.Date(2026, 5, 1, 1, 0, 0, 0, time.UTC)
+	lastAt := time.Date(2026, 5, 1, 2, 0, 0, 0, time.UTC)
+
+	mock.ExpectQuery(`SELECT COUNT\(DISTINCT l\.target_id\) FROM admin_audit_logs l WHERE`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(3)))
+
+	rows := sqlmock.NewRows([]string{
+		"actor_user_id", "actor_email", "actor_role", "add_amount", "subtract_amount", "net_amount",
+		"add_count", "subtract_count", "set_count", "total_count", "target_user_count", "first_at", "last_at",
+	}).AddRow(
+		int64(10), "operator@example.com", service.RoleOperator,
+		float64(128.5), float64(20.25), float64(108.25),
+		int64(3), int64(2), int64(1), int64(6), int64(2), firstAt, lastAt,
+	).AddRow(
+		int64(1), "admin@example.com", service.RoleAdmin,
+		float64(10), float64(2), float64(8),
+		int64(1), int64(1), int64(0), int64(2), int64(1), firstAt, lastAt,
+	)
+	mock.ExpectQuery(`WITH balance_logs AS`).
+		WillReturnRows(rows)
+
+	result, err := repo.BalanceSummary(context.Background(), &service.AdminAuditLogFilter{})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 2)
+	require.Equal(t, 2, result.Totals.ActorCount)
+	require.Equal(t, float64(138.5), result.Totals.AddAmount)
+	require.Equal(t, float64(22.25), result.Totals.SubtractAmount)
+	require.Equal(t, float64(116.25), result.Totals.NetAmount)
+	require.Equal(t, int64(4), result.Totals.AddCount)
+	require.Equal(t, int64(3), result.Totals.SubtractCount)
+	require.Equal(t, int64(1), result.Totals.SetCount)
+	require.Equal(t, int64(8), result.Totals.TotalCount)
+	require.Equal(t, int64(3), result.Totals.TargetUserCount)
+	require.Equal(t, "operator@example.com", result.Items[0].ActorEmail)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

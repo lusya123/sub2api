@@ -114,7 +114,12 @@ export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from 
 export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type { TLSFingerprintProfile, CreateProfileRequest, UpdateProfileRequest } from './tlsFingerprintProfile'
 export type { ContentModerationConfig, ContentModerationLog, ModerationMode } from './riskControl'
-export type { AdminAuditLog, AdminAuditLogFilters } from './auditLogs'
+export type {
+  AdminAuditBalanceSummary,
+  AdminAuditBalanceSummaryItem,
+  AdminAuditLog,
+  AdminAuditLogFilters
+} from './auditLogs'
 export type {
   OperationArpuPoint,
   OperationBaselines,

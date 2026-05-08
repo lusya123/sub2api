@@ -18,14 +18,90 @@
             <span>{{ t('admin.auditLogs.showReadLogs') }}</span>
             <Toggle v-model="showReadLogs" />
           </label>
-          <div class="flex gap-2">
-            <button class="btn btn-primary flex-1" @click="applyFilters">
+          <div class="flex flex-wrap gap-2 md:col-span-3 xl:col-span-2">
+            <button class="btn btn-primary min-w-24 flex-1 whitespace-nowrap" @click="applyFilters">
               {{ t('common.search') }}
             </button>
-            <button class="btn btn-secondary flex-1" @click="resetFilters">
+            <button class="btn btn-secondary min-w-24 flex-1 whitespace-nowrap" @click="resetFilters">
               {{ t('common.reset') }}
             </button>
+            <button class="btn btn-secondary min-w-36 flex-1 whitespace-nowrap" :disabled="balanceSummaryLoading" @click="loadBalanceSummary">
+              {{ balanceSummaryLoading ? t('common.loading') : t('admin.auditLogs.balanceSummary.action') }}
+            </button>
           </div>
+        </div>
+      </div>
+
+      <div v-if="balanceSummary" class="rounded-lg border border-emerald-200 bg-white p-4 dark:border-emerald-500/30 dark:bg-dark-800">
+        <div class="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.auditLogs.balanceSummary.title') }}</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">{{ balanceSummaryScope }}</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" :disabled="balanceSummaryLoading" @click="loadBalanceSummary">
+            {{ t('common.refresh') }}
+          </button>
+        </div>
+
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div class="rounded-lg bg-emerald-50 p-3 dark:bg-emerald-500/10">
+            <div class="text-xs font-medium uppercase text-emerald-700 dark:text-emerald-300">{{ t('admin.auditLogs.balanceSummary.totalAdded') }}</div>
+            <div class="mt-1 text-xl font-semibold text-emerald-700 dark:text-emerald-200">{{ money(balanceSummary.totals.add_amount) }}</div>
+            <div class="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">{{ t('admin.auditLogs.balanceSummary.count', { count: balanceSummary.totals.add_count }) }}</div>
+          </div>
+          <div class="rounded-lg bg-red-50 p-3 dark:bg-red-500/10">
+            <div class="text-xs font-medium uppercase text-red-700 dark:text-red-300">{{ t('admin.auditLogs.balanceSummary.totalSubtracted') }}</div>
+            <div class="mt-1 text-xl font-semibold text-red-700 dark:text-red-200">{{ money(balanceSummary.totals.subtract_amount) }}</div>
+            <div class="mt-1 text-xs text-red-700/80 dark:text-red-300/80">{{ t('admin.auditLogs.balanceSummary.count', { count: balanceSummary.totals.subtract_count }) }}</div>
+          </div>
+          <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-500/10">
+            <div class="text-xs font-medium uppercase text-blue-700 dark:text-blue-300">{{ t('admin.auditLogs.balanceSummary.netAmount') }}</div>
+            <div class="mt-1 text-xl font-semibold text-blue-700 dark:text-blue-200">{{ signedMoney(balanceSummary.totals.net_amount) }}</div>
+            <div class="mt-1 text-xs text-blue-700/80 dark:text-blue-300/80">{{ t('admin.auditLogs.balanceSummary.totalChanges', { count: balanceSummary.totals.total_count }) }}</div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/60">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.actors') }}</div>
+            <div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ balanceSummary.totals.actor_count }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.targetUsers', { count: balanceSummary.totals.target_user_count }) }}</div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/60">
+            <div class="text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.setOperations') }}</div>
+            <div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ balanceSummary.totals.set_count }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.successOnly') }}</div>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
+            <thead class="bg-gray-50 dark:bg-dark-900/60">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.columns.actor') }}</th>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.columns.added') }}</th>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.columns.subtracted') }}</th>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.columns.net') }}</th>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.columns.counts') }}</th>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-dark-400">{{ t('admin.auditLogs.balanceSummary.columns.lastAt') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+              <tr v-if="balanceSummary.items.length === 0">
+                <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">{{ t('admin.auditLogs.balanceSummary.empty') }}</td>
+              </tr>
+              <tr v-for="item in balanceSummary.items" v-else :key="item.actor_user_id" class="hover:bg-gray-50 dark:hover:bg-dark-700/50">
+                <td class="px-4 py-3">
+                  <div class="font-medium text-gray-900 dark:text-white">{{ item.actor_email || '-' }}</div>
+                  <div class="text-xs text-gray-500">#{{ item.actor_user_id }} · {{ roleLabel(item.actor_role) }}</div>
+                </td>
+                <td class="whitespace-nowrap px-4 py-3 font-medium text-emerald-700 dark:text-emerald-300">{{ money(item.add_amount) }}</td>
+                <td class="whitespace-nowrap px-4 py-3 font-medium text-red-700 dark:text-red-300">{{ money(item.subtract_amount) }}</td>
+                <td class="whitespace-nowrap px-4 py-3 font-medium text-gray-900 dark:text-white">{{ signedMoney(item.net_amount) }}</td>
+                <td class="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-dark-300">
+                  {{ t('admin.auditLogs.balanceSummary.rowCounts', { add: item.add_count, subtract: item.subtract_count, set: item.set_count, total: item.total_count }) }}
+                </td>
+                <td class="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-dark-300">{{ formatDateTime(item.last_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -130,9 +206,9 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
-import type { AdminAuditLog, AdminAuditLogFilters } from '@/api/admin'
+import type { AdminAuditBalanceSummary, AdminAuditLog, AdminAuditLogFilters } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import { formatDateTime } from '@/utils/format'
+import { formatCurrency, formatDateTime } from '@/utils/format'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Select from '@/components/common/Select.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -144,6 +220,8 @@ const appStore = useAppStore()
 
 const logs = ref<AdminAuditLog[]>([])
 const loading = ref(false)
+const balanceSummaryLoading = ref(false)
+const balanceSummary = ref<AdminAuditBalanceSummary | null>(null)
 const showDetail = ref(false)
 const selectedLog = ref<AdminAuditLog | null>(null)
 const showReadLogs = ref(false)
@@ -189,7 +267,25 @@ const roleOptions = computed(() => [
 
 const moduleOptions = computed(() => [
   { value: '', label: t('admin.auditLogs.allModules') },
-  ...['dashboard', 'ops', 'users', 'subscriptions', 'usage', 'settings', 'audit-logs'].map(value => ({
+  ...[
+    'dashboard',
+    'operations',
+    'users',
+    'groups',
+    'accounts',
+    'subscriptions',
+    'usage',
+    'settings',
+    'ops',
+    'system',
+    'api-keys',
+    'channels',
+    'channel-monitor',
+    'model-marketplace',
+    'risk-control',
+    'affiliates',
+    'audit-logs'
+  ].map(value => ({
     value,
     label: moduleLabel(value)
   }))
@@ -249,6 +345,33 @@ const resetFilters = () => {
     end_time: ''
   })
   applyFilters()
+}
+
+const balanceSummaryScope = computed(() => {
+  const role = filters.actor_role ? roleLabel(filters.actor_role) : t('admin.auditLogs.allRoles')
+  const actor = filters.actor_user_id ? `#${filters.actor_user_id}` : t('admin.auditLogs.balanceSummary.allActors')
+  const target = filters.target_id ? `#${filters.target_id}` : t('admin.auditLogs.balanceSummary.allTargets')
+  return t('admin.auditLogs.balanceSummary.scope', { role, actor, target })
+})
+
+const balanceSummaryFilterParams = (): AdminAuditLogFilters => ({
+  q: filters.q,
+  actor_user_id: filters.actor_user_id,
+  actor_role: filters.actor_role,
+  target_id: filters.target_id,
+  start_time: normalizeDateTime(filters.start_time as string),
+  end_time: normalizeDateTime(filters.end_time as string)
+})
+
+const loadBalanceSummary = async () => {
+  balanceSummaryLoading.value = true
+  try {
+    balanceSummary.value = await adminAPI.auditLogs.getBalanceSummary(balanceSummaryFilterParams())
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || error.message || t('admin.auditLogs.balanceSummary.failedToLoad'))
+  } finally {
+    balanceSummaryLoading.value = false
+  }
 }
 
 const handlePageChange = (page: number) => {
@@ -559,7 +682,13 @@ const money = (value: unknown) => {
   if (value === null || value === undefined || value === '') return '-'
   const n = Number(value)
   if (!Number.isFinite(n)) return valueOrDash(value)
-  return `$${n.toFixed(2)}`
+  return formatCurrency(n)
+}
+
+const signedMoney = (value: unknown) => {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return valueOrDash(value)
+  return `${n > 0 ? '+' : ''}${formatCurrency(n)}`
 }
 
 const days = (value: unknown) => {

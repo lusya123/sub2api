@@ -70,6 +70,32 @@ func (h *AuditHandler) List(c *gin.Context) {
 	response.Paginated(c, result.Logs, result.Total, result.Page, result.PageSize)
 }
 
+func (h *AuditHandler) BalanceSummary(c *gin.Context) {
+	filter := &service.AdminAuditLogFilter{
+		ActorRole: c.Query("actor_role"),
+		Query:     c.Query("q"),
+	}
+	if start, ok := parseAuditTimeQuery(c.Query("start_time")); ok {
+		filter.StartTime = &start
+	}
+	if end, ok := parseAuditTimeQuery(c.Query("end_time")); ok {
+		filter.EndTime = &end
+	}
+	if v, ok := parseAuditInt64Query(c.Query("actor_user_id")); ok {
+		filter.ActorUserID = &v
+	}
+	if v, ok := parseAuditInt64Query(c.Query("target_id")); ok {
+		filter.TargetID = &v
+	}
+
+	result, err := h.auditService.BalanceSummary(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *AuditHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {

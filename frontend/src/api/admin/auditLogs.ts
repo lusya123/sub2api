@@ -46,6 +46,39 @@ export interface AdminAuditLogFilters {
   q?: string
 }
 
+export interface AdminAuditBalanceSummaryItem {
+  actor_user_id: number
+  actor_email: string
+  actor_role: string
+  add_amount: number
+  subtract_amount: number
+  net_amount: number
+  add_count: number
+  subtract_count: number
+  set_count: number
+  total_count: number
+  target_user_count: number
+  first_at: string
+  last_at: string
+}
+
+export interface AdminAuditBalanceSummaryTotals {
+  actor_count: number
+  add_amount: number
+  subtract_amount: number
+  net_amount: number
+  add_count: number
+  subtract_count: number
+  set_count: number
+  total_count: number
+  target_user_count: number
+}
+
+export interface AdminAuditBalanceSummary {
+  items: AdminAuditBalanceSummaryItem[]
+  totals: AdminAuditBalanceSummaryTotals
+}
+
 export async function list(filters: AdminAuditLogFilters = {}): Promise<PaginatedResponse<AdminAuditLog>> {
   const params = Object.fromEntries(
     Object.entries(filters).filter(([, value]) => value !== '' && value !== undefined && value !== null)
@@ -59,9 +92,18 @@ export async function getById(id: number): Promise<AdminAuditLog> {
   return data
 }
 
+export async function getBalanceSummary(filters: AdminAuditLogFilters = {}): Promise<AdminAuditBalanceSummary> {
+  const params = Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== '' && value !== undefined && value !== null)
+  )
+  const { data } = await apiClient.get<AdminAuditBalanceSummary>('/admin/audit-logs/balance-summary', { params })
+  return data
+}
+
 export const auditLogsAPI = {
   list,
-  getById
+  getById,
+  getBalanceSummary
 }
 
 export default auditLogsAPI
