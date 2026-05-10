@@ -67,6 +67,7 @@ type AdminAuditLogFilter struct {
 	StartTime             *time.Time
 	EndTime               *time.Time
 	ActorUserID           *int64
+	ActorEmail            string
 	ActorRole             string
 	Module                string
 	ActionType            string
@@ -74,6 +75,7 @@ type AdminAuditLogFilter struct {
 	ExcludeSuccessfulRead bool
 	TargetType            string
 	TargetID              *int64
+	TargetEmail           string
 	Success               *bool
 	StatusCode            *int
 	Query                 string

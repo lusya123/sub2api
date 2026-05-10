@@ -4,13 +4,13 @@
       <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
         <div class="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
           <input v-model="filters.q" class="input" type="search" :placeholder="t('admin.auditLogs.searchPlaceholder')" @keyup.enter="applyFilters" />
-          <input v-model="filters.actor_user_id" class="input" type="number" :placeholder="t('admin.auditLogs.actorId')" @keyup.enter="applyFilters" />
+          <input v-model="filters.actor_email" class="input" type="search" :placeholder="t('admin.auditLogs.actorEmail')" @keyup.enter="applyFilters" />
           <Select v-model="filters.actor_role" :options="roleOptions" />
           <Select v-model="filters.module" :options="moduleOptions" />
           <Select v-model="filters.action_type" :options="actionTypeOptions" />
           <Select v-model="filters.success" :options="successOptions" />
           <input v-model="filters.target_type" class="input" type="text" :placeholder="t('admin.auditLogs.targetType')" @keyup.enter="applyFilters" />
-          <input v-model="filters.target_id" class="input" type="text" :placeholder="t('admin.auditLogs.targetId')" @keyup.enter="applyFilters" />
+          <input v-model="filters.target_email" class="input" type="search" :placeholder="t('admin.auditLogs.targetEmail')" @keyup.enter="applyFilters" />
           <input v-model="filters.status_code" class="input" type="number" :placeholder="t('admin.auditLogs.statusCode')" @keyup.enter="applyFilters" />
           <input v-model="filters.start_time" class="input" type="datetime-local" />
           <input v-model="filters.end_time" class="input" type="datetime-local" />
@@ -228,12 +228,12 @@ const showReadLogs = ref(false)
 
 const filters = reactive<AdminAuditLogFilters>({
   q: '',
-  actor_user_id: '',
+  actor_email: '',
   actor_role: '',
   module: '',
   action_type: '',
   target_type: '',
-  target_id: '',
+  target_email: '',
   status_code: '',
   success: '',
   start_time: '',
@@ -333,12 +333,12 @@ const applyFilters = () => {
 const resetFilters = () => {
   Object.assign(filters, {
     q: '',
-    actor_user_id: '',
+    actor_email: '',
     actor_role: '',
     module: '',
     action_type: '',
     target_type: '',
-    target_id: '',
+    target_email: '',
     status_code: '',
     success: '',
     start_time: '',
@@ -349,16 +349,16 @@ const resetFilters = () => {
 
 const balanceSummaryScope = computed(() => {
   const role = filters.actor_role ? roleLabel(filters.actor_role) : t('admin.auditLogs.allRoles')
-  const actor = filters.actor_user_id ? `#${filters.actor_user_id}` : t('admin.auditLogs.balanceSummary.allActors')
-  const target = filters.target_id ? `#${filters.target_id}` : t('admin.auditLogs.balanceSummary.allTargets')
+  const actor = filters.actor_email || t('admin.auditLogs.balanceSummary.allActors')
+  const target = filters.target_email || t('admin.auditLogs.balanceSummary.allTargets')
   return t('admin.auditLogs.balanceSummary.scope', { role, actor, target })
 })
 
 const balanceSummaryFilterParams = (): AdminAuditLogFilters => ({
   q: filters.q,
-  actor_user_id: filters.actor_user_id,
+  actor_email: filters.actor_email,
   actor_role: filters.actor_role,
-  target_id: filters.target_id,
+  target_email: filters.target_email,
   start_time: normalizeDateTime(filters.start_time as string),
   end_time: normalizeDateTime(filters.end_time as string)
 })

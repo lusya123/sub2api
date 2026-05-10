@@ -23,11 +23,13 @@ func (h *AuditHandler) List(c *gin.Context) {
 	filter := &service.AdminAuditLogFilter{
 		Page:              page,
 		PageSize:          pageSize,
+		ActorEmail:        strings.TrimSpace(c.Query("actor_email")),
 		ActorRole:         c.Query("actor_role"),
 		Module:            c.Query("module"),
 		ActionType:        c.Query("action_type"),
 		ExcludeActionType: c.Query("exclude_action_type"),
 		TargetType:        c.Query("target_type"),
+		TargetEmail:       strings.TrimSpace(c.Query("target_email")),
 		Query:             c.Query("q"),
 		Route:             c.Query("route"),
 		Method:            c.Query("method"),
@@ -72,8 +74,10 @@ func (h *AuditHandler) List(c *gin.Context) {
 
 func (h *AuditHandler) BalanceSummary(c *gin.Context) {
 	filter := &service.AdminAuditLogFilter{
-		ActorRole: c.Query("actor_role"),
-		Query:     c.Query("q"),
+		ActorEmail:  strings.TrimSpace(c.Query("actor_email")),
+		ActorRole:   c.Query("actor_role"),
+		TargetEmail: strings.TrimSpace(c.Query("target_email")),
+		Query:       c.Query("q"),
 	}
 	if start, ok := parseAuditTimeQuery(c.Query("start_time")); ok {
 		filter.StartTime = &start

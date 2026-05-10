@@ -1695,10 +1695,12 @@ export default {
     auditLogs: {
       title: '操作日志',
       description: '把后台里的关键动作翻译成人能看懂的记录，方便追踪谁在什么时候改了什么。',
-      searchPlaceholder: '搜索操作、邮箱、路径或错误信息',
+      searchPlaceholder: '模糊搜索操作、路由或错误信息',
       actorId: '操作人 ID',
+      actorEmail: '操作人邮箱',
       targetType: '对象类型',
       targetId: '对象 ID',
+      targetEmail: '被操作用户邮箱',
       statusCode: '状态码',
       showReadLogs: '显示成功的查看记录',
       empty: '暂时没有操作日志',

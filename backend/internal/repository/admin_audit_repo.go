@@ -409,6 +409,9 @@ func buildAdminAuditWhere(filter *service.AdminAuditLogFilter) (string, []any) {
 	if filter.ActorUserID != nil {
 		add("l.actor_user_id = $%d", *filter.ActorUserID)
 	}
+	if filter.ActorEmail != "" {
+		add("l.actor_email ILIKE $%d", "%"+filter.ActorEmail+"%")
+	}
 	if filter.ActorRole != "" {
 		add("l.actor_role = $%d", filter.ActorRole)
 	}
@@ -430,6 +433,9 @@ func buildAdminAuditWhere(filter *service.AdminAuditLogFilter) (string, []any) {
 	if filter.TargetID != nil {
 		add("l.target_id = $%d", *filter.TargetID)
 	}
+	if filter.TargetEmail != "" {
+		add("EXISTS (SELECT 1 FROM users u WHERE u.id = l.target_id AND u.email ILIKE $%d)", "%"+filter.TargetEmail+"%")
+	}
 	if filter.Success != nil {
 		add("l.success = $%d", *filter.Success)
 	}
@@ -450,7 +456,7 @@ func buildAdminAuditWhere(filter *service.AdminAuditLogFilter) (string, []any) {
 		args = append(args, "%"+filter.Query+"%")
 		likeIdx := len(args)
 		clauses = append(clauses, fmt.Sprintf(`(
-				to_tsvector('simple', COALESCE(l.summary,'') || ' ' || COALESCE(l.action,'') || ' ' || COALESCE(l.route_template,'') || ' ' || COALESCE(l.path,'') || ' ' || COALESCE(l.error_message,'') || ' ' || COALESCE(l.actor_email,'') || ' ' || COALESCE(l.actor_role,'') || ' ' || COALESCE(l.target_type,'') || ' ' || COALESCE(l.target_id::text,'') || ' ' || COALESCE(l.actor_user_id::text,'') || ' ' || COALESCE(l.request_body::text,'') || ' ' || COALESCE(l.query_params::text,'')) @@ plainto_tsquery('simple', $%d)
+				to_tsvector('simple', COALESCE(l.summary,'') || ' ' || COALESCE(l.action,'') || ' ' || COALESCE(l.route_template,'') || ' ' || COALESCE(l.path,'') || ' ' || COALESCE(l.error_message,'') || ' ' || COALESCE(l.actor_email,'') || ' ' || COALESCE(l.actor_role,'') || ' ' || COALESCE(l.target_type,'') || ' ' || COALESCE(l.target_id::text,'') || ' ' || COALESCE(l.actor_user_id::text,'')) @@ plainto_tsquery('simple', $%d)
 				OR l.summary ILIKE $%d
 				OR l.action ILIKE $%d
 				OR l.path ILIKE $%d
@@ -493,11 +499,17 @@ func buildAdminAuditBalanceSummaryWhere(filter *service.AdminAuditLogFilter) (st
 	if filter.ActorUserID != nil {
 		add("l.actor_user_id = $%d", *filter.ActorUserID)
 	}
+	if filter.ActorEmail != "" {
+		add("l.actor_email ILIKE $%d", "%"+filter.ActorEmail+"%")
+	}
 	if filter.ActorRole != "" {
 		add("l.actor_role = $%d", filter.ActorRole)
 	}
 	if filter.TargetID != nil {
 		add("l.target_id = $%d", *filter.TargetID)
+	}
+	if filter.TargetEmail != "" {
+		add("EXISTS (SELECT 1 FROM users u WHERE u.id = l.target_id AND u.email ILIKE $%d)", "%"+filter.TargetEmail+"%")
 	}
 	if filter.Query != "" {
 		args = append(args, filter.Query)

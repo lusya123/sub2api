@@ -1674,10 +1674,12 @@ export default {
     auditLogs: {
       title: 'Audit Logs',
       description: 'Translate important admin actions into readable records so you can trace who changed what and when.',
-      searchPlaceholder: 'Search operation, email, path, or error',
+      searchPlaceholder: 'Fuzzy search operation, route, or error',
       actorId: 'Actor ID',
+      actorEmail: 'Actor Email',
       targetType: 'Target Type',
       targetId: 'Target ID',
+      targetEmail: 'Target User Email',
       statusCode: 'Status Code',
       showReadLogs: 'Show successful read logs',
       empty: 'No audit logs yet',

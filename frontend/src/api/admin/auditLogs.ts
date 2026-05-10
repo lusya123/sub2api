@@ -34,6 +34,7 @@ export interface AdminAuditLogFilters {
   start_time?: string
   end_time?: string
   actor_user_id?: number | string
+  actor_email?: string
   actor_role?: string
   module?: string
   action_type?: string
@@ -41,6 +42,7 @@ export interface AdminAuditLogFilters {
   exclude_successful_read?: boolean | string
   target_type?: string
   target_id?: string
+  target_email?: string
   status_code?: number | string
   success?: boolean | string
   q?: string

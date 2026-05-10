@@ -58,6 +58,15 @@ func TestAdminAuditRepositoryListHydratesUserRefs(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestAdminAuditWhereQueryDoesNotSearchRequestPayloads(t *testing.T) {
+	where, args := buildAdminAuditWhere(&service.AdminAuditLogFilter{Query: "operator@example.com"})
+
+	require.NotContains(t, where, "request_body")
+	require.NotContains(t, where, "query_params")
+	require.Contains(t, where, "l.actor_email ILIKE")
+	require.Equal(t, []any{"operator@example.com", "%operator@example.com%"}, args)
+}
+
 func TestAdminAuditRepositoryBalanceSummary(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &adminAuditRepository{db: db}
