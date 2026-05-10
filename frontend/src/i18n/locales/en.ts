@@ -712,6 +712,7 @@ export default {
     quota: 'Quota',
     lastUsedAt: 'Last Used',
     useKey: 'Use Key',
+    installClient: 'Install Client',
     useKeyModal: {
       title: 'Use API Key',
       description:
