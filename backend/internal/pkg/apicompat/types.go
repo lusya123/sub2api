@@ -355,6 +355,97 @@ type ResponsesStreamEvent struct {
 	SequenceNumber int `json:"sequence_number,omitempty"`
 }
 
+func (e ResponsesStreamEvent) MarshalJSON() ([]byte, error) {
+	m := map[string]interface{}{
+		"type":            e.Type,
+		"sequence_number": e.SequenceNumber,
+	}
+	if e.Response != nil {
+		m["response"] = e.Response
+	}
+	if e.Item != nil {
+		m["item"] = e.Item
+	}
+
+	switch e.Type {
+	case "response.output_item.added", "response.output_item.done":
+		m["output_index"] = e.OutputIndex
+	case "response.output_text.delta":
+		m["output_index"] = e.OutputIndex
+		m["content_index"] = e.ContentIndex
+		if e.Delta != "" {
+			m["delta"] = e.Delta
+		}
+		if e.ItemID != "" {
+			m["item_id"] = e.ItemID
+		}
+	case "response.output_text.done":
+		m["output_index"] = e.OutputIndex
+		m["content_index"] = e.ContentIndex
+		if e.Text != "" {
+			m["text"] = e.Text
+		}
+		if e.ItemID != "" {
+			m["item_id"] = e.ItemID
+		}
+	case "response.function_call_arguments.delta":
+		m["output_index"] = e.OutputIndex
+		if e.Delta != "" {
+			m["delta"] = e.Delta
+		}
+		if e.ItemID != "" {
+			m["item_id"] = e.ItemID
+		}
+		if e.CallID != "" {
+			m["call_id"] = e.CallID
+		}
+		if e.Name != "" {
+			m["name"] = e.Name
+		}
+	case "response.function_call_arguments.done":
+		m["output_index"] = e.OutputIndex
+		if e.Arguments != "" {
+			m["arguments"] = e.Arguments
+		}
+		if e.ItemID != "" {
+			m["item_id"] = e.ItemID
+		}
+		if e.CallID != "" {
+			m["call_id"] = e.CallID
+		}
+		if e.Name != "" {
+			m["name"] = e.Name
+		}
+	case "response.reasoning_summary_text.delta":
+		m["output_index"] = e.OutputIndex
+		m["summary_index"] = e.SummaryIndex
+		if e.Delta != "" {
+			m["delta"] = e.Delta
+		}
+		if e.ItemID != "" {
+			m["item_id"] = e.ItemID
+		}
+	case "response.reasoning_summary_text.done":
+		m["output_index"] = e.OutputIndex
+		m["summary_index"] = e.SummaryIndex
+		if e.Text != "" {
+			m["text"] = e.Text
+		}
+		if e.ItemID != "" {
+			m["item_id"] = e.ItemID
+		}
+	}
+
+	if e.Code != "" {
+		m["code"] = e.Code
+	}
+	if e.Param != "" {
+		m["param"] = e.Param
+	}
+
+	return json.Marshal(m)
+}
+
 // ---------------------------------------------------------------------------
 // OpenAI Chat Completions API types
 // ---------------------------------------------------------------------------

@@ -896,6 +896,9 @@ func TestAnthropicEventToResponsesEvents_TextOutputSurvivesDoneAndCompleted(t *t
 	}, state)
 	require.Len(t, events, 1)
 	assert.Equal(t, "response.output_item.added", events[0].Type)
+	sse, err := ResponsesEventToSSE(events[0])
+	require.NoError(t, err)
+	assert.Contains(t, sse, `"output_index":0`)
 
 	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
 		Type:  "content_block_delta",
@@ -903,6 +906,10 @@ func TestAnthropicEventToResponsesEvents_TextOutputSurvivesDoneAndCompleted(t *t
 	}, state)
 	require.Len(t, events, 1)
 	assert.Equal(t, "response.output_text.delta", events[0].Type)
+	sse, err = ResponsesEventToSSE(events[0])
+	require.NoError(t, err)
+	assert.Contains(t, sse, `"output_index":0`)
+	assert.Contains(t, sse, `"content_index":0`)
 
 	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
 		Type:  "content_block_delta",
