@@ -649,6 +649,116 @@ function Invoke-XdtImport([string]$CcSwitch, [string]$ApiUrl, [string]$Token) {
   }
 }
 
+function Get-CodexModelSortKey([string]$ModelId) {
+  $numbers = @([regex]::Matches($ModelId, '\d+') | ForEach-Object { [int64]$_.Value })
+  $versionNumbers = @($numbers | Where-Object { $_ -lt 10000000 })
+  $dateNumbers = @($numbers | Where-Object { $_ -ge 10000000 })
+  $parts = New-Object System.Collections.Generic.List[string]
+  for ($i = 0; $i -lt 6; $i++) {
+    $value = if ($i -lt $versionNumbers.Count) { $versionNumbers[$i] } else { 0 }
+    $parts.Add($value.ToString('D12'))
+  }
+  $dateValue = if ($dateNumbers.Count -gt 0) { ($dateNumbers | Sort-Object -Descending | Select-Object -First 1) } else { 0 }
+  $parts.Add($dateValue.ToString('D12'))
+  return ($parts -join '.')
+}
+
+function Select-CodexModel([string[]]$ModelIds) {
+  if (-not $ModelIds -or $ModelIds.Count -eq 0) {
+    Fail-Xdt 'No models were returned by the provider'
+  }
+
+  $patterns = @(
+    '(?i)codex',
+    '(?i)^gpt-5',
+    '(?i)^gpt-',
+    '(?i)^o[0-9]',
+    '(?i)^claude-sonnet',
+    '(?i)^claude-opus',
+    '(?i)^claude-haiku',
+    '(?i)^claude-'
+  )
+
+  foreach ($pattern in $patterns) {
+    $candidate = $ModelIds |
+      Where-Object { $_ -match $pattern } |
+      Sort-Object @{ Expression = { Get-CodexModelSortKey $_ }; Descending = $true }, @{ Expression = { $_ }; Descending = $true } |
+      Select-Object -First 1
+    if ($candidate) {
+      return $candidate
+    }
+  }
+
+  return ($ModelIds | Sort-Object -Descending | Select-Object -First 1)
+}
+
+function Resolve-CodexModel([string]$ApiUrl, [string]$Token) {
+  if (-not [string]::IsNullOrWhiteSpace($env:XDT_CODEX_MODEL)) {
+    return $env:XDT_CODEX_MODEL.Trim()
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:CODEX_MODEL)) {
+    return $env:CODEX_MODEL.Trim()
+  }
+
+  $modelsUrl = "$($ApiUrl.TrimEnd('/'))/models"
+  try {
+    $models = Invoke-RestMethod -Uri $modelsUrl -Headers @{ Authorization = "Bearer $Token" } -UseBasicParsing
+    $ids = @($models.data | ForEach-Object { [string]$_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $selected = Select-CodexModel $ids
+    Write-XdtLog "Selected Codex model: $selected"
+    return $selected
+  } catch {
+    $statusCode = $null
+    try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+    if ($statusCode -eq 401 -or $statusCode -eq 403) {
+      Fail-Xdt "Unable to fetch provider models from $modelsUrl. The API key was rejected with HTTP $statusCode."
+    }
+    Fail-Xdt "Unable to fetch provider models from ${modelsUrl}: $($_.Exception.Message)"
+  }
+}
+
+function Write-CodexDirectConfig([string]$ApiUrl, [string]$Token) {
+  $codexDir = Join-Path $env:USERPROFILE '.codex'
+  New-Item -ItemType Directory -Path $codexDir -Force | Out-Null
+
+  $authPath = Join-Path $codexDir 'auth.json'
+  $auth = [ordered]@{
+    auth_mode = 'apikey'
+    OPENAI_API_KEY = $Token
+  }
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText($authPath, (($auth | ConvertTo-Json -Depth 4) + "`n"), $utf8NoBom)
+
+  $model = Resolve-CodexModel $ApiUrl $Token
+  $escapedUrl = $ApiUrl.Replace('\', '\\').Replace('"', '\"')
+  $escapedModel = $model.Replace('\', '\\').Replace('"', '\"')
+  $configPath = Join-Path $codexDir 'config.toml'
+  $config = @"
+model_provider = "xuedingtoken"
+model = "$escapedModel"
+
+[model_providers.xuedingtoken]
+name = "XueDingToken"
+base_url = "$escapedUrl"
+wire_api = "responses"
+requires_openai_auth = true
+"@
+  [IO.File]::WriteAllText($configPath, $config, $utf8NoBom)
+
+  try {
+    $writtenAuth = Get-Content -Raw -Path $authPath | ConvertFrom-Json
+    if ($writtenAuth.OPENAI_API_KEY -ne $Token) {
+      Fail-Xdt 'Codex auth direct configuration does not match the requested provider'
+    }
+    $writtenConfig = Get-Content -Raw -Path $configPath
+    if ($writtenConfig -notmatch [regex]::Escape($ApiUrl)) {
+      Fail-Xdt 'Codex config direct configuration does not match the requested endpoint'
+    }
+  } catch {
+    Fail-Xdt "Unable to verify Codex direct configuration: $($_.Exception.Message)"
+  }
+}
+
 function Test-ZipFile([string]$Path) {
   if (-not (Test-Path $Path)) { return $false }
   try {
@@ -770,7 +880,7 @@ function Ensure-CcSwitch {
     Fail-Xdt 'CC Switch installation completed but binary was not found'
   }
   if (-not (Test-XdtImportSupport $ccSwitch)) {
-    Fail-Xdt 'Installed CC Switch does not support Codex xdt-import'
+    Write-XdtLog 'Installed CC Switch still does not support Codex xdt-import; Codex CLI will be configured directly'
   }
   return $ccSwitch
 }
@@ -785,8 +895,14 @@ $ccSwitch = Ensure-CcSwitch
 Install-CcSwitchShellIntegration $ccSwitch
 
 Write-XdtLog 'Importing and switching XueDingToken provider'
-Invoke-XdtImport $ccSwitch $apiUrl $env:XDT_TOKEN
+if (Test-XdtImportSupport $ccSwitch) {
+  Invoke-XdtImport $ccSwitch $apiUrl $env:XDT_TOKEN
+  Write-XdtLog 'Codex CLI is configured through CC Switch'
+} else {
+  Write-XdtLog 'Configuring Codex CLI directly because CC Switch CLI does not support Codex import'
+  Write-CodexDirectConfig $apiUrl $env:XDT_TOKEN
+  Write-XdtLog 'Codex CLI is configured directly'
+}
 
-Write-XdtLog 'Codex CLI is configured through CC Switch'
 Start-CcSwitchGui $ccSwitch
 Start-CodexTerminal

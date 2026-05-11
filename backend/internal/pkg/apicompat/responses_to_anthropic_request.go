@@ -52,9 +52,14 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 		out.ToolChoice = tc
 	}
 
-	// reasoning.effort → output_config.effort + thinking
+	// reasoning.effort → output_config.effort + thinking.
+	// Codex CLI sends "none" for non-reasoning runs. Anthropic does not accept
+	// "none" as output_config.effort, so it must be treated as absent.
 	if req.Reasoning != nil && req.Reasoning.Effort != "" {
 		effort := mapResponsesEffortToAnthropic(req.Reasoning.Effort)
+		if effort == "" {
+			return out, nil
+		}
 		out.OutputConfig = &AnthropicOutputConfig{Effort: effort}
 		// Enable thinking for non-low efforts
 		if effort != "low" {
@@ -113,10 +118,18 @@ func defaultThinkingBudget(effort string) int {
 //	high   → high
 //	xhigh  → max
 func mapResponsesEffortToAnthropic(effort string) string {
-	if effort == "xhigh" {
+	normalized := strings.ToLower(strings.TrimSpace(effort))
+	normalized = strings.NewReplacer("-", "", "_", "", " ", "").Replace(normalized)
+	switch normalized {
+	case "none", "minimal":
+		return ""
+	case "low", "medium", "high":
+		return normalized
+	case "xhigh", "extrahigh":
 		return "max"
+	default:
+		return ""
 	}
-	return effort // low→low, medium→medium, high→high, unknown→passthrough
 }
 
 // convertResponsesInputToAnthropic extracts system prompt and messages from
@@ -413,10 +426,12 @@ func convertResponsesToAnthropicTools(tools []ResponsesTool) []AnthropicTool {
 	for _, t := range tools {
 		switch t.Type {
 		case "web_search", "google_search", "web_search_20250305":
-			out = append(out, AnthropicTool{
-				Type: "web_search_20250305",
-				Name: "web_search",
-			})
+			// Codex CLI includes OpenAI's hosted web_search tool by default.
+			// Several Anthropic-compatible upstreams reject Anthropic server tools
+			// with 422, which breaks otherwise valid coding requests. Search-only
+			// requests are handled by the gateway web-search emulation path; mixed
+			// coding requests should omit the hosted search tool.
+			continue
 		case "function":
 			out = append(out, AnthropicTool{
 				Name:        t.Name,

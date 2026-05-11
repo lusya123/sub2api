@@ -166,6 +166,121 @@ supports_xdt_import() {
   return 1
 }
 
+write_codex_direct_config() {
+  local api_url="$1"
+  local token="$2"
+  node - "$api_url" "$token" <<'NODE'
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
+const [apiUrl, token] = process.argv.slice(2)
+const envModel = (process.env.XDT_CODEX_MODEL || process.env.CODEX_MODEL || '').trim()
+
+function modelSortKey(model) {
+  const numbers = (String(model).match(/\d+/g) || []).map((value) => Number(value))
+  const versionNumbers = numbers.filter((value) => value < 10000000)
+  const dateNumbers = numbers.filter((value) => value >= 10000000)
+  const parts = Array.from({ length: 6 }, (_, index) => {
+    const value = Number(versionNumbers[index] || 0)
+    return String(value).padStart(12, '0')
+  })
+  parts.push(String(Math.max(0, ...dateNumbers)).padStart(12, '0'))
+  return parts.join('.')
+}
+
+function selectModel(ids) {
+  if (!ids.length) {
+    throw new Error('No models were returned by the provider')
+  }
+  const patterns = [
+    /codex/i,
+    /^gpt-5/i,
+    /^gpt-/i,
+    /^o[0-9]/i,
+    /^claude-sonnet/i,
+    /^claude-opus/i,
+    /^claude-haiku/i,
+    /^claude-/i,
+  ]
+  for (const pattern of patterns) {
+    const candidates = ids.filter((id) => pattern.test(id))
+    if (candidates.length) {
+      return candidates.sort((a, b) => {
+        const keyCompare = modelSortKey(b).localeCompare(modelSortKey(a))
+        return keyCompare || b.localeCompare(a)
+      })[0]
+    }
+  }
+  return ids.sort().reverse()[0]
+}
+
+async function resolveModel() {
+  if (envModel) {
+    return envModel
+  }
+  const modelsUrl = `${String(apiUrl).replace(/\/+$/, '')}/models`
+  const response = await fetch(modelsUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(`Unable to fetch provider models from ${modelsUrl}. The API key was rejected with HTTP ${response.status}.`)
+  }
+  if (!response.ok) {
+    throw new Error(`Unable to fetch provider models from ${modelsUrl}: HTTP ${response.status}`)
+  }
+  const payload = await response.json()
+  const ids = Array.isArray(payload.data)
+    ? payload.data.map((item) => String(item && item.id || '')).filter(Boolean)
+    : []
+  const selected = selectModel(ids)
+  console.error(`[XueDingToken] Selected Codex model: ${selected}`)
+  return selected
+}
+
+async function main() {
+const model = await resolveModel()
+const codexDir = path.join(os.homedir(), '.codex')
+fs.mkdirSync(codexDir, { recursive: true })
+
+fs.writeFileSync(
+  path.join(codexDir, 'auth.json'),
+  `${JSON.stringify({ auth_mode: 'apikey', OPENAI_API_KEY: token }, null, 2)}\n`,
+  { mode: 0o600 },
+)
+
+const tomlString = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+fs.writeFileSync(
+  path.join(codexDir, 'config.toml'),
+  `model_provider = "xuedingtoken"
+model = "${tomlString(model)}"
+
+[model_providers.xuedingtoken]
+name = "XueDingToken"
+base_url = "${tomlString(apiUrl)}"
+wire_api = "responses"
+requires_openai_auth = true
+`,
+  { mode: 0o600 },
+)
+
+const auth = JSON.parse(fs.readFileSync(path.join(codexDir, 'auth.json'), 'utf8'))
+const config = fs.readFileSync(path.join(codexDir, 'config.toml'), 'utf8')
+if (auth.auth_mode !== 'apikey' || auth.OPENAI_API_KEY !== token) {
+  throw new Error('Codex auth direct configuration does not match the requested provider')
+}
+if (!config.includes(apiUrl)) {
+  throw new Error('Codex config direct configuration does not match the requested endpoint')
+}
+}
+
+main().catch((error) => {
+  console.error(`[XueDingToken] ERROR: ${error.message}`)
+  process.exit(1)
+})
+NODE
+}
+
 ensure_node_and_codex() {
   configure_node_mirrors
   load_nvm
@@ -457,7 +572,9 @@ ensure_ccswitch() {
   install_ccswitch >&2
 
   bin="$(detect_ccswitch)" || fail "CC Switch installation completed but binary was not found"
-  supports_xdt_import "$bin" || fail "Installed CC Switch does not support Codex xdt-import"
+  if ! supports_xdt_import "$bin"; then
+    log "Installed CC Switch still does not support Codex xdt-import; Codex CLI will be configured directly"
+  fi
   printf '%s\n' "$bin"
 }
 
@@ -472,17 +589,23 @@ main() {
   ccswitch_bin="$(ensure_ccswitch)"
 
   log "Importing and switching XueDingToken provider"
-  "$ccswitch_bin" xdt-import \
-    --provider-id xuedingtoken \
-    --name XueDingToken \
-    --app codex \
-    --endpoint "$api_url" \
-    --api-key "$XDT_TOKEN" \
-    --homepage "https://xuedingtoken.com" \
-    --icon codex \
-    --switch
+  if supports_xdt_import "$ccswitch_bin"; then
+    "$ccswitch_bin" xdt-import \
+      --provider-id xuedingtoken \
+      --name XueDingToken \
+      --app codex \
+      --endpoint "$api_url" \
+      --api-key "$XDT_TOKEN" \
+      --homepage "https://xuedingtoken.com" \
+      --icon codex \
+      --switch
+    log "Codex CLI is configured through CC Switch"
+  else
+    log "Configuring Codex CLI directly because CC Switch CLI does not support Codex import"
+    write_codex_direct_config "$api_url" "$XDT_TOKEN"
+    log "Codex CLI is configured directly"
+  fi
 
-  log "Codex CLI is configured through CC Switch"
   if [[ "${XDT_SKIP_LAUNCH_CODEX:-0}" != "1" ]]; then
     log "Starting Codex CLI"
     exec codex

@@ -183,6 +183,51 @@ func TestResponsesToAnthropicRequest_ExplicitMaxOutputTokensWins(t *testing.T) {
 	assert.Equal(t, maxOutputTokens, got.MaxTokens)
 }
 
+func TestResponsesToAnthropicRequest_ReasoningNoneDisablesThinking(t *testing.T) {
+	req := &ResponsesRequest{
+		Model:     "claude-sonnet-4-5-20250929",
+		Input:     json.RawMessage(`"Hi"`),
+		Reasoning: &ResponsesReasoning{Effort: "none", Summary: "auto"},
+	}
+
+	got, err := ResponsesToAnthropicRequest(req)
+	require.NoError(t, err)
+	require.Nil(t, got.OutputConfig)
+	require.Nil(t, got.Thinking)
+}
+
+func TestResponsesToAnthropicRequest_ReasoningXHighMapsToMaxThinking(t *testing.T) {
+	req := &ResponsesRequest{
+		Model:     "claude-sonnet-4-5-20250929",
+		Input:     json.RawMessage(`"Hi"`),
+		Reasoning: &ResponsesReasoning{Effort: "x-high", Summary: "auto"},
+	}
+
+	got, err := ResponsesToAnthropicRequest(req)
+	require.NoError(t, err)
+	require.NotNil(t, got.OutputConfig)
+	assert.Equal(t, "max", got.OutputConfig.Effort)
+	require.NotNil(t, got.Thinking)
+	assert.Equal(t, "enabled", got.Thinking.Type)
+}
+
+func TestResponsesToAnthropicRequest_SkipsHostedWebSearchTool(t *testing.T) {
+	req := &ResponsesRequest{
+		Model: "claude-sonnet-4-5-20250929",
+		Input: json.RawMessage(`"Hi"`),
+		Tools: []ResponsesTool{
+			{Type: "function", Name: "exec_command", Parameters: json.RawMessage(`{"type":"object","properties":{}}`)},
+			{Type: "web_search"},
+		},
+	}
+
+	got, err := ResponsesToAnthropicRequest(req)
+	require.NoError(t, err)
+	require.Len(t, got.Tools, 1)
+	assert.Equal(t, "exec_command", got.Tools[0].Name)
+	assert.Empty(t, got.Tools[0].Type)
+}
+
 func TestChatCompletionsToResponses_ReasoningEffort(t *testing.T) {
 	req := &ChatCompletionsRequest{
 		Model:           "gpt-4o",
