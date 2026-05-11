@@ -142,4 +142,34 @@ describe('ClientInstallPanel', () => {
     expect(wrapper.text()).toContain('/install-claude-ccswitch-win.ps1')
     expect(wrapper.text()).not.toContain('/install-openclaw-win.ps1')
   })
+
+  it('builds Codex CLI install commands for OpenAI groups', async () => {
+    const wrapper = mount(ClientInstallPanel, {
+      props: {
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com/api',
+        platform: 'openai'
+      },
+      global: {
+        stubs: {
+          Icon: { template: '<span />' }
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('Codex CLI')
+    expect(wrapper.text()).toContain('CODEX_TOKEN="sk-test"')
+    expect(wrapper.text()).toContain('CODEX_API_URL="https://example.com/api/v1"')
+    expect(wrapper.text()).toContain('/install-codex.sh')
+    expect(wrapper.text()).not.toContain('/install-claude-ccswitch.sh')
+
+    const windowsButton = wrapper.findAll('button').find((button) => button.text().includes('Windows'))
+    expect(windowsButton).toBeDefined()
+    await windowsButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain("$env:CODEX_TOKEN='sk-test'")
+    expect(wrapper.text()).toContain("$env:CODEX_API_URL='https://example.com/api/v1'")
+    expect(wrapper.text()).toContain('/install-codex-win.ps1')
+  })
 })

@@ -1,0 +1,144 @@
+package service
+
+import (
+	"context"
+	"time"
+)
+
+type ModelMarketplaceMonitor struct {
+	ID                  int64
+	Name                string
+	Provider            string
+	Endpoint            string
+	APIKey              string
+	PrimaryModel        string
+	ExtraModels         []string
+	GroupName           string
+	Enabled             bool
+	IntervalSeconds     int
+	LastCheckedAt       *time.Time
+	CreatedBy           int64
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	TemplateID          *int64
+	ExtraHeaders        map[string]string
+	BodyOverrideMode    string
+	BodyOverride        map[string]any
+	APIKeyDecryptFailed bool
+}
+
+type ModelMarketplaceMonitorListParams struct {
+	Page     int
+	PageSize int
+	Provider string
+	Enabled  *bool
+	Search   string
+}
+
+type ModelMarketplaceMonitorCreateParams struct {
+	Name             string
+	Provider         string
+	Endpoint         string
+	APIKey           string
+	PrimaryModel     string
+	ExtraModels      []string
+	GroupName        string
+	Enabled          bool
+	IntervalSeconds  int
+	CreatedBy        int64
+	TemplateID       *int64
+	ExtraHeaders     map[string]string
+	BodyOverrideMode string
+	BodyOverride     map[string]any
+}
+
+type ModelMarketplaceMonitorUpdateParams struct {
+	Name             *string
+	Provider         *string
+	Endpoint         *string
+	APIKey           *string
+	PrimaryModel     *string
+	ExtraModels      *[]string
+	GroupName        *string
+	Enabled          *bool
+	IntervalSeconds  *int
+	TemplateID       *int64
+	ClearTemplate    bool
+	ExtraHeaders     *map[string]string
+	BodyOverrideMode *string
+	BodyOverride     *map[string]any
+}
+
+type ModelMarketplaceCheckResult struct {
+	Model         string
+	Status        string
+	LatencyMs     *int
+	PingLatencyMs *int
+	Message       string
+	CheckedAt     time.Time
+}
+
+type ModelMarketplaceMonitorHistoryRow struct {
+	MonitorID     int64
+	Model         string
+	Status        string
+	LatencyMs     *int
+	PingLatencyMs *int
+	Message       string
+	CheckedAt     time.Time
+}
+
+type ModelMarketplaceMonitorHistoryEntry struct {
+	ID            int64
+	Model         string
+	Status        string
+	LatencyMs     *int
+	PingLatencyMs *int
+	Message       string
+	CheckedAt     time.Time
+}
+
+type ModelMarketplaceMonitorLatest struct {
+	Model         string
+	Status        string
+	LatencyMs     *int
+	PingLatencyMs *int
+	CheckedAt     time.Time
+}
+
+type ModelMarketplaceMonitorAvailability struct {
+	Model           string
+	WindowDays      int
+	AvailabilityPct float64
+	AvgLatencyMs    *int
+}
+
+type ModelMarketplaceExtraModelStatus struct {
+	Model     string
+	Status    string
+	LatencyMs *int
+}
+
+type ModelMarketplaceMonitorStatusSummary struct {
+	PrimaryStatus    string
+	PrimaryLatencyMs *int
+	Availability7d   float64
+	ExtraModels      []ModelMarketplaceExtraModelStatus
+}
+
+type ModelMarketplaceMonitorRepository interface {
+	Create(ctx context.Context, m *ModelMarketplaceMonitor) error
+	GetByID(ctx context.Context, id int64) (*ModelMarketplaceMonitor, error)
+	Update(ctx context.Context, m *ModelMarketplaceMonitor) error
+	Delete(ctx context.Context, id int64) error
+	List(ctx context.Context, params ModelMarketplaceMonitorListParams) ([]*ModelMarketplaceMonitor, int64, error)
+	ListEnabled(ctx context.Context) ([]*ModelMarketplaceMonitor, error)
+	MarkChecked(ctx context.Context, id int64, checkedAt time.Time) error
+	InsertHistoryBatch(ctx context.Context, rows []*ModelMarketplaceMonitorHistoryRow) error
+	DeleteHistoryBefore(ctx context.Context, before time.Time) (int64, error)
+	ListHistory(ctx context.Context, monitorID int64, model string, limit int) ([]*ModelMarketplaceMonitorHistoryEntry, error)
+	ListLatestPerModel(ctx context.Context, monitorID int64) ([]*ModelMarketplaceMonitorLatest, error)
+	ComputeAvailability(ctx context.Context, monitorID int64, windowDays int) ([]*ModelMarketplaceMonitorAvailability, error)
+	ListLatestForMonitorIDs(ctx context.Context, ids []int64) (map[int64][]*ModelMarketplaceMonitorLatest, error)
+	ComputeAvailabilityForMonitors(ctx context.Context, ids []int64, windowDays int) (map[int64][]*ModelMarketplaceMonitorAvailability, error)
+}

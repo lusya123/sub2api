@@ -4762,7 +4762,7 @@
             </p>
             <p class="mt-1.5 text-xs">
               <router-link
-                to="/admin/channels/monitor"
+                to="/admin/model-marketplace"
                 class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
               >
                 {{ t('admin.settings.features.channelMonitor.configureLink') }}
@@ -4831,39 +4831,6 @@
                 </p>
               </div>
               <Toggle v-model="form.available_channels_enabled" />
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ localText("模型状态页", "Model Status Page") }}
-            </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {{ localText("控制用户侧边栏里的模型状态入口，并决定后台主动探针是否运行。", "Control the user sidebar model status entry and whether active health probes run.") }}
-            </p>
-            <p class="mt-1.5 text-xs">
-              <router-link
-                to="/admin/model-marketplace"
-                class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
-              >
-                {{ localText("配置模型与展示分组", "Configure models and groups") }}
-                <span aria-hidden="true">→</span>
-              </router-link>
-            </p>
-          </div>
-          <div class="space-y-5 p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {{ localText("启用模型状态页", "Enable model status page") }}
-                </label>
-                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{ localText("关闭后普通用户不会看到模型状态入口，主动探针也会停止。管理员仍可进入模型广场调整配置。", "When disabled, regular users will not see the model status entry and active probes stop. Admins can still adjust configuration in the model marketplace.") }}
-                </p>
-              </div>
-              <Toggle v-model="form.model_health_page_enabled" />
             </div>
           </div>
         </div>
@@ -6527,7 +6494,6 @@ const form = reactive<SettingsForm>({
   purchase_subscription_embedded_url: "",
   purchase_subscription_redirect_url: "",
   purchase_subscription_url: "",
-  model_health_page_enabled: true,
   payment_enabled: false,
   risk_control_enabled: false,
   payment_min_amount: 1,
@@ -7686,7 +7652,6 @@ async function saveSettings() {
       purchase_subscription_redirect_url:
         form.purchase_subscription_redirect_url,
       purchase_subscription_url: form.purchase_subscription_embedded_url,
-      model_health_page_enabled: form.model_health_page_enabled,
       table_default_page_size: form.table_default_page_size,
       table_page_size_options: form.table_page_size_options,
       custom_menu_items: form.custom_menu_items,

@@ -105,7 +105,7 @@ func RegisterAdminRoutes(
 		// 渠道监控
 		registerChannelMonitorRoutes(admin, h)
 
-		// 模型广场 / 公开状态页配置
+		// 模型广场：独立于渠道监控的探测配置
 		registerModelMarketplaceRoutes(admin, h)
 
 		// 风控中心
@@ -666,8 +666,22 @@ func registerModelMarketplaceRoutes(admin *gin.RouterGroup, h *handler.Handlers)
 	marketplace := admin.Group("/model-marketplace")
 	{
 		marketplace.GET("", h.Admin.ModelMarketplace.List)
-		marketplace.GET("/status-config", h.Admin.ModelMarketplace.GetPublicStatusConfig)
-		marketplace.PUT("/status-config", h.Admin.ModelMarketplace.UpdatePublicStatusConfig)
+		marketplace.POST("", h.Admin.ModelMarketplace.Create)
+		templates := marketplace.Group("/templates")
+		{
+			templates.GET("", h.Admin.ModelMarketplaceTpl.List)
+			templates.POST("", h.Admin.ModelMarketplaceTpl.Create)
+			templates.GET("/:id", h.Admin.ModelMarketplaceTpl.Get)
+			templates.PUT("/:id", h.Admin.ModelMarketplaceTpl.Update)
+			templates.DELETE("/:id", h.Admin.ModelMarketplaceTpl.Delete)
+			templates.GET("/:id/monitors", h.Admin.ModelMarketplaceTpl.AssociatedMonitors)
+			templates.POST("/:id/apply", h.Admin.ModelMarketplaceTpl.Apply)
+		}
+		marketplace.GET("/:id", h.Admin.ModelMarketplace.Get)
+		marketplace.PUT("/:id", h.Admin.ModelMarketplace.Update)
+		marketplace.DELETE("/:id", h.Admin.ModelMarketplace.Delete)
+		marketplace.POST("/:id/run", h.Admin.ModelMarketplace.Run)
+		marketplace.GET("/:id/history", h.Admin.ModelMarketplace.History)
 	}
 }
 

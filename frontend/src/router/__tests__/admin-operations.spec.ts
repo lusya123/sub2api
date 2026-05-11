@@ -10,11 +10,12 @@ describe('admin operations route', () => {
     expect(route?.meta.requiresSuperAdmin).toBeUndefined()
   })
 
-  it('registers the public model status page', () => {
+  it('registers the user model status page on channel monitor logic', () => {
     const route = router.getRoutes().find((item) => item.path === '/status')
 
     expect(route?.name).toBe('Status')
-    expect(route?.meta.requiresAuth).toBe(false)
+    expect(route?.meta.requiresAuth).toBe(true)
+    expect(route?.meta.requiresAdmin).toBe(false)
   })
 
   it('registers the public and admin live globe pages', () => {

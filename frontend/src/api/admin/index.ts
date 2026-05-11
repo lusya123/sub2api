@@ -28,12 +28,13 @@ import tlsFingerprintProfileAPI from './tlsFingerprintProfile'
 import channelsAPI from './channels'
 import channelMonitorAPI from './channelMonitor'
 import channelMonitorTemplateAPI from './channelMonitorTemplate'
+import modelMarketplaceMonitorAPI from './modelMarketplaceMonitor'
+import modelMarketplaceTemplateAPI from './modelMarketplaceTemplate'
 import adminPaymentAPI from './payment'
 import affiliatesAPI from './affiliates'
 import riskControlAPI from './riskControl'
 import auditLogsAPI from './auditLogs'
 import operationsAPI from './operations'
-import modelMarketplaceAPI from './modelMarketplace'
 
 /**
  * Unified admin API object for convenient access
@@ -64,12 +65,13 @@ export const adminAPI = {
   channels: channelsAPI,
   channelMonitor: channelMonitorAPI,
   channelMonitorTemplate: channelMonitorTemplateAPI,
+  modelMarketplaceMonitor: modelMarketplaceMonitorAPI,
+  modelMarketplaceTemplate: modelMarketplaceTemplateAPI,
   payment: adminPaymentAPI,
   affiliates: affiliatesAPI,
   riskControl: riskControlAPI,
   auditLogs: auditLogsAPI,
-  operations: operationsAPI,
-  modelMarketplace: modelMarketplaceAPI
+  operations: operationsAPI
 }
 
 export {
@@ -98,12 +100,13 @@ export {
   channelsAPI,
   channelMonitorAPI,
   channelMonitorTemplateAPI,
+  modelMarketplaceMonitorAPI,
+  modelMarketplaceTemplateAPI,
   adminPaymentAPI,
   affiliatesAPI,
   riskControlAPI,
   auditLogsAPI,
-  operationsAPI,
-  modelMarketplaceAPI
+  operationsAPI
 }
 
 export default adminAPI

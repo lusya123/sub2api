@@ -32,6 +32,8 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/channelhealthsample"
+	"github.com/Wei-Shaw/sub2api/ent/channelmonitor"
+	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 
 	"golang.org/x/sync/singleflight"
@@ -301,9 +303,21 @@ func (s *StatusPageService) clearCaches() {
 	s.detailMu.Unlock()
 }
 
+// ClearCaches invalidates public status list/detail caches after monitor or
+// status-page configuration changes.
+func (s *StatusPageService) ClearCaches() {
+	s.clearCaches()
+}
+
 // loadListFromDB does the actual Group.Query + catalog join. Callers are
 // responsible for caching the result.
 func (s *StatusPageService) loadListFromDB(ctx context.Context) (*listModelsCache, error) {
+	if monitorCache, err := s.loadListFromMonitorConfigs(ctx); err != nil {
+		return nil, err
+	} else if monitorCache != nil && len(monitorCache.data) > 0 {
+		return monitorCache, nil
+	}
+
 	cfg, err := s.loadPublicStatusConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -483,6 +497,12 @@ func (s *StatusPageService) cachedDetail(modelName string) *StatusModel {
 
 // loadDetailFromDB does the full 4-query aggregation. Callers cache the result.
 func (s *StatusPageService) loadDetailFromDB(ctx context.Context, modelName string) (*StatusModel, error) {
+	if model, found, err := s.loadDetailFromMonitorConfigs(ctx, modelName); err != nil {
+		return nil, err
+	} else if found {
+		return model, nil
+	}
+
 	cfg, err := s.loadPublicStatusConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -729,44 +749,320 @@ func (s *StatusPageService) loadDetailFromDB(ctx context.Context, modelName stri
 	return result, nil
 }
 
+func (s *StatusPageService) loadListFromMonitorConfigs(ctx context.Context) (*listModelsCache, error) {
+	monitors, err := s.listEnabledChannelMonitors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(monitors) == 0 {
+		return nil, nil
+	}
+
+	type modelInfo struct {
+		name     string
+		provider string
+	}
+	byModel := map[string]*modelInfo{}
+	for _, m := range monitors {
+		for _, model := range monitorModels(m) {
+			key := strings.ToLower(model)
+			info := byModel[key]
+			if info == nil {
+				info = &modelInfo{name: model, provider: providerFromMonitor(m)}
+				byModel[key] = info
+			}
+			if info.provider == "" {
+				info.provider = providerFromMonitor(m)
+			}
+		}
+	}
+
+	models := make([]StatusModel, 0, len(byModel))
+	modelSet := map[string]struct{}{}
+	for _, info := range byModel {
+		md := lookupMetadata(info.name)
+		if info.provider != "" {
+			md.Provider = info.provider
+		}
+		models = append(models, StatusModel{
+			Name:          info.name,
+			Provider:      md.Provider,
+			ReleaseDate:   md.ReleaseDate,
+			PromptCaching: md.PromptCaching,
+			Note:          md.Note,
+			Pricing:       md.Pricing,
+		})
+		modelSet[info.name] = struct{}{}
+	}
+	sort.SliceStable(models, func(i, j int) bool {
+		ri, rj := publicStatusModelRank(models[i].Name), publicStatusModelRank(models[j].Name)
+		if ri != rj {
+			return ri < rj
+		}
+		return models[i].Name < models[j].Name
+	})
+
+	return &listModelsCache{
+		data:     models,
+		modelSet: modelSet,
+		expireAt: s.nowFn().Add(statusCacheTTL),
+	}, nil
+}
+
+func (s *StatusPageService) loadDetailFromMonitorConfigs(ctx context.Context, modelName string) (*StatusModel, bool, error) {
+	monitors, err := s.listEnabledChannelMonitors(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	scoped := make([]*dbent.ChannelMonitor, 0, len(monitors))
+	for _, m := range monitors {
+		if monitorSupportsModel(m, modelName) {
+			scoped = append(scoped, m)
+		}
+	}
+	if len(scoped) == 0 {
+		return nil, false, nil
+	}
+
+	md := lookupMetadata(modelName)
+	if _, known := modelCatalog[modelName]; !known && providerFromMonitor(scoped[0]) != "" {
+		md.Provider = providerFromMonitor(scoped[0])
+	}
+	result := &StatusModel{
+		Name:          modelName,
+		Provider:      md.Provider,
+		ReleaseDate:   md.ReleaseDate,
+		PromptCaching: md.PromptCaching,
+		Note:          md.Note,
+		Pricing:       md.Pricing,
+		Heartbeats:    []StatusBeat{},
+		Groups:        []StatusGroup{},
+	}
+
+	type monitorChannel struct {
+		group string
+		item  StatusChannel
+		ok    bool
+		beats []StatusBeat
+	}
+	channels := make([]monitorChannel, 0, len(scoped))
+	for _, m := range scoped {
+		history, err := s.monitorHistoryForModel(ctx, m.ID, modelName)
+		if err != nil {
+			return nil, false, err
+		}
+		beats := monitorHistoryToBeats(history)
+		availability := availabilityFromBeats(beats)
+		groupName := strings.TrimSpace(m.GroupName)
+		if groupName == "" {
+			groupName = providerDisplayName(providerFromMonitor(m))
+		}
+		channels = append(channels, monitorChannel{
+			group: groupName,
+			item: StatusChannel{
+				Name:            m.Name,
+				AvailabilityPct: availability,
+				Heartbeats:      beats,
+			},
+			ok:    latestMonitorHistoryOK(history),
+			beats: beats,
+		})
+	}
+
+	groupOrder := []string{}
+	grouped := map[string][]monitorChannel{}
+	for _, ch := range channels {
+		if _, ok := grouped[ch.group]; !ok {
+			groupOrder = append(groupOrder, ch.group)
+		}
+		grouped[ch.group] = append(grouped[ch.group], ch)
+	}
+	sort.Strings(groupOrder)
+
+	overallBeats := make([][]StatusBeat, 0, len(channels))
+	availabilityTotal := 0.0
+	for _, key := range groupOrder {
+		rows := grouped[key]
+		groupChannels := make([]StatusChannel, 0, len(rows))
+		active := 0
+		for _, row := range rows {
+			groupChannels = append(groupChannels, row.item)
+			availabilityTotal += row.item.AvailabilityPct
+			overallBeats = append(overallBeats, row.beats)
+			if row.ok {
+				active++
+			}
+		}
+		loadPct := 0.0
+		if len(rows) > 0 {
+			loadPct = float64(active) * 100.0 / float64(len(rows))
+		}
+		result.Groups = append(result.Groups, StatusGroup{
+			Name:     key,
+			LoadPct:  loadPct,
+			Channels: groupChannels,
+		})
+	}
+	if len(channels) > 0 {
+		result.AvailabilityPct = availabilityTotal / float64(len(channels))
+		result.Heartbeats = mergeOverallBeats(overallBeats)
+	}
+	return result, true, nil
+}
+
+func (s *StatusPageService) listEnabledChannelMonitors(ctx context.Context) ([]*dbent.ChannelMonitor, error) {
+	if s == nil || s.entClient == nil {
+		return nil, nil
+	}
+	monitors, err := s.entClient.ChannelMonitor.Query().
+		Where(channelmonitor.EnabledEQ(true)).
+		Order(dbent.Asc(channelmonitor.FieldGroupName), dbent.Asc(channelmonitor.FieldName), dbent.Asc(channelmonitor.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("status_page_service: list channel monitors: %w", err)
+	}
+	return monitors, nil
+}
+
+func (s *StatusPageService) monitorHistoryForModel(ctx context.Context, monitorID int64, modelName string) ([]*dbent.ChannelMonitorHistory, error) {
+	rows, err := s.entClient.ChannelMonitorHistory.Query().
+		Where(channelmonitorhistory.MonitorIDEQ(monitorID), channelmonitorhistory.ModelEQ(modelName)).
+		Order(dbent.Desc(channelmonitorhistory.FieldCheckedAt)).
+		Limit(statusWindowMinutes).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("status_page_service: list monitor history: %w", err)
+	}
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
+	}
+	return rows, nil
+}
+
+func monitorModels(m *dbent.ChannelMonitor) []string {
+	if m == nil {
+		return nil
+	}
+	models := make([]string, 0, 1+len(m.ExtraModels))
+	if primary := strings.TrimSpace(m.PrimaryModel); primary != "" {
+		models = append(models, primary)
+	}
+	for _, model := range m.ExtraModels {
+		if model = strings.TrimSpace(model); model != "" {
+			models = append(models, model)
+		}
+	}
+	return normalizeStringSlice(models)
+}
+
+func monitorSupportsModel(m *dbent.ChannelMonitor, modelName string) bool {
+	target := strings.TrimSpace(modelName)
+	if target == "" {
+		return false
+	}
+	for _, model := range monitorModels(m) {
+		if model == target {
+			return true
+		}
+	}
+	return false
+}
+
+func monitorHistoryToBeats(history []*dbent.ChannelMonitorHistory) []StatusBeat {
+	beats := make([]StatusBeat, 0, len(history))
+	for _, h := range history {
+		beats = append(beats, StatusBeat{
+			Ts:     h.CheckedAt.UTC().Format(time.RFC3339),
+			Status: monitorStatusToBeatStatus(string(h.Status)),
+		})
+	}
+	return beats
+}
+
+func latestMonitorHistoryOK(history []*dbent.ChannelMonitorHistory) bool {
+	if len(history) == 0 {
+		return false
+	}
+	switch string(history[len(history)-1].Status) {
+	case MonitorStatusOperational, MonitorStatusDegraded:
+		return true
+	default:
+		return false
+	}
+}
+
+func monitorStatusToBeatStatus(status string) string {
+	switch status {
+	case MonitorStatusOperational:
+		return "ok"
+	case MonitorStatusDegraded:
+		return "degraded"
+	case MonitorStatusFailed, MonitorStatusError:
+		return "down"
+	default:
+		return "unknown"
+	}
+}
+
+func providerFromMonitor(m *dbent.ChannelMonitor) string {
+	if m == nil {
+		return ""
+	}
+	switch strings.ToLower(string(m.Provider)) {
+	case PlatformAnthropic:
+		return "ANTHROPIC"
+	case PlatformGemini:
+		return "GOOGLE"
+	case PlatformOpenAI:
+		return "OPENAI"
+	default:
+		return strings.ToUpper(string(m.Provider))
+	}
+}
+
+func providerDisplayName(provider string) string {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return "默认渠道"
+	}
+	return provider
+}
+
 func mergeOverallBeats(series [][]StatusBeat) []StatusBeat {
 	if len(series) == 0 {
 		return []StatusBeat{}
 	}
-	out := make([]StatusBeat, len(series[0]))
-	for i := range out {
-		out[i] = StatusBeat{Ts: series[0][i].Ts, Status: "unknown"}
-		known := 0
-		ok := 0
-		hasProblem := false
-		hasDown := false
-		for _, beats := range series {
-			if i >= len(beats) {
+	statusByTs := make(map[string]string)
+	for _, beats := range series {
+		for _, beat := range beats {
+			if strings.TrimSpace(beat.Ts) == "" {
 				continue
 			}
-			switch beats[i].Status {
-			case "ok":
-				known++
-				ok++
-			case "degraded":
-				known++
-				hasProblem = true
-			case "down":
-				known++
-				hasProblem = true
-				hasDown = true
+			if existing, ok := statusByTs[beat.Ts]; ok {
+				statusByTs[beat.Ts] = mergeStatus(existing, beat.Status)
+			} else {
+				statusByTs[beat.Ts] = beat.Status
 			}
 		}
-		switch {
-		case known == 0:
-			out[i].Status = "unknown"
-		case ok == known:
-			out[i].Status = "ok"
-		case ok == 0 && hasDown:
-			out[i].Status = "down"
-		case hasProblem:
-			out[i].Status = "degraded"
+	}
+	timestamps := make([]string, 0, len(statusByTs))
+	for ts := range statusByTs {
+		timestamps = append(timestamps, ts)
+	}
+	sort.Slice(timestamps, func(i, j int) bool {
+		left, leftErr := time.Parse(time.RFC3339, timestamps[i])
+		right, rightErr := time.Parse(time.RFC3339, timestamps[j])
+		if leftErr == nil && rightErr == nil {
+			return left.Before(right)
 		}
+		return timestamps[i] < timestamps[j]
+	})
+	if len(timestamps) > statusWindowMinutes {
+		timestamps = timestamps[len(timestamps)-statusWindowMinutes:]
+	}
+	out := make([]StatusBeat, 0, len(timestamps))
+	for _, ts := range timestamps {
+		out = append(out, StatusBeat{Ts: ts, Status: statusByTs[ts]})
 	}
 	return out
 }

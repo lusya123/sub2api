@@ -17,22 +17,29 @@ import (
 
 // ChatHandler handles browser entry points for the hosted chat experience.
 type ChatHandler struct {
-	cfg         *config.Config
-	authSvc     *service.AuthService
-	userService *service.UserService
-	settingSvc  *service.SettingService
+	cfg               *config.Config
+	authSvc           *service.AuthService
+	userService       *service.UserService
+	settingSvc        *service.SettingService
+	lobeConfigService *service.LobeConfigService
 }
 
 type ChatLaunchResponse struct {
 	URL string `json:"url"`
 }
 
-func NewChatHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService) *ChatHandler {
+type chatLaunchPreference struct {
+	Provider string
+	Model    string
+}
+
+func NewChatHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService, lobeConfigService *service.LobeConfigService) *ChatHandler {
 	return &ChatHandler{
-		cfg:         cfg,
-		authSvc:     authService,
-		userService: userService,
-		settingSvc:  settingService,
+		cfg:               cfg,
+		authSvc:           authService,
+		userService:       userService,
+		settingSvc:        settingService,
+		lobeConfigService: lobeConfigService,
 	}
 }
 
@@ -89,7 +96,13 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 	}
 	h.setOIDCSessionCookie(c, token, h.authSvc.GetAccessTokenExpiresIn())
 
-	target, err := h.chatSignInURL(c.Request.Context(), chatPageURL)
+	preference, err := h.resolveLaunchPreference(c.Request.Context(), subject.UserID, c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return "", false
+	}
+
+	target, err := h.chatSignInURLWithPreference(c.Request.Context(), preference, chatPageURL)
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return "", false
@@ -109,7 +122,43 @@ func (h *ChatHandler) chatPageSettings(ctx context.Context) (bool, string, error
 	return settings.ChatPageEnabled, settings.ChatPageURL, nil
 }
 
+func (h *ChatHandler) resolveLaunchPreference(ctx context.Context, userID int64, c *gin.Context) (*chatLaunchPreference, error) {
+	provider := strings.TrimSpace(firstNonEmpty(c.Query("provider"), c.PostForm("provider")))
+	model := strings.TrimSpace(firstNonEmpty(c.Query("model"), c.Query("model_id"), c.PostForm("model"), c.PostForm("model_id")))
+	if provider == "" && model == "" {
+		return nil, nil
+	}
+	if provider == "" || model == "" {
+		return nil, fmt.Errorf("both provider and model are required")
+	}
+
+	if h == nil || h.lobeConfigService == nil {
+		return &chatLaunchPreference{Provider: provider, Model: model}, nil
+	}
+
+	cfg, err := h.lobeConfigService.GetUserConfig(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range cfg.Providers {
+		if p.ID != provider {
+			continue
+		}
+		for _, m := range p.Models {
+			if m.ID == model {
+				return &chatLaunchPreference{Provider: provider, Model: model}, nil
+			}
+		}
+		return nil, fmt.Errorf("selected model is not available in this group")
+	}
+	return nil, fmt.Errorf("selected group is not available")
+}
+
 func (h *ChatHandler) chatSignInURL(ctx context.Context, configuredChatURL ...string) (string, error) {
+	return h.chatSignInURLWithPreference(ctx, nil, configuredChatURL...)
+}
+
+func (h *ChatHandler) chatSignInURLWithPreference(ctx context.Context, preference *chatLaunchPreference, configuredChatURL ...string) (string, error) {
 	base := ""
 	if len(configuredChatURL) > 0 {
 		base = strings.TrimSpace(configuredChatURL[0])
@@ -143,7 +192,16 @@ func (h *ChatHandler) chatSignInURL(ctx context.Context, configuredChatURL ...st
 		return "", fmt.Errorf("invalid lobe chat url")
 	}
 	q := u.Query()
-	q.Set("callbackUrl", "/agent/inbox")
+	callbackURL := "/agent/inbox"
+	if preference != nil && preference.Provider != "" && preference.Model != "" {
+		cb := url.URL{Path: "/agent/inbox"}
+		cbq := cb.Query()
+		cbq.Set("provider", preference.Provider)
+		cbq.Set("modelId", preference.Model)
+		cb.RawQuery = cbq.Encode()
+		callbackURL = cb.String()
+	}
+	q.Set("callbackUrl", callbackURL)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

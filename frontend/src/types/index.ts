@@ -22,88 +22,6 @@ export interface FetchOptions {
   signal?: AbortSignal
 }
 
-export interface ModelMarketplacePrice {
-  input_price_per_token: number | null
-  output_price_per_token: number | null
-  input_price_per_mtok: number | null
-  output_price_per_mtok: number | null
-  total_price_per_mtok: number | null
-  source_model_id?: string
-  available: boolean
-}
-
-export interface ModelMarketplaceItem {
-  model_id: string
-  display_name: string
-  platforms: string[]
-  account_count: number
-  upstream_names?: string[]
-  price: ModelMarketplacePrice
-}
-
-export interface ModelMarketplaceResponse {
-  models: ModelMarketplaceItem[]
-  total_models: number
-  total_accounts: number
-}
-
-export interface PublicStatusModelConfig {
-  name: string
-  provider?: string
-  release_date?: string
-  prompt_caching: boolean
-  note?: string
-  pricing?: StatusPricing
-  enabled: boolean
-}
-
-export interface PublicStatusProbeLineConfig {
-  id?: string
-  name: string
-  region?: string
-  enabled: boolean
-  sort_order?: number
-}
-
-export interface PublicStatusGroupConfig {
-  group_id: number
-  enabled: boolean
-  display_name?: string
-  aggregate_key?: string
-  sort_order?: number
-  models?: string[]
-  probe_lines?: PublicStatusProbeLineConfig[]
-}
-
-export interface PublicStatusConfig {
-  models: PublicStatusModelConfig[]
-  groups: PublicStatusGroupConfig[]
-}
-
-export interface PublicStatusGroupOption {
-  group_id: number
-  name: string
-  platform: string
-  subscription_type: string
-  account_count?: number
-  rpm_limit: number
-  image_rate_independent: boolean
-  image_rate_multiplier: number
-  image_price_1k?: number
-  image_price_2k?: number
-  image_price_4k?: number
-  aggregate_key?: string
-  sort_order?: number
-  suggested_name: string
-  suggested_key?: string
-  probe_lines?: PublicStatusProbeLineConfig[]
-}
-
-export interface PublicStatusConfigAdminView {
-  config: PublicStatusConfig
-  group_options: PublicStatusGroupOption[]
-}
-
 // ==================== Notification Types ====================
 
 /** Notification email entry with enable/disable and verification state.
@@ -322,7 +240,6 @@ export interface PublicSettings {
   channel_monitor_enabled: boolean
   channel_monitor_default_interval_seconds: number
   available_channels_enabled: boolean
-  model_health_page_enabled: boolean
   affiliate_enabled: boolean
 }
 
@@ -1862,49 +1779,6 @@ export interface UpdateScheduledTestPlanRequest {
   enabled?: boolean
   max_results?: number
   auto_recover?: boolean
-}
-
-// ==================== Public Status Page Types ====================
-// 1:1 alignment with backend DTOs in
-// backend/internal/service/status_page_service.go
-// Field names MUST stay snake_case to match the Go json tags.
-
-export type StatusBeatStatus = 'ok' | 'degraded' | 'down' | 'unknown'
-
-export interface StatusBeat {
-  ts: string
-  status: StatusBeatStatus
-}
-
-export interface StatusPricing {
-  input_per_mtok: number
-  output_per_mtok: number
-  cache_write: number
-  cache_read: number
-}
-
-export interface StatusChannel {
-  name: string
-  availability_pct: number
-  heartbeats: StatusBeat[]
-}
-
-export interface StatusGroup {
-  name: string
-  load_pct: number
-  channels: StatusChannel[]
-}
-
-export interface StatusModel {
-  name: string
-  provider: string
-  release_date?: string
-  prompt_caching: boolean
-  note?: string
-  pricing: StatusPricing
-  availability_pct: number
-  heartbeats: StatusBeat[]
-  groups: StatusGroup[]
 }
 
 // Payment types

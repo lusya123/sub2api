@@ -79,6 +79,7 @@ func RegisterUserRoutes(
 		// Hosted chat launch
 		chat := authenticated.Group("/chat")
 		{
+			chat.GET("/lobe-config", h.LobeConfig.GetCurrentUserConfig)
 			chat.GET("/launch", h.Chat.Launch)
 			chat.POST("/launch", h.Chat.CreateLaunch)
 		}

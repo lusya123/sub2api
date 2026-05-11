@@ -17,6 +17,7 @@ import (
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
 	dbapikey "github.com/Wei-Shaw/sub2api/ent/apikey"
 	dbgroup "github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
 	dbusersub "github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -4013,7 +4014,7 @@ func (r *usageLogRepository) loadAPIKeys(ctx context.Context, ids []int64) (map[
 	if len(ids) == 0 {
 		return out, nil
 	}
-	models, err := r.client.APIKey.Query().Where(dbapikey.IDIn(ids...)).All(ctx)
+	models, err := r.client.APIKey.Query().Where(dbapikey.IDIn(ids...)).All(mixins.SkipSoftDelete(ctx))
 	if err != nil {
 		return nil, err
 	}

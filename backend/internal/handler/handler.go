@@ -37,7 +37,8 @@ type AdminHandlers struct {
 	Channel                *admin.ChannelHandler
 	ChannelMonitor         *admin.ChannelMonitorHandler
 	ChannelMonitorTemplate *admin.ChannelMonitorRequestTemplateHandler
-	ModelMarketplace       *admin.ModelMarketplaceHandler
+	ModelMarketplace       *admin.ModelMarketplaceMonitorHandler
+	ModelMarketplaceTpl    *admin.ModelMarketplaceTemplateHandler
 	ContentModeration      *admin.ContentModerationHandler
 	Payment                *admin.PaymentHandler
 	Affiliate              *admin.AffiliateHandler
@@ -64,7 +65,6 @@ type Handlers struct {
 	Payment          *PaymentHandler
 	PaymentWebhook   *PaymentWebhookHandler
 	AvailableChannel *AvailableChannelHandler
-	PublicStatus     *public.PublicStatusHandler
 	Globe            *public.GlobeHandler
 }
 

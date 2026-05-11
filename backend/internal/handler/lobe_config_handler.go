@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -29,4 +30,22 @@ func (h *LobeConfigHandler) GetUserConfig(c *gin.Context) {
 		return
 	}
 	c.JSON(200, cfg)
+}
+
+func (h *LobeConfigHandler) GetCurrentUserConfig(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	cfg, err := h.lobeConfigService.GetUserConfig(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	for i := range cfg.Providers {
+		cfg.Providers[i].APIKey = ""
+	}
+	response.Success(c, cfg)
 }

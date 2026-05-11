@@ -153,11 +153,12 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
   {
     path: '/status',
     name: 'Status',
-    component: () => import('@/views/status/StatusView.vue'),
+    component: () => import('@/views/user/ChannelStatusView.vue'),
     meta: {
-      requiresAuth: false,
+      requiresAuth: true,
+      requiresAdmin: false,
       title: 'Status',
-      titleKey: 'status.title'
+      titleKey: 'nav.modelStatus'
     }
   },
   {
@@ -523,14 +524,7 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
   },
   {
     path: '/monitor',
-    name: 'ChannelStatus',
-    component: () => import('@/views/user/ChannelStatusView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'Channel Status',
-      titleKey: 'nav.channelStatus'
-    }
+    redirect: '/status'
   },
   {
     path: '/admin/subscriptions',
@@ -757,7 +751,7 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/legal', '/status', '/globe']
+const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/legal', '/globe']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',

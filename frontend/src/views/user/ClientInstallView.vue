@@ -112,7 +112,11 @@ const selectedKey = ref<ApiKey | null>(null)
 const publicSettings = ref<PublicSettings | null>(null)
 
 const supportedKeys = computed(() =>
-  apiKeys.value.filter((item) => item.group?.platform === 'anthropic' || item.group?.platform === 'antigravity')
+  apiKeys.value.filter((item) =>
+    item.group?.platform === 'anthropic' ||
+    item.group?.platform === 'antigravity' ||
+    item.group?.platform === 'openai'
+  )
 )
 
 const filteredKeys = computed(() => {

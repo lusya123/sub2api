@@ -40,7 +40,8 @@ func ProvideAdminHandlers(
 	channelHandler *admin.ChannelHandler,
 	channelMonitorHandler *admin.ChannelMonitorHandler,
 	channelMonitorTemplateHandler *admin.ChannelMonitorRequestTemplateHandler,
-	modelMarketplaceHandler *admin.ModelMarketplaceHandler,
+	modelMarketplaceHandler *admin.ModelMarketplaceMonitorHandler,
+	modelMarketplaceTemplateHandler *admin.ModelMarketplaceTemplateHandler,
 	contentModerationHandler *admin.ContentModerationHandler,
 	paymentHandler *admin.PaymentHandler,
 	affiliateHandler *admin.AffiliateHandler,
@@ -77,6 +78,7 @@ func ProvideAdminHandlers(
 		ChannelMonitor:         channelMonitorHandler,
 		ChannelMonitorTemplate: channelMonitorTemplateHandler,
 		ModelMarketplace:       modelMarketplaceHandler,
+		ModelMarketplaceTpl:    modelMarketplaceTemplateHandler,
 		ContentModeration:      contentModerationHandler,
 		Payment:                paymentHandler,
 		Affiliate:              affiliateHandler,
@@ -114,7 +116,6 @@ func ProvideHandlers(
 	paymentHandler *PaymentHandler,
 	paymentWebhookHandler *PaymentWebhookHandler,
 	availableChannelHandler *AvailableChannelHandler,
-	publicStatusHandler *public.PublicStatusHandler,
 	globeHandler *public.GlobeHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
@@ -139,7 +140,6 @@ func ProvideHandlers(
 		Payment:          paymentHandler,
 		PaymentWebhook:   paymentWebhookHandler,
 		AvailableChannel: availableChannelHandler,
-		PublicStatus:     publicStatusHandler,
 		Globe:            globeHandler,
 	}
 }
@@ -165,7 +165,6 @@ var ProviderSet = wire.NewSet(
 	NewPaymentHandler,
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
-	public.NewPublicStatusHandler,
 	public.NewGlobeHandler,
 
 	// Admin handlers
@@ -199,7 +198,8 @@ var ProviderSet = wire.NewSet(
 	admin.NewChannelHandler,
 	admin.NewChannelMonitorHandler,
 	admin.NewChannelMonitorRequestTemplateHandler,
-	admin.NewModelMarketplaceHandler,
+	admin.NewModelMarketplaceMonitorHandler,
+	admin.NewModelMarketplaceTemplateHandler,
 	admin.NewContentModerationHandler,
 	admin.NewPaymentHandler,
 	admin.NewAffiliateHandler,

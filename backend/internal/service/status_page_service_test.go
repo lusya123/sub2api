@@ -7,6 +7,8 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/channelmonitor"
+	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,6 +89,97 @@ func statusChannelNames(channels []StatusChannel) []string {
 		out = append(out, channel.Name)
 	}
 	return out
+}
+
+func seedStatusChannelMonitor(
+	t *testing.T,
+	client *dbent.Client,
+	name string,
+	provider string,
+	primary string,
+	extras []string,
+	groupName string,
+	enabled bool,
+) int64 {
+	t.Helper()
+	row, err := client.ChannelMonitor.Create().
+		SetName(name).
+		SetProvider(channelmonitor.Provider(provider)).
+		SetEndpoint("https://api.example.test").
+		SetAPIKeyEncrypted("encrypted-test-key").
+		SetPrimaryModel(primary).
+		SetExtraModels(extras).
+		SetGroupName(groupName).
+		SetEnabled(enabled).
+		SetIntervalSeconds(60).
+		SetCreatedBy(1).
+		Save(context.Background())
+	require.NoError(t, err)
+	return row.ID
+}
+
+func seedStatusMonitorHistory(
+	t *testing.T,
+	client *dbent.Client,
+	monitorID int64,
+	model string,
+	status string,
+	checkedAt time.Time,
+) {
+	t.Helper()
+	_, err := client.ChannelMonitorHistory.Create().
+		SetMonitorID(monitorID).
+		SetModel(model).
+		SetStatus(channelmonitorhistory.Status(status)).
+		SetCheckedAt(checkedAt).
+		SetLatencyMs(120).
+		SetPingLatencyMs(35).
+		Save(context.Background())
+	require.NoError(t, err)
+}
+
+func TestStatusPage_ChannelMonitorConfigsDriveModelDashboard(t *testing.T) {
+	client := newChannelHealthTestClient(t)
+	model := "claude-sonnet-4-6"
+	extraModel := "glm-5"
+	oldConfigModel := "claude-opus-4-7"
+
+	usMonitorID := seedStatusChannelMonitor(t, client, "Claude US", PlatformAnthropic, model, []string{extraModel}, "AWS", true)
+	euMonitorID := seedStatusChannelMonitor(t, client, "Claude EU", PlatformAnthropic, model, nil, "AWS", true)
+	disabledMonitorID := seedStatusChannelMonitor(t, client, "Disabled GLM", PlatformGemini, "gemini-2.5-pro", nil, "Google", false)
+
+	seedStatusMonitorHistory(t, client, usMonitorID, model, MonitorStatusOperational, fixedNow.Add(-2*time.Minute))
+	seedStatusMonitorHistory(t, client, usMonitorID, model, MonitorStatusFailed, fixedNow.Add(-1*time.Minute))
+	seedStatusMonitorHistory(t, client, euMonitorID, model, MonitorStatusDegraded, fixedNow.Add(-1*time.Minute))
+	seedStatusMonitorHistory(t, client, usMonitorID, extraModel, MonitorStatusOperational, fixedNow.Add(-1*time.Minute))
+	seedStatusMonitorHistory(t, client, disabledMonitorID, "gemini-2.5-pro", MonitorStatusOperational, fixedNow.Add(-1*time.Minute))
+
+	svc := NewStatusPageService(client).
+		WithPublicStatusConfig(PublicStatusConfig{
+			Models: []PublicStatusModelConfig{modelConfigFromCatalog(oldConfigModel)},
+			Groups: []PublicStatusGroupConfig{{GroupID: 999, Enabled: true}},
+		}).
+		WithNowFn(func() time.Time { return fixedNow })
+
+	list, err := svc.ListModels(context.Background())
+	require.NoError(t, err)
+	require.True(t, hasStatusModel(list, model))
+	require.True(t, hasStatusModel(list, extraModel))
+	require.False(t, hasStatusModel(list, oldConfigModel), "enabled channel monitors should become the model dashboard source")
+	require.False(t, hasStatusModel(list, "gemini-2.5-pro"), "disabled monitors must not leak into the public dashboard")
+
+	detail, err := svc.GetModelDetail(context.Background(), model)
+	require.NoError(t, err)
+	require.Equal(t, model, detail.Name)
+	require.Equal(t, "ANTHROPIC", detail.Provider)
+	require.Len(t, detail.Groups, 1)
+	require.Equal(t, "AWS", detail.Groups[0].Name)
+	require.ElementsMatch(t, []string{"Claude US", "Claude EU"}, statusChannelNames(detail.Groups[0].Channels))
+	require.Len(t, detail.Heartbeats, 2)
+	require.Equal(t, "down", detail.Heartbeats[1].Status)
+
+	_, err = svc.GetModelDetail(context.Background(), oldConfigModel)
+	require.ErrorIs(t, err, ErrStatusModelUnknown)
 }
 
 func TestStatusPage_AllGreen(t *testing.T) {

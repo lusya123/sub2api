@@ -350,11 +350,9 @@ func ProvideScheduledTestRunnerService(
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,
-	prober *ChannelHealthProber,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
 	svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg)
-	svc.SetChannelHealthProber(prober)
 	svc.Start()
 	return svc
 }
@@ -507,12 +505,6 @@ var ProviderSet = wire.NewSet(
 	NewErrorPassthroughService,
 	NewTLSFingerprintProfileService,
 	NewDigestSessionStore,
-	NewChannelHealthRecorder,
-	ProvideAsyncChannelHealthRecorder,
-	ProvideChannelHealthWiring,
-	ProvideStatusPageService,
-	NewModelMarketplaceService,
-	ProvideChannelHealthProber,
 	ProvideGlobeService,
 	ProvideIdempotencyCoordinator,
 	ProvideSystemOperationLockService,
@@ -531,6 +523,9 @@ var ProviderSet = wire.NewSet(
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,
 	NewChannelMonitorRequestTemplateService,
+	ProvideModelMarketplaceMonitorService,
+	ProvideModelMarketplaceMonitorRunner,
+	NewModelMarketplaceTemplateService,
 )
 
 // ProvidePaymentConfigService wraps NewPaymentConfigService to accept the named
@@ -571,46 +566,16 @@ func ProvideChannelMonitorRunner(svc *ChannelMonitorService, settingService *Set
 	return r
 }
 
-func ProvideStatusPageService(entClient *dbent.Client, settingRepo SettingRepository) *StatusPageService {
-	return NewStatusPageService(entClient).WithSettingRepo(settingRepo)
+func ProvideModelMarketplaceMonitorService(
+	repo ModelMarketplaceMonitorRepository,
+	encryptor SecretEncryptor,
+) *ModelMarketplaceMonitorService {
+	return NewModelMarketplaceMonitorService(repo, encryptor)
 }
 
-type ChannelHealthWiring struct{}
-
-func ProvideAsyncChannelHealthRecorder(recorder *ChannelHealthRecorder) *AsyncChannelHealthRecorder {
-	return NewAsyncChannelHealthRecorder(recorder, 0)
-}
-
-func ProvideChannelHealthWiring(
-	asyncRecorder *AsyncChannelHealthRecorder,
-	gateway *GatewayService,
-	openAIGateway *OpenAIGatewayService,
-	antigravityGateway *AntigravityGatewayService,
-	geminiMessagesCompat *GeminiMessagesCompatService,
-) *ChannelHealthWiring {
-	if gateway != nil {
-		gateway.SetChannelHealthRecorder(asyncRecorder)
-	}
-	if openAIGateway != nil {
-		openAIGateway.SetChannelHealthRecorder(asyncRecorder)
-	}
-	if antigravityGateway != nil {
-		antigravityGateway.SetChannelHealthRecorder(asyncRecorder)
-	}
-	if geminiMessagesCompat != nil {
-		geminiMessagesCompat.SetChannelHealthRecorder(asyncRecorder)
-	}
-	return &ChannelHealthWiring{}
-}
-
-func ProvideChannelHealthProber(
-	entClient *dbent.Client,
-	recorder *ChannelHealthRecorder,
-	tester *AccountTestService,
-	settingRepo SettingRepository,
-	gateway *GatewayService,
-) *ChannelHealthProber {
-	return NewChannelHealthProber(entClient, recorder, tester).
-		WithSettingRepo(settingRepo).
-		WithGatewayService(gateway)
+func ProvideModelMarketplaceMonitorRunner(svc *ModelMarketplaceMonitorService) *ModelMarketplaceMonitorRunner {
+	r := NewModelMarketplaceMonitorRunner(svc)
+	svc.SetScheduler(r)
+	r.Start()
+	return r
 }

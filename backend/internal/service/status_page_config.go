@@ -12,7 +12,11 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 )
 
 const (
@@ -812,6 +816,126 @@ func publicStatusProbeLineID(name string, idx int) string {
 		id = fmt.Sprintf("line-%d", idx+1)
 	}
 	return id
+}
+
+type marketplaceModelCandidate struct {
+	modelID       string
+	displayName   string
+	upstreamModel string
+}
+
+func supportedMarketplaceModels(account *Account) []marketplaceModelCandidate {
+	if account == nil {
+		return nil
+	}
+	switch account.Platform {
+	case PlatformOpenAI:
+		if account.IsOpenAIPassthroughEnabled() {
+			return openAIMarketplaceModels()
+		}
+		return modelsFromMappingOrDefault(account.GetModelMapping(), openAIMarketplaceModels())
+	case PlatformGemini:
+		if account.IsOAuth() {
+			return geminiMarketplaceModels()
+		}
+		return modelsFromMappingOrDefault(account.GetModelMapping(), geminiMarketplaceModels())
+	case PlatformAntigravity:
+		return modelsFromMappingOrDefault(account.GetModelMapping(), antigravityMarketplaceModels())
+	case PlatformAnthropic:
+		if account.IsOAuth() {
+			return claudeMarketplaceModels()
+		}
+		return modelsFromMappingOrDefault(account.GetModelMapping(), claudeMarketplaceModels())
+	default:
+		if account.IsBedrock() {
+			return modelsFromMappingOrDefault(account.GetModelMapping(), mappingKeysToMarketplace(domain.DefaultBedrockModelMapping, claudeMarketplaceModels()))
+		}
+		return modelsFromMappingOrDefault(account.GetModelMapping(), nil)
+	}
+}
+
+func modelsFromMappingOrDefault(mapping map[string]string, defaults []marketplaceModelCandidate) []marketplaceModelCandidate {
+	if len(mapping) == 0 {
+		return defaults
+	}
+	defaultByID := make(map[string]marketplaceModelCandidate, len(defaults))
+	for _, model := range defaults {
+		defaultByID[model.modelID] = model
+	}
+	outByID := make(map[string]marketplaceModelCandidate)
+	for pattern, upstream := range mapping {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" || pattern == "*" {
+			continue
+		}
+		if strings.Contains(pattern, "*") {
+			for _, model := range defaults {
+				if matchWildcard(pattern, model.modelID) {
+					candidate := model
+					if strings.TrimSpace(upstream) != "" {
+						candidate.upstreamModel = upstream
+					}
+					outByID[candidate.modelID] = candidate
+				}
+			}
+			continue
+		}
+		candidate := marketplaceModelCandidate{modelID: pattern, displayName: pattern, upstreamModel: strings.TrimSpace(upstream)}
+		if known, ok := defaultByID[pattern]; ok {
+			candidate.displayName = known.displayName
+			if candidate.upstreamModel == "" {
+				candidate.upstreamModel = known.upstreamModel
+			}
+		}
+		outByID[pattern] = candidate
+	}
+	out := make([]marketplaceModelCandidate, 0, len(outByID))
+	for _, model := range outByID {
+		out = append(out, model)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].modelID < out[j].modelID })
+	return out
+}
+
+func openAIMarketplaceModels() []marketplaceModelCandidate {
+	models := make([]marketplaceModelCandidate, 0, len(openai.DefaultModels)+2)
+	for _, model := range openai.DefaultModels {
+		models = append(models, marketplaceModelCandidate{modelID: model.ID, displayName: model.DisplayName})
+	}
+	models = append(models,
+		marketplaceModelCandidate{modelID: "glm-5", displayName: "GLM-5"},
+		marketplaceModelCandidate{modelID: "minimax-m2.5", displayName: "MiniMax M2.5"},
+	)
+	return models
+}
+
+func claudeMarketplaceModels() []marketplaceModelCandidate {
+	out := make([]marketplaceModelCandidate, 0, len(claude.DefaultModels))
+	for _, model := range claude.DefaultModels {
+		out = append(out, marketplaceModelCandidate{modelID: model.ID, displayName: model.DisplayName})
+	}
+	return out
+}
+
+func geminiMarketplaceModels() []marketplaceModelCandidate {
+	out := make([]marketplaceModelCandidate, 0, len(geminicli.DefaultModels))
+	for _, model := range geminicli.DefaultModels {
+		out = append(out, marketplaceModelCandidate{modelID: model.ID, displayName: model.DisplayName})
+	}
+	return out
+}
+
+func antigravityMarketplaceModels() []marketplaceModelCandidate {
+	models := antigravity.DefaultModels()
+	out := make([]marketplaceModelCandidate, 0, len(models))
+	for _, model := range models {
+		out = append(out, marketplaceModelCandidate{modelID: model.ID, displayName: model.DisplayName})
+	}
+	return out
+}
+
+func mappingKeysToMarketplace(mapping map[string]string, defaults []marketplaceModelCandidate) []marketplaceModelCandidate {
+	return modelsFromMappingOrDefault(mapping, defaults)
 }
 
 func containsString(values []string, needle string) bool {

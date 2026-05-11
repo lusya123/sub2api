@@ -98,11 +98,8 @@ func provideCleanup(
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
-	asyncHealthRecorder *service.AsyncChannelHealthRecorder,
-	channelHealthWiring *service.ChannelHealthWiring,
 ) func() {
 	return func() {
-		_ = channelHealthWiring
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -246,12 +243,6 @@ func provideCleanup(
 			{"ChannelMonitorRunner", func() error {
 				if channelMonitorRunner != nil {
 					channelMonitorRunner.Stop()
-				}
-				return nil
-			}},
-			{"AsyncChannelHealthRecorder", func() error {
-				if asyncHealthRecorder != nil {
-					return asyncHealthRecorder.Shutdown(5 * time.Second)
 				}
 				return nil
 			}},

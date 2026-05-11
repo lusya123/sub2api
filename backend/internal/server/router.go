@@ -106,7 +106,6 @@ func registerRoutes(
 	routes.RegisterCommonRoutes(r)
 	routes.RegisterOIDCIssuerRoutes(r, h)
 	routes.RegisterInternalRoutes(r, h, cfg)
-	routes.RegisterPublicStatusRoutes(r, h.PublicStatus)
 	routes.RegisterPublicGlobeRoutes(r, h.Globe)
 
 	// API v1

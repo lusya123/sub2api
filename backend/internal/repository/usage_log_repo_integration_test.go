@@ -1599,6 +1599,22 @@ func (s *UsageLogRepoSuite) TestListWithFilters_ApiKeyFilter() {
 	s.Require().Equal(int64(1), page.Total)
 }
 
+func (s *UsageLogRepoSuite) TestListWithFilters_HydratesSoftDeletedAPIKey() {
+	user := mustCreateUser(s.T(), s.client, &service.User{Email: "filtersdeletedkey@test.com"})
+	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-filtersdeletedkey", Name: "deleted-key"})
+	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-filtersdeletedkey"})
+
+	s.createUsageLog(user, apiKey, account, 10, 20, 0.5, time.Now())
+	s.Require().NoError(s.client.APIKey.DeleteOneID(apiKey.ID).Exec(s.ctx), "soft delete api key")
+
+	logs, page, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, usagestats.UsageLogFilters{UserID: user.ID})
+	s.Require().NoError(err, "ListWithFilters deleted api key")
+	s.Require().Len(logs, 1)
+	s.Require().Equal(int64(1), page.Total)
+	s.Require().NotNil(logs[0].APIKey)
+	s.Require().Equal("deleted-key", logs[0].APIKey.Name)
+}
+
 func (s *UsageLogRepoSuite) TestListWithFilters_TimeRange() {
 	user := mustCreateUser(s.T(), s.client, &service.User{Email: "filterstime@test.com"})
 	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-filterstime", Name: "k"})

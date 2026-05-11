@@ -1,0 +1,134 @@
+package service
+
+import (
+	"context"
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+func validateModelMarketplaceProvider(p string) error {
+	if !isModelMarketplaceSupportedProvider(p) {
+		return ErrModelMarketplaceMonitorInvalidProvider
+	}
+	return nil
+}
+
+func validateModelMarketplaceInterval(sec int) error {
+	if sec < modelMarketplaceMinIntervalSeconds || sec > modelMarketplaceMaxIntervalSeconds {
+		return ErrModelMarketplaceMonitorInvalidInterval
+	}
+	return nil
+}
+
+func validateModelMarketplaceEndpoint(ep string) error {
+	ep = strings.TrimSpace(ep)
+	if ep == "" {
+		return ErrModelMarketplaceMonitorInvalidEndpoint
+	}
+	u, err := url.Parse(ep)
+	if err != nil {
+		return ErrModelMarketplaceMonitorInvalidEndpoint
+	}
+	if u.Scheme != "https" {
+		return ErrModelMarketplaceMonitorEndpointScheme
+	}
+	if u.Host == "" {
+		return ErrModelMarketplaceMonitorInvalidEndpoint
+	}
+	if u.Path != "" && u.Path != "/" {
+		return ErrModelMarketplaceMonitorEndpointPath
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return ErrModelMarketplaceMonitorEndpointPath
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), modelMarketplaceEndpointResolveTimeout)
+	defer cancel()
+	blocked, err := isModelMarketplacePrivateOrLoopbackHost(ctx, u.Hostname())
+	if err != nil {
+		return ErrModelMarketplaceMonitorEndpointUnreachable
+	}
+	if blocked {
+		return ErrModelMarketplaceMonitorEndpointPrivate
+	}
+	return nil
+}
+
+func normalizeModelMarketplaceEndpoint(ep string) string {
+	ep = strings.TrimSpace(ep)
+	return strings.TrimRight(ep, "/")
+}
+
+func normalizeModelMarketplaceModels(in []string) []string {
+	if len(in) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, m := range in {
+		m = strings.TrimSpace(m)
+		if m == "" {
+			continue
+		}
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		out = append(out, m)
+	}
+	return out
+}
+
+func validateModelMarketplaceBodyModeParams(mode string, body map[string]any) error {
+	switch mode {
+	case "", ModelMarketplaceBodyOverrideModeOff:
+		return nil
+	case ModelMarketplaceBodyOverrideModeMerge, ModelMarketplaceBodyOverrideModeReplace:
+		if len(body) == 0 {
+			return ErrModelMarketplaceTemplateBodyRequired
+		}
+		return nil
+	default:
+		return ErrModelMarketplaceTemplateInvalidBodyMode
+	}
+}
+
+var modelMarketplaceHeaderNameRegex = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+\-.^_` + "`" + `|~]+$`)
+
+var modelMarketplaceForbiddenHeaderNames = map[string]bool{
+	"host":              true,
+	"content-length":    true,
+	"content-encoding":  true,
+	"transfer-encoding": true,
+	"connection":        true,
+}
+
+func isForbiddenModelMarketplaceHeaderName(name string) bool {
+	return modelMarketplaceForbiddenHeaderNames[strings.ToLower(strings.TrimSpace(name))]
+}
+
+func validateModelMarketplaceExtraHeaders(h map[string]string) error {
+	for k := range h {
+		if !modelMarketplaceHeaderNameRegex.MatchString(k) {
+			return ErrModelMarketplaceTemplateHeaderInvalidName
+		}
+		if isForbiddenModelMarketplaceHeaderName(k) {
+			return ErrModelMarketplaceTemplateHeaderForbidden
+		}
+	}
+	return nil
+}
+
+func emptyModelMarketplaceHeadersIfNil(h map[string]string) map[string]string {
+	if h == nil {
+		return map[string]string{}
+	}
+	return h
+}
+
+func defaultModelMarketplaceBodyMode(mode string) string {
+	if mode == "" {
+		return ModelMarketplaceBodyOverrideModeOff
+	}
+	return mode
+}

@@ -132,7 +132,7 @@ interface Props {
   platform: GroupPlatform | null
 }
 
-type ClientType = 'claude' | 'openclaw'
+type ClientType = 'claude' | 'openclaw' | 'codex'
 type OsType = 'unix' | 'windows'
 
 const props = defineProps<Props>()
@@ -146,13 +146,15 @@ const selectedOpenClawModel = ref('anthropic/claude-sonnet-4-6')
 const copied = ref(false)
 
 watch(() => props.platform, () => {
-  selectedClient.value = 'claude'
+  selectedClient.value = props.platform === 'openai' ? 'codex' : 'claude'
   selectedOs.value = 'unix'
   selectedOpenClawModel.value = 'anthropic/claude-sonnet-4-6'
   copied.value = false
 }, { immediate: true })
 
-const isSupportedPlatform = computed(() => props.platform === 'anthropic' || props.platform === 'antigravity')
+const isSupportedPlatform = computed(() =>
+  props.platform === 'anthropic' || props.platform === 'antigravity' || props.platform === 'openai'
+)
 const isZhLocale = computed(() => locale.value.toLowerCase().startsWith('zh'))
 
 function interpolate(template: string, params?: Record<string, string>): string {
@@ -200,30 +202,53 @@ const effectiveApiUrl = computed(() => {
   return normalizedBaseRoot.value
 })
 
-const clientOptions = computed(() => [
-  {
-    id: 'claude' as const,
-    label: safeT('keys.clientInstallModal.clients.claude.label', {
-      zh: 'Claude Code',
-      en: 'Claude Code',
-    }),
-    description: safeT('keys.clientInstallModal.clients.claude.description', {
-      zh: '安装 Claude Code 与 CC Switch，并自动导入当前供应商。',
-      en: 'Install Claude Code and CC Switch, then import this provider automatically.',
-    })
-  },
-  {
-    id: 'openclaw' as const,
-    label: safeT('keys.clientInstallModal.clients.openclaw.label', {
-      zh: 'OpenClaw',
-      en: 'OpenClaw',
-    }),
-    description: safeT('keys.clientInstallModal.clients.openclaw.description', {
-      zh: '安装官方 OpenClaw，并把当前密钥设为默认认证。',
-      en: 'Install the official OpenClaw package and set this API key as default auth.',
-    })
-  }
-])
+const codexApiUrl = computed(() => {
+  const source = (props.baseUrl || scriptBaseUrl.value).trim() || scriptBaseUrl.value
+  const trimmed = source.replace(/\/+$/, '')
+  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`
+})
+
+const clientOptions = computed(() => {
+  const options = [
+    {
+      id: 'claude' as const,
+      label: safeT('keys.clientInstallModal.clients.claude.label', {
+        zh: 'Claude Code',
+        en: 'Claude Code',
+      }),
+      description: safeT('keys.clientInstallModal.clients.claude.description', {
+        zh: '安装 Claude Code 与 CC Switch，并自动导入当前供应商。',
+        en: 'Install Claude Code and CC Switch, then import this provider automatically.',
+      })
+    },
+    {
+      id: 'openclaw' as const,
+      label: safeT('keys.clientInstallModal.clients.openclaw.label', {
+        zh: 'OpenClaw',
+        en: 'OpenClaw',
+      }),
+      description: safeT('keys.clientInstallModal.clients.openclaw.description', {
+        zh: '安装官方 OpenClaw，并把当前密钥设为默认认证。',
+        en: 'Install the official OpenClaw package and set this API key as default auth.',
+      })
+    },
+    {
+      id: 'codex' as const,
+      label: safeT('keys.clientInstallModal.clients.codex.label', {
+        zh: 'Codex CLI',
+        en: 'Codex CLI',
+      }),
+      description: safeT('keys.clientInstallModal.clients.codex.description', {
+        zh: '安装官方 Codex CLI，并自动导入当前供应商。',
+        en: 'Install the official Codex CLI and import this provider automatically.',
+      })
+    }
+  ]
+
+  return props.platform === 'openai'
+    ? options.filter((option) => option.id === 'codex')
+    : options.filter((option) => option.id !== 'codex')
+})
 
 const osOptions = computed(() => [
   {
@@ -263,8 +288,8 @@ const unsupportedTitle = computed(() => safeT('keys.clientInstallModal.unsupport
 }))
 
 const unsupportedDescription = computed(() => safeT('keys.clientInstallModal.unsupportedDescription', {
-  zh: '只有 Anthropic 和 Antigravity 分组会生成 Claude Code / OpenClaw 一键安装命令。',
-  en: 'Only Anthropic and Antigravity groups generate Claude Code / OpenClaw one-click install commands.',
+  zh: '只有 Anthropic、Antigravity 和 OpenAI 分组会生成一键安装命令。',
+  en: 'Only Anthropic, Antigravity, and OpenAI groups generate one-click install commands.',
 }))
 
 const modelTitle = computed(() => safeT('keys.clientInstallModal.modelTitle', {
@@ -289,6 +314,11 @@ const description = computed(() => (
       zh: '为当前 API Key 生成 Claude Code 一键安装命令。脚本会安装 Claude Code，确保增强版 CC Switch 可用，自动导入并切换到当前供应商。',
       en: 'Generate a one-click Claude Code deployment command for this API key. The script installs Claude Code, ensures the enhanced CC Switch build is available, imports this provider, and switches to it automatically.',
     })
+    : selectedClient.value === 'codex'
+      ? safeT('keys.clientInstallModal.codexDescription', {
+        zh: '为当前 API Key 生成 Codex CLI 一键安装命令。脚本会安装 Codex CLI，确保增强版 CC Switch 可用，自动导入并切换到当前供应商。',
+        en: 'Generate a one-click Codex CLI command for this API key. The script installs Codex CLI, ensures the enhanced CC Switch build is available, imports this provider, and switches to it automatically.',
+      })
     : safeT('keys.clientInstallModal.openclawDescription', {
       zh: '为当前 API Key 生成 OpenClaw 一键部署命令。脚本会安装官方 openclaw npm 包，并写入 ~/.openclaw 配置。',
       en: 'Generate a one-click OpenClaw deployment command for this API key. The script installs the official openclaw npm package and writes config into ~/.openclaw.',
@@ -302,6 +332,17 @@ const note = computed(() => {
       en: 'XDT_TOKEN/XDT_API_URL are only temporary inputs for this installer run. The script installs official Claude Code, imports and switches the CC Switch provider, then starts claude.',
     })
   }
+  if (selectedClient.value === 'codex') {
+    return selectedOs.value === 'windows'
+      ? safeT('keys.clientInstallModal.codexWindowsNote', {
+        zh: '命令里的 CODEX_TOKEN/CODEX_API_URL 只用于本次安装脚本传参。脚本会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
+        en: 'CODEX_TOKEN/CODEX_API_URL are temporary inputs for this installer run. The script installs official Codex CLI, imports and switches the CC Switch provider, then starts codex.',
+      })
+      : safeT('keys.clientInstallModal.codexNote', {
+        zh: '命令里的 CODEX_TOKEN/CODEX_API_URL 只用于本次安装脚本传参。脚本会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
+        en: 'CODEX_TOKEN/CODEX_API_URL are temporary inputs for this installer run. The script installs official Codex CLI, imports and switches the CC Switch provider, then starts codex.',
+      })
+  }
   return selectedOs.value === 'windows'
     ? safeT('keys.clientInstallModal.openclawWindowsNote', {
       zh: 'OpenClaw 官方仍更推荐在 Windows 上通过 WSL2 使用。这里提供的是原生 PowerShell 部署命令，并要求 Node.js 22.16+；如果系统策略或 Node 环境受限，优先考虑 WSL。',
@@ -314,7 +355,7 @@ const note = computed(() => {
 })
 
 const commandPanelKey = computed(() => (
-  `${selectedClient.value}:${selectedOs.value}:${selectedOpenClawModel.value}:${props.apiKey}:${effectiveApiUrl.value}`
+  `${selectedClient.value}:${selectedOs.value}:${selectedOpenClawModel.value}:${props.apiKey}:${effectiveApiUrl.value}:${codexApiUrl.value}`
 ))
 
 const currentSummary = computed(() => {
@@ -327,6 +368,18 @@ const currentSummary = computed(() => {
       : safeT('keys.clientInstallModal.summary.claudeWindows', {
         zh: 'Claude Code · Windows PowerShell',
         en: 'Claude Code · Windows PowerShell',
+      })
+  }
+
+  if (selectedClient.value === 'codex') {
+    return selectedOs.value === 'unix'
+      ? safeT('keys.clientInstallModal.summary.codexUnix', {
+        zh: 'Codex CLI · macOS / Linux / WSL · OpenAI 兼容配置',
+        en: 'Codex CLI · macOS / Linux / WSL · OpenAI-compatible config',
+      })
+      : safeT('keys.clientInstallModal.summary.codexWindows', {
+        zh: 'Codex CLI · Windows PowerShell · OpenAI 兼容配置',
+        en: 'Codex CLI · Windows PowerShell · OpenAI-compatible config',
       })
   }
 
@@ -351,6 +404,14 @@ const currentCommand = computed(() => {
     return `$env:XDT_TOKEN='${escapePowerShell(props.apiKey)}'; $env:XDT_API_URL='${escapePowerShell(effectiveApiUrl.value)}'; try { irm ${scriptBaseUrl.value}/install-claude-ccswitch-win.ps1 | iex } finally { Remove-Item Env:XDT_TOKEN,Env:XDT_API_URL -ErrorAction SilentlyContinue }`
   }
 
+  if (selectedClient.value === 'codex') {
+    if (selectedOs.value === 'unix') {
+      const scriptUrl = `${scriptBaseUrl.value}/install-codex.sh`
+      return `CODEX_TOKEN="${escapeShellDoubleQuoted(props.apiKey)}" CODEX_API_URL="${escapeShellDoubleQuoted(codexApiUrl.value)}" bash -c "$(curl -fsSL ${scriptUrl} || wget -qO- ${scriptUrl})"`
+    }
+    return `$env:CODEX_TOKEN='${escapePowerShell(props.apiKey)}'; $env:CODEX_API_URL='${escapePowerShell(codexApiUrl.value)}'; try { irm ${scriptBaseUrl.value}/install-codex-win.ps1 | iex } finally { Remove-Item Env:CODEX_TOKEN,Env:CODEX_API_URL -ErrorAction SilentlyContinue }`
+  }
+
   if (selectedOs.value === 'unix') {
     return `OPENCLAW_TOKEN="${props.apiKey}" OPENCLAW_BASE_URL="${effectiveApiUrl.value}" OPENCLAW_MODEL="${selectedOpenClawModel.value}" OPENCLAW_INSTALLER_BASE="${scriptBaseUrl.value}" bash -c "$(curl -fsSL ${scriptBaseUrl.value}/install-openclaw.sh)"`
   }
@@ -359,6 +420,10 @@ const currentCommand = computed(() => {
 
 function escapePowerShell(value: string): string {
   return value.replace(/'/g, "''")
+}
+
+function escapeShellDoubleQuoted(value: string): string {
+  return value.replace(/(["\\$`])/g, '\\$1')
 }
 
 async function copyCommand() {
@@ -370,7 +435,7 @@ async function copyCommand() {
   }, 1500)
 }
 
-watch([selectedClient, selectedOs, selectedOpenClawModel, () => props.apiKey, effectiveApiUrl], () => {
+watch([selectedClient, selectedOs, selectedOpenClawModel, () => props.apiKey, effectiveApiUrl, codexApiUrl], () => {
   copied.value = false
 })
 </script>
