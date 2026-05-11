@@ -16,6 +16,7 @@
         <thead class="border-b border-gray-200 dark:border-dark-700">
           <tr class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
             <th class="py-2 pr-3">{{ t('modelMarketplaceStatus.detailColumns.model') }}</th>
+            <th class="py-2 pr-3">{{ t('modelMarketplaceStatus.price') }}</th>
             <th class="py-2 pr-3">{{ t('modelMarketplaceStatus.detailColumns.latestStatus') }}</th>
             <th class="py-2 pr-3">{{ t('modelMarketplaceStatus.detailColumns.latestLatency') }}</th>
             <th class="py-2 pr-3">{{ t('modelMarketplaceStatus.detailColumns.availability7d') }}</th>
@@ -31,6 +32,12 @@
             class="border-b border-gray-100 dark:border-dark-800"
           >
             <td class="py-2 pr-3 font-medium text-gray-900 dark:text-gray-100">{{ m.model }}</td>
+            <td class="py-2 pr-3 text-gray-700 dark:text-gray-300">
+              <div v-if="priceSummary(m.pricing).length > 0" class="flex flex-col gap-0.5 font-mono text-xs">
+                <span v-for="line in priceSummary(m.pricing)" :key="line">{{ line }}</span>
+              </div>
+              <span v-else class="text-gray-400">{{ t('modelMarketplaceStatus.priceUnavailable') }}</span>
+            </td>
             <td class="py-2 pr-3">
               <span
                 class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px]"
@@ -68,8 +75,11 @@ import {
   status as fetchModelMarketplaceDetail,
   type UserModelMarketplaceDetail,
 } from '@/api/modelMarketplace'
+import type { UserSupportedModelPricing } from '@/api/channels'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { useModelMarketplaceMonitorFormat } from '@/composables/useModelMarketplaceMonitorFormat'
+import { BILLING_MODE_IMAGE, BILLING_MODE_PER_REQUEST, BILLING_MODE_TOKEN } from '@/constants/channel'
+import { formatScaled } from '@/utils/pricing'
 
 const props = defineProps<{
   show: boolean
@@ -98,6 +108,31 @@ async function load(id: number) {
   } finally {
     loading.value = false
   }
+}
+
+function priceSummary(pricing: UserSupportedModelPricing | null): string[] {
+  if (!pricing) return []
+  const perRequestUnit = t('availableChannels.pricing.unitPerRequest')
+  if (pricing.billing_mode === BILLING_MODE_PER_REQUEST && pricing.per_request_price != null) {
+    return [`${formatScaled(pricing.per_request_price, 1)} ${perRequestUnit}`]
+  }
+  if (pricing.billing_mode === BILLING_MODE_IMAGE && pricing.image_output_price != null) {
+    return [`${formatScaled(pricing.image_output_price, 1)} ${perRequestUnit}`]
+  }
+  if (pricing.billing_mode !== BILLING_MODE_TOKEN) return []
+  const unit = t('availableChannels.pricing.unitPerMillion')
+  const lines = [
+    pricing.input_price == null
+      ? ''
+      : `${t('availableChannels.pricing.inputPrice')} ${formatScaled(pricing.input_price, 1_000_000)} ${unit}`,
+    pricing.output_price == null
+      ? ''
+      : `${t('availableChannels.pricing.outputPrice')} ${formatScaled(pricing.output_price, 1_000_000)} ${unit}`,
+    pricing.cache_read_price == null
+      ? ''
+      : `${t('availableChannels.pricing.cacheReadPrice')} ${formatScaled(pricing.cache_read_price, 1_000_000)} ${unit}`,
+  ]
+  return lines.filter(Boolean)
 }
 
 watch(

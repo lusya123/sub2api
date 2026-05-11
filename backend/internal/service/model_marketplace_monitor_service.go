@@ -54,13 +54,14 @@ type ModelMarketplaceMonitorScheduler interface {
 }
 
 type ModelMarketplaceMonitorService struct {
-	repo      ModelMarketplaceMonitorRepository
-	encryptor SecretEncryptor
-	scheduler ModelMarketplaceMonitorScheduler
+	repo           ModelMarketplaceMonitorRepository
+	encryptor      SecretEncryptor
+	pricingService *PricingService
+	scheduler      ModelMarketplaceMonitorScheduler
 }
 
-func NewModelMarketplaceMonitorService(repo ModelMarketplaceMonitorRepository, encryptor SecretEncryptor) *ModelMarketplaceMonitorService {
-	return &ModelMarketplaceMonitorService{repo: repo, encryptor: encryptor}
+func NewModelMarketplaceMonitorService(repo ModelMarketplaceMonitorRepository, encryptor SecretEncryptor, pricingService *PricingService) *ModelMarketplaceMonitorService {
+	return &ModelMarketplaceMonitorService{repo: repo, encryptor: encryptor, pricingService: pricingService}
 }
 
 func (s *ModelMarketplaceMonitorService) List(ctx context.Context, params ModelMarketplaceMonitorListParams) ([]*ModelMarketplaceMonitor, int64, error) {
@@ -439,6 +440,10 @@ func buildModelMarketplaceStatusSummary(
 		if l, ok := latestByModel[model]; ok {
 			entry.Status = l.Status
 			entry.LatencyMs = l.LatencyMs
+			entry.PingLatencyMs = l.PingLatencyMs
+		}
+		if a, ok := availByModel[model]; ok {
+			entry.Availability7d = a.AvailabilityPct
 		}
 		summary.ExtraModels = append(summary.ExtraModels, entry)
 	}

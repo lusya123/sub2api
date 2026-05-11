@@ -569,8 +569,9 @@ func ProvideChannelMonitorRunner(svc *ChannelMonitorService, settingService *Set
 func ProvideModelMarketplaceMonitorService(
 	repo ModelMarketplaceMonitorRepository,
 	encryptor SecretEncryptor,
+	pricingService *PricingService,
 ) *ModelMarketplaceMonitorService {
-	return NewModelMarketplaceMonitorService(repo, encryptor)
+	return NewModelMarketplaceMonitorService(repo, encryptor, pricingService)
 }
 
 func ProvideModelMarketplaceMonitorRunner(svc *ModelMarketplaceMonitorService) *ModelMarketplaceMonitorRunner {

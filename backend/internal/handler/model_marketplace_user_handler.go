@@ -29,14 +29,18 @@ type modelMarketplaceUserListItem struct {
 	PrimaryLatencyMs     *int                                   `json:"primary_latency_ms"`
 	PrimaryPingLatencyMs *int                                   `json:"primary_ping_latency_ms"`
 	Availability7d       float64                                `json:"availability_7d"`
+	PrimaryPricing       *userSupportedModelPricing             `json:"primary_pricing"`
 	ExtraModels          []modelMarketplaceUserExtraModelStatus `json:"extra_models"`
 	Timeline             []modelMarketplaceUserTimelinePoint    `json:"timeline"`
 }
 
 type modelMarketplaceUserExtraModelStatus struct {
-	Model     string `json:"model"`
-	Status    string `json:"status"`
-	LatencyMs *int   `json:"latency_ms"`
+	Model          string                     `json:"model"`
+	Status         string                     `json:"status"`
+	LatencyMs      *int                       `json:"latency_ms"`
+	PingLatencyMs  *int                       `json:"ping_latency_ms"`
+	Availability7d float64                    `json:"availability_7d"`
+	Pricing        *userSupportedModelPricing `json:"pricing"`
 }
 
 type modelMarketplaceUserTimelinePoint struct {
@@ -55,22 +59,26 @@ type modelMarketplaceUserDetailResponse struct {
 }
 
 type modelMarketplaceUserModelStat struct {
-	Model           string  `json:"model"`
-	LatestStatus    string  `json:"latest_status"`
-	LatestLatencyMs *int    `json:"latest_latency_ms"`
-	Availability7d  float64 `json:"availability_7d"`
-	Availability15d float64 `json:"availability_15d"`
-	Availability30d float64 `json:"availability_30d"`
-	AvgLatency7dMs  *int    `json:"avg_latency_7d_ms"`
+	Model           string                     `json:"model"`
+	LatestStatus    string                     `json:"latest_status"`
+	LatestLatencyMs *int                       `json:"latest_latency_ms"`
+	Availability7d  float64                    `json:"availability_7d"`
+	Availability15d float64                    `json:"availability_15d"`
+	Availability30d float64                    `json:"availability_30d"`
+	AvgLatency7dMs  *int                       `json:"avg_latency_7d_ms"`
+	Pricing         *userSupportedModelPricing `json:"pricing"`
 }
 
 func modelMarketplaceUserViewToItem(v *service.ModelMarketplaceUserMonitorView) modelMarketplaceUserListItem {
 	extras := make([]modelMarketplaceUserExtraModelStatus, 0, len(v.ExtraModels))
 	for _, e := range v.ExtraModels {
 		extras = append(extras, modelMarketplaceUserExtraModelStatus{
-			Model:     e.Model,
-			Status:    e.Status,
-			LatencyMs: e.LatencyMs,
+			Model:          e.Model,
+			Status:         e.Status,
+			LatencyMs:      e.LatencyMs,
+			PingLatencyMs:  e.PingLatencyMs,
+			Availability7d: e.Availability7d,
+			Pricing:        toUserPricing(e.Pricing),
 		})
 	}
 	timeline := make([]modelMarketplaceUserTimelinePoint, 0, len(v.Timeline))
@@ -92,6 +100,7 @@ func modelMarketplaceUserViewToItem(v *service.ModelMarketplaceUserMonitorView) 
 		PrimaryLatencyMs:     v.PrimaryLatencyMs,
 		PrimaryPingLatencyMs: v.PrimaryPingLatencyMs,
 		Availability7d:       v.Availability7d,
+		PrimaryPricing:       toUserPricing(v.PrimaryPricing),
 		ExtraModels:          extras,
 		Timeline:             timeline,
 	}
@@ -108,6 +117,7 @@ func modelMarketplaceUserDetailToResponse(d *service.ModelMarketplaceUserMonitor
 			Availability15d: m.Availability15d,
 			Availability30d: m.Availability30d,
 			AvgLatency7dMs:  m.AvgLatency7dMs,
+			Pricing:         toUserPricing(m.Pricing),
 		})
 	}
 	return &modelMarketplaceUserDetailResponse{

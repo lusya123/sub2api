@@ -5,6 +5,7 @@
 
 import { apiClient } from './client'
 import type { Provider, MonitorStatus } from './admin/modelMarketplaceMonitor'
+import type { UserSupportedModelPricing } from './channels'
 
 export type { Provider, MonitorStatus } from './admin/modelMarketplaceMonitor'
 
@@ -12,6 +13,9 @@ export interface UserModelMarketplaceExtraModel {
   model: string
   status: MonitorStatus
   latency_ms: number | null
+  ping_latency_ms: number | null
+  availability_7d: number
+  pricing: UserSupportedModelPricing | null
 }
 
 export interface ModelMarketplaceTimelinePoint {
@@ -31,6 +35,7 @@ export interface UserModelMarketplaceView {
   primary_latency_ms: number | null
   primary_ping_latency_ms: number | null
   availability_7d: number
+  primary_pricing: UserSupportedModelPricing | null
   extra_models: UserModelMarketplaceExtraModel[]
   timeline: ModelMarketplaceTimelinePoint[]
 }
@@ -47,6 +52,7 @@ export interface UserModelMarketplaceModelDetail {
   availability_15d: number
   availability_30d: number
   avg_latency_7d_ms: number | null
+  pricing: UserSupportedModelPricing | null
 }
 
 export interface UserModelMarketplaceDetail {

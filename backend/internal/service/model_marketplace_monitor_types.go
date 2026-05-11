@@ -114,9 +114,12 @@ type ModelMarketplaceMonitorAvailability struct {
 }
 
 type ModelMarketplaceExtraModelStatus struct {
-	Model     string
-	Status    string
-	LatencyMs *int
+	Model          string
+	Status         string
+	LatencyMs      *int
+	PingLatencyMs  *int
+	Availability7d float64
+	Pricing        *ChannelModelPricing
 }
 
 type ModelMarketplaceMonitorStatusSummary struct {
@@ -136,6 +139,7 @@ type ModelMarketplaceUserMonitorView struct {
 	PrimaryLatencyMs     *int
 	PrimaryPingLatencyMs *int
 	Availability7d       float64
+	PrimaryPricing       *ChannelModelPricing
 	ExtraModels          []ModelMarketplaceExtraModelStatus
 	Timeline             []ModelMarketplaceUserTimelinePoint
 }
@@ -163,6 +167,7 @@ type ModelMarketplaceModelDetail struct {
 	Availability15d float64
 	Availability30d float64
 	AvgLatency7dMs  *int
+	Pricing         *ChannelModelPricing
 }
 
 type ModelMarketplaceMonitorRepository interface {

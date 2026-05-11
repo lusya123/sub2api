@@ -872,6 +872,136 @@ func TestStreamingEmptyResponse(t *testing.T) {
 	assert.Equal(t, "end_turn", events[0].Delta.StopReason)
 }
 
+func TestAnthropicEventToResponsesEvents_TextOutputSurvivesDoneAndCompleted(t *testing.T) {
+	state := NewAnthropicEventToResponsesState()
+	index := 0
+
+	events := AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type: "message_start",
+		Message: &AnthropicResponse{
+			ID:    "msg_text",
+			Type:  "message",
+			Role:  "assistant",
+			Model: "claude-sonnet-4-5-20250929",
+			Usage: AnthropicUsage{InputTokens: 12},
+		},
+	}, state)
+	require.Len(t, events, 1)
+	assert.Equal(t, "response.created", events[0].Type)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type:         "content_block_start",
+		Index:        &index,
+		ContentBlock: &AnthropicContentBlock{Type: "text"},
+	}, state)
+	require.Len(t, events, 1)
+	assert.Equal(t, "response.output_item.added", events[0].Type)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type:  "content_block_delta",
+		Delta: &AnthropicDelta{Type: "text_delta", Text: "Hello"},
+	}, state)
+	require.Len(t, events, 1)
+	assert.Equal(t, "response.output_text.delta", events[0].Type)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type:  "content_block_delta",
+		Delta: &AnthropicDelta{Type: "text_delta", Text: " world"},
+	}, state)
+	require.Len(t, events, 1)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type: "content_block_stop",
+	}, state)
+	require.Len(t, events, 1)
+	assert.Equal(t, "response.output_text.done", events[0].Type)
+	assert.Equal(t, "Hello world", events[0].Text)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type:  "message_delta",
+		Usage: &AnthropicUsage{OutputTokens: 3},
+	}, state)
+	assert.Empty(t, events)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type: "message_stop",
+	}, state)
+	require.Len(t, events, 2)
+	assert.Equal(t, "response.output_item.done", events[0].Type)
+	require.NotNil(t, events[0].Item)
+	require.Len(t, events[0].Item.Content, 1)
+	assert.Equal(t, "Hello world", events[0].Item.Content[0].Text)
+
+	assert.Equal(t, "response.completed", events[1].Type)
+	require.NotNil(t, events[1].Response)
+	require.Len(t, events[1].Response.Output, 1)
+	require.Len(t, events[1].Response.Output[0].Content, 1)
+	assert.Equal(t, "Hello world", events[1].Response.Output[0].Content[0].Text)
+	assert.Equal(t, 12, events[1].Response.Usage.InputTokens)
+	assert.Equal(t, 3, events[1].Response.Usage.OutputTokens)
+}
+
+func TestAnthropicEventToResponsesEvents_ToolArgumentsSurviveDoneAndCompleted(t *testing.T) {
+	state := NewAnthropicEventToResponsesState()
+	index := 0
+
+	AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type: "message_start",
+		Message: &AnthropicResponse{
+			ID:    "msg_tool",
+			Type:  "message",
+			Role:  "assistant",
+			Model: "claude-sonnet-4-5-20250929",
+		},
+	}, state)
+
+	events := AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type:  "content_block_start",
+		Index: &index,
+		ContentBlock: &AnthropicContentBlock{
+			Type: "tool_use",
+			ID:   "toolu_123",
+			Name: "exec_command",
+		},
+	}, state)
+	require.Len(t, events, 1)
+	assert.Equal(t, "response.output_item.added", events[0].Type)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type:  "content_block_delta",
+		Delta: &AnthropicDelta{Type: "input_json_delta", PartialJSON: `{"cmd":`},
+	}, state)
+	require.Len(t, events, 1)
+	assert.Equal(t, "response.function_call_arguments.delta", events[0].Type)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type:  "content_block_delta",
+		Delta: &AnthropicDelta{Type: "input_json_delta", PartialJSON: `"pwd"}`},
+	}, state)
+	require.Len(t, events, 1)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type: "content_block_stop",
+	}, state)
+	require.Len(t, events, 2)
+	assert.Equal(t, "response.function_call_arguments.done", events[0].Type)
+	assert.JSONEq(t, `{"cmd":"pwd"}`, events[0].Arguments)
+	assert.Equal(t, "response.output_item.done", events[1].Type)
+	require.NotNil(t, events[1].Item)
+	assert.JSONEq(t, `{"cmd":"pwd"}`, events[1].Item.Arguments)
+
+	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
+		Type: "message_stop",
+	}, state)
+	require.Len(t, events, 1)
+	assert.Equal(t, "response.completed", events[0].Type)
+	require.NotNil(t, events[0].Response)
+	require.Len(t, events[0].Response.Output, 1)
+	assert.Equal(t, "function_call", events[0].Response.Output[0].Type)
+	assert.Equal(t, "exec_command", events[0].Response.Output[0].Name)
+	assert.JSONEq(t, `{"cmd":"pwd"}`, events[0].Response.Output[0].Arguments)
+}
+
 func TestResponsesAnthropicEventToSSE(t *testing.T) {
 	evt := AnthropicStreamEvent{
 		Type: "message_start",
