@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-4 pt-3 border-t border-gray-100 dark:border-dark-700/60">
+  <div class="mt-4 min-w-0 overflow-hidden pt-3 border-t border-gray-100 dark:border-dark-700/60">
     <div
       class="flex justify-between text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2"
     >
@@ -13,11 +13,15 @@
     >
       {{ t('monitorCommon.maintenancePaused') }}
     </div>
-    <div v-else class="flex items-end gap-[2px] h-5 w-full">
+    <div
+      v-else
+      class="grid h-5 w-full min-w-0 items-end gap-[2px] overflow-hidden"
+      :style="{ gridTemplateColumns: `repeat(${displayBars.length}, minmax(0, 1fr))` }"
+    >
       <div
         v-for="(bar, idx) in displayBars"
         :key="idx"
-        class="flex-1 min-w-[3px] rounded-sm"
+        class="w-full min-w-0 rounded-sm"
         :class="bar.colorClass"
         :style="{ height: bar.heightPct + '%' }"
         :title="bar.title"
@@ -36,8 +40,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { MonitorTimelinePoint } from '@/api/channelMonitor'
 import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
+
+interface MonitorTimelinePoint {
+  status: 'operational' | 'degraded' | 'failed' | 'error'
+  latency_ms: number | null
+  ping_latency_ms: number | null
+  checked_at: string
+}
 
 const props = withDefaults(defineProps<{
   buckets?: MonitorTimelinePoint[]

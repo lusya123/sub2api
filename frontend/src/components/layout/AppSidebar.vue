@@ -733,6 +733,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/client-install', label: t('nav.clientInstall'), icon: ChevronDoubleRightIcon },
     { path: '/chat', label: t('nav.chat'), icon: GlobeIcon, featureFlag: flagChatPage },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
+    { path: '/model-marketplace', label: t('nav.modelMarketplace'), icon: SignalIcon },
     { path: '/status', label: t('nav.modelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },

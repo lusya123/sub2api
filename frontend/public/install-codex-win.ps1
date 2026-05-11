@@ -25,11 +25,16 @@ function Require-Token {
 function Normalize-Url([string]$Value) {
   if ([string]::IsNullOrWhiteSpace($Value)) {
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_API_URL)) {
-      return $env:CODEX_API_URL.Trim().TrimEnd('/')
+      $Value = $env:CODEX_API_URL
+    } else {
+      return 'https://xuedingtoken.com/v1'
     }
-    return 'https://xuedingtoken.com/v1'
   }
-  return $Value.Trim().TrimEnd('/')
+  $normalized = $Value.Trim().TrimEnd('/')
+  if ($normalized -match '^https?://[^/]+$') {
+    return "$normalized/v1"
+  }
+  return $normalized
 }
 
 function Get-XdtWindowsArch {

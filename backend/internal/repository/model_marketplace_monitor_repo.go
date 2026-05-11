@@ -220,7 +220,7 @@ func (r *modelMarketplaceMonitorRepository) ComputeAvailabilityForMonitors(ctx c
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT monitor_id, model,
-		       CASE WHEN COUNT(*) = 0 THEN 100 ELSE 100.0 * SUM(CASE WHEN status = 'operational' THEN 1 ELSE 0 END) / COUNT(*) END AS availability_pct,
+		       CASE WHEN COUNT(*) = 0 THEN 100 ELSE 100.0 * SUM(CASE WHEN status IN ('operational','degraded') THEN 1 ELSE 0 END) / COUNT(*) END AS availability_pct,
 		       AVG(latency_ms)::INT AS avg_latency_ms
 		FROM model_marketplace_monitor_histories
 		WHERE monitor_id = ANY($1) AND checked_at >= NOW() - ($2::INT * INTERVAL '1 day')
@@ -238,6 +238,103 @@ func (r *modelMarketplaceMonitorRepository) ComputeAvailabilityForMonitors(ctx c
 		out[id] = append(out[id], a)
 	}
 	return out, rows.Err()
+}
+
+func (r *modelMarketplaceMonitorRepository) ListRecentHistoryForMonitors(
+	ctx context.Context,
+	ids []int64,
+	primaryModels map[int64]string,
+	perMonitorLimit int,
+) (map[int64][]*service.ModelMarketplaceMonitorHistoryEntry, error) {
+	out := make(map[int64][]*service.ModelMarketplaceMonitorHistoryEntry, len(ids))
+	pairIDs, pairModels := buildModelMarketplaceMonitorModelPairs(ids, primaryModels)
+	if len(pairIDs) == 0 {
+		return out, nil
+	}
+	perMonitorLimit = clampModelMarketplaceTimelineLimit(perMonitorLimit)
+
+	const q = `
+		WITH targets AS (
+		    SELECT unnest($1::bigint[]) AS monitor_id,
+		           unnest($2::text[])   AS model
+		),
+		ranked AS (
+		    SELECT h.monitor_id,
+		           h.status,
+		           h.latency_ms,
+		           h.ping_latency_ms,
+		           h.checked_at,
+		           ROW_NUMBER() OVER (PARTITION BY h.monitor_id ORDER BY h.checked_at DESC) AS rn
+		    FROM model_marketplace_monitor_histories h
+		    JOIN targets t
+		      ON t.monitor_id = h.monitor_id AND t.model = h.model
+		)
+		SELECT monitor_id, status, latency_ms, ping_latency_ms, checked_at
+		FROM ranked
+		WHERE rn <= $3
+		ORDER BY monitor_id, checked_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, q, pq.Array(pairIDs), pq.Array(pairModels), perMonitorLimit)
+	if err != nil {
+		return nil, fmt.Errorf("query model marketplace recent history batch: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var monitorID int64
+		entry := &service.ModelMarketplaceMonitorHistoryEntry{}
+		var latency, ping sql.NullInt64
+		if err := rows.Scan(&monitorID, &entry.Status, &latency, &ping, &entry.CheckedAt); err != nil {
+			return nil, fmt.Errorf("scan model marketplace recent history row: %w", err)
+		}
+		assignModelMarketplaceNullInt(&entry.LatencyMs, latency)
+		assignModelMarketplaceNullInt(&entry.PingLatencyMs, ping)
+		out[monitorID] = append(out[monitorID], entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func buildModelMarketplaceMonitorModelPairs(ids []int64, primaryModels map[int64]string) ([]int64, []string) {
+	if len(ids) == 0 || len(primaryModels) == 0 {
+		return nil, nil
+	}
+	pairIDs := make([]int64, 0, len(ids))
+	pairModels := make([]string, 0, len(ids))
+	for _, id := range ids {
+		model, ok := primaryModels[id]
+		if !ok || strings.TrimSpace(model) == "" {
+			continue
+		}
+		pairIDs = append(pairIDs, id)
+		pairModels = append(pairModels, model)
+	}
+	return pairIDs, pairModels
+}
+
+const (
+	modelMarketplaceTimelineLimitMin = 1
+	modelMarketplaceTimelineLimitMax = 200
+)
+
+func clampModelMarketplaceTimelineLimit(n int) int {
+	if n < modelMarketplaceTimelineLimitMin {
+		return modelMarketplaceTimelineLimitMin
+	}
+	if n > modelMarketplaceTimelineLimitMax {
+		return modelMarketplaceTimelineLimitMax
+	}
+	return n
+}
+
+func assignModelMarketplaceNullInt(dst **int, n sql.NullInt64) {
+	if !n.Valid {
+		return
+	}
+	v := int(n.Int64)
+	*dst = &v
 }
 
 func buildMarketplaceMonitorWhere(params service.ModelMarketplaceMonitorListParams) (string, []any) {
@@ -332,7 +429,7 @@ func scanMarketplaceAvailability(rows *sql.Rows, err error, windowDays int) ([]*
 func marketplaceAvailabilitySQL(where string, windowArg int) string {
 	return fmt.Sprintf(`
 		SELECT model,
-		       CASE WHEN COUNT(*) = 0 THEN 100 ELSE 100.0 * SUM(CASE WHEN status = 'operational' THEN 1 ELSE 0 END) / COUNT(*) END AS availability_pct,
+		       CASE WHEN COUNT(*) = 0 THEN 100 ELSE 100.0 * SUM(CASE WHEN status IN ('operational','degraded') THEN 1 ELSE 0 END) / COUNT(*) END AS availability_pct,
 		       AVG(latency_ms)::INT AS avg_latency_ms
 		FROM model_marketplace_monitor_histories
 		WHERE %s AND checked_at >= NOW() - ($%d::INT * INTERVAL '1 day')

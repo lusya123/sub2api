@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="group text-left p-5 rounded-2xl min-h-[280px] w-full bg-white/70 backdrop-blur-xl border border-gray-200/80 shadow-card dark:bg-dark-800/60 dark:border-dark-700/70 hover:-translate-y-1 hover:shadow-card-hover dark:hover:border-primary-500/30 hover:border-gray-300 transition-all duration-300 ease-out flex flex-col"
+    class="group text-left p-5 rounded-2xl min-h-[280px] w-full min-w-0 overflow-hidden bg-white/70 backdrop-blur-xl border border-gray-200/80 shadow-card dark:bg-dark-800/60 dark:border-dark-700/70 hover:-translate-y-1 hover:shadow-card-hover dark:hover:border-primary-500/30 hover:border-gray-300 transition-all duration-300 ease-out flex flex-col"
     @click="emit('click')"
   >
     <!-- Header: icon + name/model + status chip -->
@@ -75,15 +75,33 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { UserMonitorView } from '@/api/channelMonitor'
 import {
   useChannelMonitorFormat,
   providerGradient,
 } from '@/composables/useChannelMonitorFormat'
+import { useModelMarketplaceMonitorFormat } from '@/composables/useModelMarketplaceMonitorFormat'
 import ProviderIcon from './ProviderIcon.vue'
 import MonitorMetricPair from './MonitorMetricPair.vue'
 import MonitorAvailabilityRow from './MonitorAvailabilityRow.vue'
 import MonitorTimeline from './MonitorTimeline.vue'
+
+interface MonitorCardItem {
+  id: number
+  name: string
+  provider: string
+  group_name: string
+  primary_model: string
+  primary_status: 'operational' | 'degraded' | 'failed' | 'error' | ''
+  primary_latency_ms: number | null
+  primary_ping_latency_ms: number | null
+  extra_models?: unknown[]
+  timeline: Array<{
+    status: 'operational' | 'degraded' | 'failed' | 'error'
+    latency_ms: number | null
+    ping_latency_ms: number | null
+    checked_at: string
+  }>
+}
 
 const PROVIDER_TINT: Record<string, string> = {
   openai: 'text-emerald-600 dark:text-emerald-300',
@@ -92,10 +110,12 @@ const PROVIDER_TINT: Record<string, string> = {
 }
 
 const props = defineProps<{
-  item: UserMonitorView
+  item: MonitorCardItem
   window: '7d' | '15d' | '30d'
   availabilityValue: number | null
   countdownSeconds: number
+  i18nPrefix?: string
+  formatKind?: 'channel' | 'marketplace'
 }>()
 
 const emit = defineEmits<{
@@ -103,20 +123,24 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const {
-  statusLabel,
-  statusBadgeClass,
-  providerLabel,
-  providerBadgeClass,
-  formatLatency,
-} = useChannelMonitorFormat()
+const channelFormat = useChannelMonitorFormat()
+const marketplaceFormat = useModelMarketplaceMonitorFormat()
+const formatters = computed(() =>
+  props.formatKind === 'marketplace' ? marketplaceFormat : channelFormat
+)
+
+const statusLabel = (s: MonitorCardItem['primary_status']) => formatters.value.statusLabel(s)
+const statusBadgeClass = (s: MonitorCardItem['primary_status']) => formatters.value.statusBadgeClass(s)
+const providerLabel = (p: string) => formatters.value.providerLabel(p)
+const providerBadgeClass = (p: string) => formatters.value.providerBadgeClass(p)
+const formatLatency = (ms: number | null | undefined) => formatters.value.formatLatency(ms)
 
 const providerTintClass = computed(() =>
   PROVIDER_TINT[props.item.provider] ?? 'text-gray-500 dark:text-gray-300'
 )
 
 const availabilityLabel = computed(() => {
-  const win = t(`channelStatus.windowTab.${props.window}`)
+  const win = t(`${props.i18nPrefix ?? 'channelStatus'}.windowTab.${props.window}`)
   return `${t('monitorCommon.availabilityPrefix')} · ${win}`
 })
 

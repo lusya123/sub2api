@@ -21,6 +21,7 @@ export { chatAPI } from './chat'
 export { totpAPI } from './totp'
 export { default as announcementsAPI } from './announcements'
 export { channelMonitorUserAPI } from './channelMonitor'
+export { modelMarketplaceUserAPI } from './modelMarketplace'
 
 // Admin APIs
 export { adminAPI } from './admin'

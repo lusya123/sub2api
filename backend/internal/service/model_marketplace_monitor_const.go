@@ -30,10 +30,14 @@ const (
 	ModelMarketplaceStatusFailed      = "failed"
 	ModelMarketplaceStatusError       = "error"
 
-	modelMarketplaceAvailability7Days = 7
+	modelMarketplaceAvailability7Days  = 7
+	modelMarketplaceAvailability15Days = 15
+	modelMarketplaceAvailability30Days = 30
 
 	ModelMarketplaceMonitorHistoryDefaultLimit = 100
 	ModelMarketplaceMonitorHistoryMaxLimit     = 1000
+
+	modelMarketplaceTimelineMaxPoints = 60
 
 	modelMarketplaceEndpointResolveTimeout = 5 * time.Second
 	modelMarketplaceAnthropicAPIVersion    = "2023-06-01"

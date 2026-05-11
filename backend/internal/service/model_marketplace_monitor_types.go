@@ -126,6 +126,45 @@ type ModelMarketplaceMonitorStatusSummary struct {
 	ExtraModels      []ModelMarketplaceExtraModelStatus
 }
 
+type ModelMarketplaceUserMonitorView struct {
+	ID                   int64
+	Name                 string
+	Provider             string
+	GroupName            string
+	PrimaryModel         string
+	PrimaryStatus        string
+	PrimaryLatencyMs     *int
+	PrimaryPingLatencyMs *int
+	Availability7d       float64
+	ExtraModels          []ModelMarketplaceExtraModelStatus
+	Timeline             []ModelMarketplaceUserTimelinePoint
+}
+
+type ModelMarketplaceUserTimelinePoint struct {
+	Status        string
+	LatencyMs     *int
+	PingLatencyMs *int
+	CheckedAt     time.Time
+}
+
+type ModelMarketplaceUserMonitorDetail struct {
+	ID        int64
+	Name      string
+	Provider  string
+	GroupName string
+	Models    []ModelMarketplaceModelDetail
+}
+
+type ModelMarketplaceModelDetail struct {
+	Model           string
+	LatestStatus    string
+	LatestLatencyMs *int
+	Availability7d  float64
+	Availability15d float64
+	Availability30d float64
+	AvgLatency7dMs  *int
+}
+
 type ModelMarketplaceMonitorRepository interface {
 	Create(ctx context.Context, m *ModelMarketplaceMonitor) error
 	GetByID(ctx context.Context, id int64) (*ModelMarketplaceMonitor, error)
@@ -141,4 +180,5 @@ type ModelMarketplaceMonitorRepository interface {
 	ComputeAvailability(ctx context.Context, monitorID int64, windowDays int) ([]*ModelMarketplaceMonitorAvailability, error)
 	ListLatestForMonitorIDs(ctx context.Context, ids []int64) (map[int64][]*ModelMarketplaceMonitorLatest, error)
 	ComputeAvailabilityForMonitors(ctx context.Context, ids []int64, windowDays int) (map[int64][]*ModelMarketplaceMonitorAvailability, error)
+	ListRecentHistoryForMonitors(ctx context.Context, ids []int64, primaryModels map[int64]string, perMonitorLimit int) (map[int64][]*ModelMarketplaceMonitorHistoryEntry, error)
 }

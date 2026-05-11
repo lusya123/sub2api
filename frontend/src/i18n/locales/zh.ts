@@ -1037,6 +1037,41 @@ export default {
     }
   },
 
+  // Model Marketplace (user-facing read-only view)
+  modelMarketplaceStatus: {
+    title: '模型广场',
+    description: '查看模型广场的可用性、延迟和近期状态',
+    searchPlaceholder: '搜索模型...',
+    allProviders: '全部供应商',
+    loadError: '加载模型广场失败',
+    detailLoadError: '加载模型详情失败',
+    detailTitle: '模型详情',
+    closeDetail: '关闭',
+    windowTab: {
+      '7d': '7 天',
+      '15d': '15 天',
+      '30d': '30 天'
+    },
+    overall: {
+      operational: 'OPERATIONAL',
+      degraded: 'DEGRADED',
+      unavailable: 'UNAVAILABLE'
+    },
+    detailColumns: {
+      model: '模型',
+      latestStatus: '最新状态',
+      latestLatency: '最新延迟 (ms)',
+      availability7d: '7 天可用率',
+      availability15d: '15 天可用率',
+      availability30d: '30 天可用率',
+      avgLatency7d: '7 天平均延迟 (ms)'
+    },
+    empty: {
+      title: '暂无可显示的模型',
+      description: '管理员尚未配置模型广场。'
+    }
+  },
+
   // Available Channels (user-facing)
   availableChannels: {
     title: '可用渠道',

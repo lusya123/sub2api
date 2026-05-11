@@ -1033,6 +1033,41 @@ export default {
     }
   },
 
+  // Model Marketplace (user-facing read-only view)
+  modelMarketplaceStatus: {
+    title: 'Model Marketplace',
+    description: 'Inspect model marketplace availability, latency and recent status',
+    searchPlaceholder: 'Search models...',
+    allProviders: 'All Providers',
+    loadError: 'Failed to load model marketplace',
+    detailLoadError: 'Failed to load model detail',
+    detailTitle: 'Model Detail',
+    closeDetail: 'Close',
+    windowTab: {
+      '7d': '7 days',
+      '15d': '15 days',
+      '30d': '30 days'
+    },
+    overall: {
+      operational: 'OPERATIONAL',
+      degraded: 'DEGRADED',
+      unavailable: 'UNAVAILABLE'
+    },
+    detailColumns: {
+      model: 'Model',
+      latestStatus: 'Latest Status',
+      latestLatency: 'Latest Latency (ms)',
+      availability7d: '7d Availability',
+      availability15d: '15d Availability',
+      availability30d: '30d Availability',
+      avgLatency7d: '7d Avg Latency (ms)'
+    },
+    empty: {
+      title: 'No models available',
+      description: 'No model marketplace entries have been configured yet.'
+    }
+  },
+
   // Available Channels (user-facing)
   availableChannels: {
     title: 'Available Channels',

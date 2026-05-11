@@ -126,5 +126,12 @@ func RegisterUserRoutes(
 			monitors.GET("", h.ChannelMonitor.List)
 			monitors.GET("/:id/status", h.ChannelMonitor.GetStatus)
 		}
+
+		// 模型广场（用户只读，独立于渠道监控）
+		marketplace := authenticated.Group("/model-marketplace")
+		{
+			marketplace.GET("", h.ModelMarketplace.List)
+			marketplace.GET("/:id/status", h.ModelMarketplace.GetStatus)
+		}
 	}
 }

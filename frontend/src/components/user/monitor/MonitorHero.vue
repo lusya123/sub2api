@@ -68,6 +68,7 @@ const props = defineProps<{
   intervalSeconds: number
   window: MonitorWindow
   loading: boolean
+  i18nPrefix?: string
   autoRefresh?: {
     enabled: { value: boolean }
     intervalSeconds: { value: number }
@@ -84,14 +85,15 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const i18nPrefix = computed(() => props.i18nPrefix ?? 'channelStatus')
 
 const windowOptions = computed<{ value: MonitorWindow; label: string }[]>(() => [
-  { value: '7d', label: t('channelStatus.windowTab.7d') },
-  { value: '15d', label: t('channelStatus.windowTab.15d') },
-  { value: '30d', label: t('channelStatus.windowTab.30d') },
+  { value: '7d', label: t(`${i18nPrefix.value}.windowTab.7d`) },
+  { value: '15d', label: t(`${i18nPrefix.value}.windowTab.15d`) },
+  { value: '30d', label: t(`${i18nPrefix.value}.windowTab.30d`) },
 ])
 
-const overallLabel = computed(() => t(`channelStatus.overall.${props.overallStatus}`))
+const overallLabel = computed(() => t(`${i18nPrefix.value}.overall.${props.overallStatus}`))
 
 const overallChipClass = computed(() => {
   switch (props.overallStatus) {

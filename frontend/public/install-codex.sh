@@ -39,6 +39,9 @@ require_token() {
 normalize_url() {
   local value="${1:-${CODEX_API_URL:-https://xuedingtoken.com/v1}}"
   value="${value%/}"
+  if printf '%s' "$value" | grep -Eq '^https?://[^/]+$'; then
+    value="$value/v1"
+  fi
   printf '%s' "$value"
 }
 

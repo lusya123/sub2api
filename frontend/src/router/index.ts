@@ -162,6 +162,18 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
     }
   },
   {
+    path: '/model-marketplace',
+    name: 'UserModelMarketplace',
+    component: () => import('@/views/user/ModelMarketplaceView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Model Marketplace',
+      titleKey: 'modelMarketplaceStatus.title',
+      descriptionKey: 'modelMarketplaceStatus.description'
+    }
+  },
+  {
     path: '/globe',
     name: 'GlobeShowcase',
     component: () => import('@/views/globe/GlobeShowcaseView.vue'),

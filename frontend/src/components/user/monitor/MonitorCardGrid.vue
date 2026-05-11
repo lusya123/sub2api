@@ -27,8 +27,8 @@
 
     <EmptyState
       v-else-if="items.length === 0"
-      :title="t('channelStatus.empty.title')"
-      :description="t('channelStatus.empty.description')"
+      :title="t(`${i18nPrefix}.empty.title`)"
+      :description="t(`${i18nPrefix}.empty.description`)"
     />
 
     <div
@@ -42,6 +42,8 @@
         :window="window"
         :availability-value="resolveAvailability(item)"
         :countdown-seconds="countdownSeconds"
+        :i18n-prefix="i18nPrefix"
+        :format-kind="formatKind"
         @click="emit('cardClick', item)"
       />
     </div>
@@ -50,25 +52,54 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import type { UserMonitorView, UserMonitorDetail } from '@/api/channelMonitor'
 import EmptyState from '@/components/common/EmptyState.vue'
 import MonitorCard from './MonitorCard.vue'
 
+interface MonitorListItem {
+  id: number
+  name: string
+  provider: string
+  group_name: string
+  primary_model: string
+  primary_status: 'operational' | 'degraded' | 'failed' | 'error' | ''
+  primary_latency_ms: number | null
+  primary_ping_latency_ms: number | null
+  availability_7d: number
+  extra_models: unknown[]
+  timeline: Array<{
+    status: 'operational' | 'degraded' | 'failed' | 'error'
+    latency_ms: number | null
+    ping_latency_ms: number | null
+    checked_at: string
+  }>
+}
+
+interface MonitorDetail {
+  models: Array<{
+    model: string
+    availability_15d: number | null
+    availability_30d: number | null
+  }>
+}
+
 const props = defineProps<{
-  items: UserMonitorView[]
+  items: MonitorListItem[]
   window: '7d' | '15d' | '30d'
   countdownSeconds: number
   loading: boolean
-  detailCache: Record<number, UserMonitorDetail>
+  detailCache: Record<number, MonitorDetail>
+  i18nPrefix?: string
+  formatKind?: 'channel' | 'marketplace'
 }>()
 
 const emit = defineEmits<{
-  (e: 'cardClick', item: UserMonitorView): void
+  (e: 'cardClick', item: MonitorListItem): void
 }>()
 
 const { t } = useI18n()
+const i18nPrefix = props.i18nPrefix ?? 'channelStatus'
 
-function resolveAvailability(item: UserMonitorView): number | null {
+function resolveAvailability(item: MonitorListItem): number | null {
   if (props.window === '7d') {
     return item.availability_7d ?? null
   }
