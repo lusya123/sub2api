@@ -10,10 +10,12 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/security"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // AuthHandler handles authentication-related requests
@@ -25,6 +27,7 @@ type AuthHandler struct {
 	promoService  *service.PromoService
 	redeemService *service.RedeemService
 	totpService   *service.TotpService
+	loginDefense  *security.LoginDefense
 }
 
 // NewAuthHandler creates a new AuthHandler
@@ -38,6 +41,27 @@ func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userSe
 		redeemService: redeemService,
 		totpService:   totpService,
 	}
+}
+
+func (h *AuthHandler) ConfigureLoginDefense(redisClient *redis.Client) {
+	if h == nil || h.cfg == nil || h.authService == nil || !h.cfg.LoginProtection.Enabled {
+		return
+	}
+	h.loginDefense = security.NewLoginDefense(h.cfg.LoginProtection, h.authService.EntClient(), redisClient)
+}
+
+func loginAttemptFromRequest(c *gin.Context, email string) security.LoginAttempt {
+	return security.NewLoginAttempt(
+		email,
+		ip.GetClientIP(c),
+		c.GetHeader("X-Forwarded-For"),
+		c.GetHeader("User-Agent"),
+	)
+}
+
+func respondWithLoginDefenseError(c *gin.Context, err error) {
+	statusCode, status := infraerrors.ToHTTP(err)
+	response.ErrorWithDetails(c, statusCode, status.Message, status.Reason, status.Metadata)
 }
 
 // RegisterRequest represents the registration request payload
@@ -178,6 +202,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	security.AddLoginEmail(user.Email)
 
 	h.respondWithTokenPair(c, user)
 }
@@ -217,21 +242,56 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	req.Email = security.NormalizeEmail(req.Email)
+	attempt := loginAttemptFromRequest(c, req.Email)
+
+	if h.loginDefense != nil {
+		rejected, err := h.loginDefense.RejectUnknownEmail(c.Request.Context(), req.Email)
+		if err != nil {
+			h.loginDefense.AuditPrecheckFailure(attempt, err)
+			respondWithLoginDefenseError(c, err)
+			return
+		}
+		if rejected {
+			h.loginDefense.Audit(attempt, security.LoginResultUserNotFound)
+			response.ErrorFrom(c, service.ErrInvalidCredentials)
+			return
+		}
+	}
+
+	if h.loginDefense != nil {
+		if err := h.loginDefense.Precheck(c.Request.Context(), req.Email); err != nil {
+			h.loginDefense.AuditPrecheckFailure(attempt, err)
+			respondWithLoginDefenseError(c, err)
+			return
+		}
+	}
 
 	// Turnstile 验证
 	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
+		h.loginDefense.Audit(attempt, security.LoginResultTurnstileFailed)
 		response.ErrorFrom(c, err)
 		return
 	}
 
 	token, user, err := h.authService.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
+		if h.loginDefense != nil && infraerrors.IsUnauthorized(err) {
+			h.loginDefense.RecordFailure(c.Request.Context(), req.Email)
+			h.loginDefense.Audit(attempt, security.LoginResultWrongPassword)
+		} else {
+			h.loginDefense.Audit(attempt, security.LoginResultError)
+		}
 		response.ErrorFrom(c, err)
 		return
 	}
 	_ = token // token 由 authService.Login 返回但此处由 respondWithTokenPair 重新生成
+	if h.loginDefense != nil {
+		h.loginDefense.RecordSuccess(c.Request.Context(), req.Email)
+	}
 
 	if err := h.ensureBackendModeAllowsUser(c.Request.Context(), user); err != nil {
+		h.loginDefense.Audit(attempt, security.LoginResultBackendModeBlocked)
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -250,11 +310,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			TempToken:       tempToken,
 			UserEmailMasked: service.MaskEmail(user.Email),
 		})
+		h.loginDefense.Audit(attempt, security.LoginResultPasswordOK2FA)
 		return
 	}
 
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 
+	h.loginDefense.Audit(attempt, security.LoginResultSuccess)
 	h.respondWithTokenPair(c, user)
 }
 

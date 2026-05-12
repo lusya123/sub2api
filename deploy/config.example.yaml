@@ -995,6 +995,34 @@ rate_limit:
   overload_cooldown_minutes: 10
 
 # =============================================================================
+# Login CC Protection
+# 登录接口 CC 防护
+# =============================================================================
+login_protection:
+  # Master switch. Disable only for emergency rollback.
+  # 总开关。仅在紧急回滚时关闭。
+  enabled: true
+  # Load known login emails into an in-memory Bloom filter at startup.
+  # 启动时将已存在登录邮箱加载到内存 Bloom Filter，不存在的邮箱不查数据库直接 401。
+  bloom_enabled: true
+  # Redis-backed email rate limit, progressive account lock, and global login breaker.
+  # Redis 邮箱维度限速、递进锁定、全站登录总闸。
+  redis_enabled: true
+  # Async write login attempts into login_attempts for incident forensics.
+  # 异步写入 login_attempts，便于下次快速溯源。
+  audit_enabled: true
+  key_prefix: "login:"
+  email_rate_per_minute: 10
+  global_rate_per_second: 200
+  failure_window_minutes: 60
+  lock_short_after: 7
+  lock_long_after: 15
+  lock_short_minutes: 15
+  lock_long_minutes: 60
+  bloom_capacity: 1000000
+  audit_queue_size: 10000
+
+# =============================================================================
 # Pricing Data Source (Optional)
 # 定价数据源（可选）
 # =============================================================================

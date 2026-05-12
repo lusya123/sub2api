@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/security"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 
@@ -113,6 +114,7 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 	}
 
 	applyUserEntityToService(userIn, created)
+	security.AddLoginEmail(created.Email)
 	return nil
 }
 
@@ -253,6 +255,7 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 	}
 
 	userIn.UpdatedAt = updated.UpdatedAt
+	security.AddLoginEmail(updated.Email)
 	return nil
 }
 

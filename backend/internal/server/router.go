@@ -81,6 +81,10 @@ func SetupRouter(
 		settingService.SetOnUpdateCallback(refreshFrameOrigins)
 	}
 
+	if handlers != nil && handlers.Auth != nil {
+		handlers.Auth.ConfigureLoginDefense(redisClient)
+	}
+
 	// 注册路由
 	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, adminAuditService, cfg, redisClient)
 

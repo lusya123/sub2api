@@ -80,6 +80,7 @@ type Config struct {
 	GoogleOAuth             EmailOAuthProviderConfig      `mapstructure:"google_oauth"`
 	Default                 DefaultConfig                 `mapstructure:"default"`
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
+	LoginProtection         LoginProtectionConfig         `mapstructure:"login_protection"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
 	Gateway                 GatewayConfig                 `mapstructure:"gateway"`
 	APIKeyAuth              APIKeyAuthCacheConfig         `mapstructure:"api_key_auth_cache"`
@@ -1163,6 +1164,23 @@ type RateLimitConfig struct {
 	OAuth401CooldownMinutes int `mapstructure:"oauth_401_cooldown_minutes"` // OAuth 401临时不可调度冷却(分钟)
 }
 
+type LoginProtectionConfig struct {
+	Enabled              bool   `mapstructure:"enabled"`
+	BloomEnabled         bool   `mapstructure:"bloom_enabled"`
+	RedisEnabled         bool   `mapstructure:"redis_enabled"`
+	AuditEnabled         bool   `mapstructure:"audit_enabled"`
+	KeyPrefix            string `mapstructure:"key_prefix"`
+	EmailRatePerMinute   int    `mapstructure:"email_rate_per_minute"`
+	GlobalRatePerSecond  int    `mapstructure:"global_rate_per_second"`
+	FailureWindowMinutes int    `mapstructure:"failure_window_minutes"`
+	LockShortAfter       int    `mapstructure:"lock_short_after"`
+	LockLongAfter        int    `mapstructure:"lock_long_after"`
+	LockShortMinutes     int    `mapstructure:"lock_short_minutes"`
+	LockLongMinutes      int    `mapstructure:"lock_long_minutes"`
+	BloomCapacity        int    `mapstructure:"bloom_capacity"`
+	AuditQueueSize       int    `mapstructure:"audit_queue_size"`
+}
+
 // APIKeyAuthCacheConfig API Key 认证缓存配置
 type APIKeyAuthCacheConfig struct {
 	L1Size             int  `mapstructure:"l1_size"`
@@ -1634,6 +1652,22 @@ func setDefaults() {
 	// RateLimit
 	viper.SetDefault("rate_limit.overload_cooldown_minutes", 10)
 	viper.SetDefault("rate_limit.oauth_401_cooldown_minutes", 10)
+
+	// Login protection
+	viper.SetDefault("login_protection.enabled", true)
+	viper.SetDefault("login_protection.bloom_enabled", true)
+	viper.SetDefault("login_protection.redis_enabled", true)
+	viper.SetDefault("login_protection.audit_enabled", true)
+	viper.SetDefault("login_protection.key_prefix", "login:")
+	viper.SetDefault("login_protection.email_rate_per_minute", 10)
+	viper.SetDefault("login_protection.global_rate_per_second", 200)
+	viper.SetDefault("login_protection.failure_window_minutes", 60)
+	viper.SetDefault("login_protection.lock_short_after", 7)
+	viper.SetDefault("login_protection.lock_long_after", 15)
+	viper.SetDefault("login_protection.lock_short_minutes", 15)
+	viper.SetDefault("login_protection.lock_long_minutes", 60)
+	viper.SetDefault("login_protection.bloom_capacity", 1000000)
+	viper.SetDefault("login_protection.audit_queue_size", 10000)
 
 	// Pricing - 从 model-price-repo 同步模型定价和上下文窗口数据（固定到 commit，避免分支漂移）
 	viper.SetDefault("pricing.remote_url", "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.json")

@@ -432,6 +432,9 @@ export default {
     loginFailed: '登录失败，请检查您的凭据后重试。',
     errors: {
       USER_NOT_ACTIVE: '账号已被禁用',
+      LOGIN_LOCKED: '登录尝试次数过多，账号已临时锁定。请 {retry_after_minutes} 分钟后再试。',
+      LOGIN_RATE_LIMITED: '登录尝试过于频繁，请 {retry_after_seconds} 秒后再试。',
+      LOGIN_SERVICE_BUSY: '当前登录请求较多，请稍后再试。',
     },
     registrationFailed: '注册失败，请重试。',
     emailSuffixNotAllowed: '该邮箱域名不在允许注册范围内。',

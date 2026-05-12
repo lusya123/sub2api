@@ -19,6 +19,9 @@ services:
       nofile:
         soft: 100000
         hard: 100000
+    cpus: "${SUB2API_CPU_LIMIT:-4}"
+    mem_limit: ${SUB2API_MEMORY_LIMIT:-4G}
+    pids_limit: ${SUB2API_PIDS_LIMIT:-2000}
     ports:
       - "${BIND_HOST:-0.0.0.0}:${SERVER_PORT:-8080}:8080"
     volumes:
@@ -38,6 +41,8 @@ services:
       - SERVER_PORT=8080
       - SERVER_MODE=${SERVER_MODE:-release}
       - RUN_MODE=${RUN_MODE:-standard}
+      - GOMEMLIMIT=${SUB2API_GOMEMLIMIT:-3GiB}
+      - GOGC=${SUB2API_GOGC:-100}
 
       # =======================================================================
       # Database Configuration (PostgreSQL) - Required
@@ -48,8 +53,8 @@ services:
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
       - DATABASE_DBNAME=${DATABASE_DBNAME:-sub2api}
       - DATABASE_SSLMODE=${DATABASE_SSLMODE:-disable}
-      - DATABASE_MAX_OPEN_CONNS=${DATABASE_MAX_OPEN_CONNS:-50}
-      - DATABASE_MAX_IDLE_CONNS=${DATABASE_MAX_IDLE_CONNS:-10}
+      - DATABASE_MAX_OPEN_CONNS=${DATABASE_MAX_OPEN_CONNS:-200}
+      - DATABASE_MAX_IDLE_CONNS=${DATABASE_MAX_IDLE_CONNS:-30}
       - DATABASE_CONN_MAX_LIFETIME_MINUTES=${DATABASE_CONN_MAX_LIFETIME_MINUTES:-30}
       - DATABASE_CONN_MAX_IDLE_TIME_MINUTES=${DATABASE_CONN_MAX_IDLE_TIME_MINUTES:-5}
 
@@ -63,6 +68,16 @@ services:
       - REDIS_POOL_SIZE=${REDIS_POOL_SIZE:-1024}
       - REDIS_MIN_IDLE_CONNS=${REDIS_MIN_IDLE_CONNS:-10}
       - REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-false}
+
+      # =======================================================================
+      # Login CC Protection
+      # =======================================================================
+      - LOGIN_PROTECTION_ENABLED=${LOGIN_PROTECTION_ENABLED:-true}
+      - LOGIN_PROTECTION_BLOOM_ENABLED=${LOGIN_PROTECTION_BLOOM_ENABLED:-true}
+      - LOGIN_PROTECTION_REDIS_ENABLED=${LOGIN_PROTECTION_REDIS_ENABLED:-true}
+      - LOGIN_PROTECTION_AUDIT_ENABLED=${LOGIN_PROTECTION_AUDIT_ENABLED:-true}
+      - LOGIN_PROTECTION_EMAIL_RATE_PER_MINUTE=${LOGIN_PROTECTION_EMAIL_RATE_PER_MINUTE:-10}
+      - LOGIN_PROTECTION_GLOBAL_RATE_PER_SECOND=${LOGIN_PROTECTION_GLOBAL_RATE_PER_SECOND:-200}
 
       # =======================================================================
       # Admin Account (auto-created on first run)

@@ -432,6 +432,9 @@ export default {
     loginFailed: 'Login failed. Please check your credentials and try again.',
     errors: {
       USER_NOT_ACTIVE: 'Account has been disabled.',
+      LOGIN_LOCKED: 'Too many failed login attempts. Please try again in {retry_after_minutes} minute(s).',
+      LOGIN_RATE_LIMITED: 'Too many login attempts. Please try again in {retry_after_seconds} second(s).',
+      LOGIN_SERVICE_BUSY: 'The login service is busy. Please try again shortly.',
     },
     registrationFailed: 'Registration failed. Please try again.',
     emailSuffixNotAllowed: 'This email domain is not allowed for registration.',
