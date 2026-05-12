@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/Wei-Shaw/sub2api/internal/security"
@@ -24,5 +25,5 @@ func NewBanCheck(rdb *redis.Client) gin.HandlerFunc {
 }
 
 func TriggerDynamicBan(rdb *redis.Client, fingerprint, reason string) {
-	security.NewDynamicBan(rdb).Trigger(nil, fingerprint, reason)
+	security.NewDynamicBan(rdb).Trigger(context.Background(), fingerprint, reason)
 }
