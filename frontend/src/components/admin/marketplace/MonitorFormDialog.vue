@@ -13,7 +13,7 @@
 
       <div>
         <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.provider') }} <span class="text-red-500">*</span></label>
-        <div class="grid grid-cols-3 gap-3">
+        <div class="grid max-h-72 grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4">
           <button
             v-for="opt in providerOptions"
             :key="opt.value"
@@ -183,9 +183,8 @@ import MonitorAdvancedRequestConfig from '@/components/admin/marketplace/Monitor
 import ProviderIcon from '@/components/user/monitor/ProviderIcon.vue'
 import { useModelMarketplaceMonitorFormat } from '@/composables/useModelMarketplaceMonitorFormat'
 import {
-  PROVIDER_OPENAI,
   PROVIDER_ANTHROPIC,
-  PROVIDER_GEMINI,
+  MODEL_MARKETPLACE_PROVIDER_OPTIONS,
   DEFAULT_INTERVAL_SECONDS,
 } from '@/constants/modelMarketplaceMonitor'
 
@@ -302,9 +301,7 @@ interface ProviderOption {
 }
 
 const providerOptions = computed<ProviderOption[]>(() => [
-  { value: PROVIDER_ANTHROPIC, label: t('monitorCommon.providers.anthropic') },
-  { value: PROVIDER_OPENAI, label: t('monitorCommon.providers.openai') },
-  { value: PROVIDER_GEMINI, label: t('monitorCommon.providers.gemini') },
+  ...MODEL_MARKETPLACE_PROVIDER_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label })),
 ])
 
 // Clear api_key whenever provider changes to avoid cross-provider key mismatch.

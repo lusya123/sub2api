@@ -227,7 +227,13 @@ function Start-CodexTerminal {
   }
 
   Write-XdtLog 'Starting Codex CLI in a new terminal'
-  $command = '$env:TERM="xterm-256color"; codex'
+  $codexLauncher = 'codex'
+  $codexCmd = Get-Command 'codex.cmd' -ErrorAction SilentlyContinue
+  if ($codexCmd) {
+    $codexLauncher = $codexCmd.Source
+  }
+  $codexLauncher = $codexLauncher.Replace("'", "''")
+  $command = "`$env:TERM=`"xterm-256color`"; & '$codexLauncher'"
   $workingDirectory = [Environment]::GetFolderPath('UserProfile')
 
   if (Get-Command wt.exe -ErrorAction SilentlyContinue) {
@@ -719,31 +725,103 @@ function Get-CodexModelSortKey([string]$ModelId) {
   return ($parts -join '.')
 }
 
-function Select-CodexModel([string[]]$ModelIds) {
+function Select-CodexModelCandidates([string[]]$ModelIds) {
   if (-not $ModelIds -or $ModelIds.Count -eq 0) {
     Fail-Xdt 'No models were returned by the provider'
   }
 
-  $patterns = @(
+  $preferredPatterns = @(
     '(?i)^gpt-5',
     '(?i)codex',
     '(?i)^gpt-',
     '(?i)^o[0-9]'
   )
+  $fallbackPatterns = @(
+    '(?i)^glm-5',
+    '(?i)minimax',
+    '(?i)claude.*sonnet',
+    '(?i)claude.*haiku',
+    '(?i)claude'
+  )
 
-  foreach ($pattern in $patterns) {
-    $candidate = $ModelIds |
-      Where-Object { $_ -match $pattern } |
-      Sort-Object @{ Expression = { Get-CodexModelSortKey $_ }; Descending = $true }, @{ Expression = { $_ }; Descending = $true } |
-      Select-Object -First 1
-    if ($candidate) {
+  $ordered = New-Object System.Collections.Generic.List[string]
+  $pushCandidates = {
+    param([string[]]$Patterns)
+    foreach ($pattern in $Patterns) {
+      $candidates = $ModelIds |
+        Where-Object { $_ -match $pattern } |
+        Sort-Object @{ Expression = { Get-CodexModelSortKey $_ }; Descending = $true }, @{ Expression = { $_ }; Descending = $true }
+      foreach ($candidate in $candidates) {
+        if (-not $ordered.Contains($candidate)) {
+          $ordered.Add($candidate) | Out-Null
+        }
+      }
+    }
+  }
+
+  & $pushCandidates $preferredPatterns
+  if (-not ($ModelIds -contains 'gpt-5.5')) {
+    $ordered.Add('gpt-5.5') | Out-Null
+  }
+  & $pushCandidates $fallbackPatterns
+  $rest = $ModelIds |
+    Where-Object { -not $ordered.Contains($_) } |
+    Sort-Object @{ Expression = { Get-CodexModelSortKey $_ }; Descending = $true }, @{ Expression = { $_ }; Descending = $true }
+  foreach ($candidate in $rest) {
+    $ordered.Add($candidate) | Out-Null
+  }
+
+  return @($ordered.ToArray())
+}
+
+function Test-CodexResponsesModel([string]$ApiUrl, [string]$Token, [string]$Model) {
+  $responsesUrl = "$($ApiUrl.TrimEnd('/'))/responses"
+  $body = @{
+    model = $Model
+    input = 'Reply with OK.'
+    max_output_tokens = 4
+  } | ConvertTo-Json -Depth 8 -Compress
+
+  try {
+    Invoke-RestMethod -Method Post -Uri $responsesUrl -Headers @{ Authorization = "Bearer $Token" } -ContentType 'application/json' -Body $body -TimeoutSec 30 -UseBasicParsing | Out-Null
+    return $true
+  } catch {
+    $statusCode = $null
+    try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+    if ($statusCode -eq 401 -or $statusCode -eq 403) {
+      Fail-Xdt "The API key was rejected by $responsesUrl with HTTP $statusCode."
+    }
+    $message = $_.Exception.Message
+    try {
+      $stream = $_.Exception.Response.GetResponseStream()
+      if ($stream) {
+        $reader = New-Object System.IO.StreamReader($stream)
+        $text = $reader.ReadToEnd()
+        if (-not [string]::IsNullOrWhiteSpace($text)) {
+          $message = $text
+        }
+      }
+    } catch {}
+    if ($message.Length -gt 160) {
+      $message = $message.Substring(0, 160)
+    }
+    Write-XdtLog "Codex model probe failed for ${Model}: HTTP $statusCode $message"
+    return $false
+  }
+}
+
+function Select-WorkingCodexModel([string]$ApiUrl, [string]$Token, [string[]]$ModelIds) {
+  $candidates = Select-CodexModelCandidates $ModelIds
+  foreach ($candidate in $candidates) {
+    if (Test-CodexResponsesModel $ApiUrl $Token $candidate) {
+      if ($candidate -notmatch '(?i)^(gpt-|o[0-9])' -and $candidate -notmatch '(?i)codex') {
+        Write-XdtLog "GPT/Codex models are not currently available through this key. Using working Responses model: $candidate"
+      }
       return $candidate
     }
   }
 
-  $fallback = 'gpt-5.5'
-  Write-XdtLog "No Codex-compatible OpenAI models were returned by the provider. Using $fallback. Received: $($ModelIds -join ', ')"
-  return $fallback
+  Fail-Xdt "No returned model can be called through $($ApiUrl.TrimEnd('/'))/responses"
 }
 
 function Resolve-CodexModel([string]$ApiUrl, [string]$Token) {
@@ -754,21 +832,9 @@ function Resolve-CodexModel([string]$ApiUrl, [string]$Token) {
     return $env:CODEX_MODEL.Trim()
   }
 
-  $modelsUrl = "$($ApiUrl.TrimEnd('/'))/models"
-  try {
-    $models = Invoke-RestMethod -Uri $modelsUrl -Headers @{ Authorization = "Bearer $Token" } -UseBasicParsing
-    $ids = @($models.data | ForEach-Object { [string]$_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $selected = Select-CodexModel $ids
-    Write-XdtLog "Selected Codex model: $selected"
-    return $selected
-  } catch {
-    $statusCode = $null
-    try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-    if ($statusCode -eq 401 -or $statusCode -eq 403) {
-      Fail-Xdt "Unable to fetch provider models from $modelsUrl. The API key was rejected with HTTP $statusCode."
-    }
-    Fail-Xdt "Unable to fetch provider models from ${modelsUrl}: $($_.Exception.Message)"
-  }
+  $selected = 'gpt-5.5'
+  Write-XdtLog "Selected Codex model: $selected"
+  return $selected
 }
 
 function Write-CodexDirectConfig([string]$ApiUrl, [string]$Token) {

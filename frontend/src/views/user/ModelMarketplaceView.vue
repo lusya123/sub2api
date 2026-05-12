@@ -21,6 +21,7 @@
               class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
             />
             <input
+              ref="searchInputRef"
               v-model="searchQuery"
               type="text"
               :placeholder="t('modelMarketplaceStatus.searchPlaceholderFull', 'Search model name, provider, group, endpoint or tag...')"
@@ -176,8 +177,31 @@
             <article
               v-for="card in pagedModelCards"
               :key="card.key"
-              class="group flex min-h-[188px] min-w-0 flex-col rounded-lg border border-gray-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-dark-700/70 dark:bg-dark-900/80 dark:hover:border-primary-500/30"
+              class="group flex min-h-[188px] min-w-0 flex-col overflow-hidden rounded-lg border border-gray-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-dark-700/70 dark:bg-dark-900/80 dark:hover:border-primary-500/30"
             >
+              <div
+                class="-mx-4 -mt-4 mb-4 border-b border-gray-100 bg-gray-50/80 px-4 py-2 dark:border-dark-800 dark:bg-dark-900/70"
+                :title="healthTimelineTitle(card)"
+              >
+                <div
+                  class="grid h-3 w-full min-w-0 items-end gap-[2px] overflow-hidden"
+                  :style="{ gridTemplateColumns: `repeat(${healthTimelineBars(card).length}, minmax(0, 1fr))` }"
+                >
+                  <span
+                    v-for="(bar, idx) in healthTimelineBars(card)"
+                    :key="`${card.key}:health:${idx}`"
+                    class="block w-full min-w-0 rounded-sm"
+                    :class="bar.colorClass"
+                    :style="{ height: bar.heightPct + '%' }"
+                    :title="bar.title"
+                  ></span>
+                </div>
+                <div class="mt-1 flex items-center justify-between text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                  <span>{{ t('monitorCommon.past') }}</span>
+                  <span>{{ t('monitorCommon.nextUpdateIn', { n: countdown }) }}</span>
+                </div>
+              </div>
+
               <div class="flex items-start justify-between gap-3">
                 <div class="flex min-w-0 items-start gap-3">
                   <span
@@ -318,6 +342,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import {
   list as listModelMarketplaceViews,
+  type ModelMarketplaceTimelinePoint,
   type UserModelMarketplaceView,
   type UserModelMarketplaceExtraModel,
 } from '@/api/modelMarketplace'
@@ -370,8 +395,15 @@ interface MarketplaceModelCard {
   billingType: BillingMode | 'unknown'
   endpointTypes: string[]
   tags: string[]
+  timeline: ModelMarketplaceTimelinePoint[]
   description: string
   isPrimary: boolean
+}
+
+interface HealthTimelineBar {
+  colorClass: string
+  heightPct: number
+  title: string
 }
 
 const { t } = useI18n()
@@ -388,6 +420,7 @@ const items = ref<UserModelMarketplaceView[]>([])
 const loading = ref(false)
 const showDetail = ref(false)
 const detailTarget = ref<UserModelMarketplaceView | null>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const searchQuery = ref('')
 const groupFilter = ref('all')
 const vendorFilter = ref('all')
@@ -415,6 +448,10 @@ const PROVIDER_TINT: Record<string, string> = {
   openai: 'text-emerald-600 dark:text-emerald-300',
   anthropic: 'text-orange-600 dark:text-orange-300',
   gemini: 'text-sky-600 dark:text-sky-300',
+  minimax: 'text-pink-600 dark:text-pink-300',
+  zhipu: 'text-cyan-600 dark:text-cyan-300',
+  zhipu_v4: 'text-cyan-600 dark:text-cyan-300',
+  deepseek: 'text-indigo-600 dark:text-indigo-300',
 }
 
 const modelCards = computed<MarketplaceModelCard[]>(() => {
@@ -633,6 +670,7 @@ function buildModelCard(input: {
     billingType,
     endpointTypes,
     tags,
+    timeline: input.isPrimary ? input.monitor.timeline || [] : [],
     description: buildDescription(input.monitor, input.model, input.status, input.isPrimary),
     isPrimary: input.isPrimary,
   }
@@ -714,6 +752,68 @@ function healthRank(card: MarketplaceModelCard): number {
   if (card.health === 'degraded') return 1
   if (card.health === 'unknown') return 2
   return 3
+}
+
+const HEALTH_TIMELINE_LENGTH = 60
+
+const HEALTH_TIMELINE_HEIGHT: Record<string, number> = {
+  operational: 100,
+  degraded: 68,
+  failed: 36,
+  error: 36,
+  empty: 18,
+}
+
+const HEALTH_TIMELINE_COLOR: Record<string, string> = {
+  operational: 'bg-emerald-500',
+  degraded: 'bg-amber-500',
+  failed: 'bg-red-500',
+  error: 'bg-red-500',
+  empty: 'bg-gray-300 dark:bg-dark-700',
+}
+
+function healthTimelineBars(card: MarketplaceModelCard): HealthTimelineBar[] {
+  const realPoints = (card.timeline || []).length > 0
+    ? card.timeline.slice(0, HEALTH_TIMELINE_LENGTH)
+    : fallbackHealthPoint(card)
+  const points = [...realPoints].reverse()
+  const padCount = Math.max(0, HEALTH_TIMELINE_LENGTH - points.length)
+  const bars: HealthTimelineBar[] = Array.from({ length: padCount }, () => ({
+    colorClass: HEALTH_TIMELINE_COLOR.empty,
+    heightPct: HEALTH_TIMELINE_HEIGHT.empty,
+    title: t('monitorCommon.noData', 'No data'),
+  }))
+
+  for (const point of points) {
+    const status = point.status || 'empty'
+    bars.push({
+      colorClass: HEALTH_TIMELINE_COLOR[status] ?? HEALTH_TIMELINE_COLOR.empty,
+      heightPct: HEALTH_TIMELINE_HEIGHT[status] ?? HEALTH_TIMELINE_HEIGHT.empty,
+      title: healthTimelinePointTitle(point),
+    })
+  }
+  return bars
+}
+
+function fallbackHealthPoint(card: MarketplaceModelCard): ModelMarketplaceTimelinePoint[] {
+  if (!card.status) return []
+  return [{
+    status: card.status,
+    latency_ms: card.latencyMs,
+    ping_latency_ms: card.pingLatencyMs,
+    checked_at: '',
+  }]
+}
+
+function healthTimelinePointTitle(point: ModelMarketplaceTimelinePoint): string {
+  const latency = formatLatency(point.latency_ms)
+  const ping = formatLatency(point.ping_latency_ms)
+  const checkedAt = point.checked_at ? new Date(point.checked_at).toLocaleString() : t('monitorCommon.now', 'Now')
+  return `${checkedAt} · ${statusLabel(point.status)} · ${t('monitorCommon.dialogLatency')}: ${latency}ms · ${t('monitorCommon.endpointPing')}: ${ping}ms`
+}
+
+function healthTimelineTitle(card: MarketplaceModelCard): string {
+  return `${t('modelMarketplaceStatus.health.title', 'Health')}: ${statusLabel(card.status)} · ${t('monitorCommon.history60pts', { n: HEALTH_TIMELINE_LENGTH })} · ${t('modelMarketplaceStatus.availability7d', '7d Availability')} ${formatPercent(card.availability7d)}`
 }
 
 function providerTintClass(provider: string): string {
@@ -858,13 +958,22 @@ async function copyModel(model: string) {
   }
 }
 
+function handleSearchShortcut(event: KeyboardEvent) {
+  if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
+  event.preventDefault()
+  searchInputRef.value?.focus()
+  searchInputRef.value?.select()
+}
+
 onMounted(() => {
   void reload(false)
   autoRefresh.setEnabled(true)
+  window.addEventListener('keydown', handleSearchShortcut)
 })
 
 onBeforeUnmount(() => {
   if (abortController) abortController.abort()
+  window.removeEventListener('keydown', handleSearchShortcut)
 })
 
 const FilterSection = defineComponent({

@@ -7,14 +7,14 @@
   >
     <!-- provider tabs -->
     <div class="mb-4 border-b border-gray-200 dark:border-dark-700">
-      <div role="tablist" class="flex gap-1">
+      <div role="tablist" class="flex gap-1 overflow-x-auto pb-1">
         <button
           v-for="tab in providerTabs"
           :key="tab.value"
           type="button"
           role="tab"
           :aria-selected="activeProvider === tab.value"
-          class="px-4 py-2 text-sm font-medium transition-colors"
+          class="whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors"
           :class="tabClass(tab.value)"
           @click="activeProvider = tab.value"
         >
@@ -219,8 +219,7 @@ import MonitorTemplateApplyPickerDialog from '@/components/admin/marketplace/Mon
 import { useModelMarketplaceMonitorFormat } from '@/composables/useModelMarketplaceMonitorFormat'
 import {
   PROVIDER_ANTHROPIC,
-  PROVIDER_OPENAI,
-  PROVIDER_GEMINI,
+  MODEL_MARKETPLACE_PROVIDER_OPTIONS,
 } from '@/constants/modelMarketplaceMonitor'
 
 const props = defineProps<{ show: boolean }>()
@@ -235,9 +234,7 @@ const appStore = useAppStore()
 const { providerPickerClass } = useModelMarketplaceMonitorFormat()
 
 const providerTabs = computed<{ value: Provider; label: string }[]>(() => [
-  { value: PROVIDER_ANTHROPIC, label: t('monitorCommon.providers.anthropic') },
-  { value: PROVIDER_OPENAI, label: t('monitorCommon.providers.openai') },
-  { value: PROVIDER_GEMINI, label: t('monitorCommon.providers.gemini') },
+  ...MODEL_MARKETPLACE_PROVIDER_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label })),
 ])
 
 const activeProvider = ref<Provider>(PROVIDER_ANTHROPIC)
@@ -248,13 +245,9 @@ const templatesForActiveProvider = computed(() =>
   templates.value.filter((t) => t.provider === activeProvider.value),
 )
 
-const countByProvider = computed<Record<Provider, number>>(() => {
-  const out: Record<Provider, number> = {
-    anthropic: 0,
-    openai: 0,
-    gemini: 0,
-  }
-  for (const t of templates.value) out[t.provider]++
+const countByProvider = computed<Record<string, number>>(() => {
+  const out: Record<string, number> = {}
+  for (const t of templates.value) out[t.provider] = (out[t.provider] || 0) + 1
   return out
 })
 

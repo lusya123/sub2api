@@ -67,9 +67,7 @@ import type { Provider } from '@/api/admin/modelMarketplaceMonitor'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import {
-  PROVIDER_OPENAI,
-  PROVIDER_ANTHROPIC,
-  PROVIDER_GEMINI,
+  MODEL_MARKETPLACE_PROVIDER_OPTIONS,
 } from '@/constants/modelMarketplaceMonitor'
 
 defineProps<{
@@ -91,9 +89,7 @@ const { t } = useI18n()
 
 const providerFilterOptions = computed(() => [
   { value: '', label: t('admin.modelMarketplaceMonitor.allProviders') },
-  { value: PROVIDER_OPENAI, label: t('monitorCommon.providers.openai') },
-  { value: PROVIDER_ANTHROPIC, label: t('monitorCommon.providers.anthropic') },
-  { value: PROVIDER_GEMINI, label: t('monitorCommon.providers.gemini') },
+  ...MODEL_MARKETPLACE_PROVIDER_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label })),
 ])
 
 const enabledFilterOptions = computed(() => [

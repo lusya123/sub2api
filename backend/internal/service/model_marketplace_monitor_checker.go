@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/tidwall/gjson"
 )
 
@@ -152,7 +153,8 @@ func pingModelMarketplaceEndpointOrigin(ctx context.Context, endpoint string) *i
 //   - 构造鉴权头
 //   - 从响应 JSON 中按 path 提取文本（gjson path）
 //
-// 加新 provider 只需要在 modelMarketplaceProviderAdapters 里增加一个条目，无需触碰 callModelMarketplaceProvider / validateProvider。
+// 加新检测协议只需要在 modelMarketplaceProtocolAdapters 里增加一个条目；
+// 加 New API 渠道只需要在 modelMarketplaceProviderProtocols 里映射到协议。
 type modelMarketplaceProviderAdapter struct {
 	buildPath    func(model string) string
 	buildBody    func(model, prompt string) ([]byte, error)
@@ -160,11 +162,71 @@ type modelMarketplaceProviderAdapter struct {
 	textPath     string // gjson 提取响应文本的 path
 }
 
-// modelMarketplaceProviderAdapters 全部已支持的 provider。键值即 ModelMarketplaceProvider* 字符串。
+// modelMarketplaceProviderProtocols mirrors New API's channel list while keeping
+// the health checker implementation compact.
+//
+//nolint:gochecknoglobals // 静态查表，初始化后不变。
+var modelMarketplaceProviderProtocols = map[string]string{
+	ModelMarketplaceProviderOpenAI:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderOpenAIMax:      modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderOhMyGPT:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderCustom:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAILS:           modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAIProxy:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAPI2GPT:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAIGC2D:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAnthropic:      modelMarketplaceProtocolAnthropic,
+	ModelMarketplaceProviderAWS:            modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderGemini:         modelMarketplaceProtocolGemini,
+	ModelMarketplaceProviderDeepSeek:       modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAzure:          modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderVertexAI:       modelMarketplaceProtocolGemini,
+	ModelMarketplaceProviderXAI:            modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderMistral:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderCohere:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderOpenRouter:     modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderOllama:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderSiliconFlow:    modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderPerplexity:     modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderMoonshot:       modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAli:            modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderZhipu:          modelMarketplaceProtocolZhipu,
+	ModelMarketplaceProviderZhipuV4:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderBaidu:          modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderBaiduV2:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderTencent:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderXunfei:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderVolcEngine:     modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderLingYiWanWu:    modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderMiniMax:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderCoze:           modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAI360:          modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderXinference:     modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderDify:           modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderJina:           modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderCloudflare:     modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderPaLM:           modelMarketplaceProtocolGemini,
+	ModelMarketplaceProviderCodex:          modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderFastGPT:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderAIProxyLibrary: modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderMokaAI:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderMidjourney:     modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderMidjourneyPlus: modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderSunoAPI:        modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderKling:          modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderJimeng:         modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderVidu:           modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderSubmodel:       modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderDoubaoVideo:    modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderSora:           modelMarketplaceProtocolOpenAICompatible,
+	ModelMarketplaceProviderReplicate:      modelMarketplaceProtocolOpenAICompatible,
+}
+
+// modelMarketplaceProtocolAdapters 全部已支持的检测协议。
 //
 //nolint:gochecknoglobals // 适配器表是只读静态数据，初始化后不变更。
-var modelMarketplaceProviderAdapters = map[string]modelMarketplaceProviderAdapter{
-	ModelMarketplaceProviderOpenAI: {
+var modelMarketplaceProtocolAdapters = map[string]modelMarketplaceProviderAdapter{
+	modelMarketplaceProtocolOpenAICompatible: {
 		buildPath: func(string) string { return modelMarketplaceProviderOpenAIPath },
 		buildBody: func(model, prompt string) ([]byte, error) {
 			return json.Marshal(map[string]any{
@@ -179,7 +241,7 @@ var modelMarketplaceProviderAdapters = map[string]modelMarketplaceProviderAdapte
 		},
 		textPath: "choices.0.message.content",
 	},
-	ModelMarketplaceProviderAnthropic: {
+	modelMarketplaceProtocolAnthropic: {
 		buildPath: func(string) string { return modelMarketplaceProviderAnthropicPath },
 		buildBody: func(model, prompt string) ([]byte, error) {
 			return json.Marshal(map[string]any{
@@ -196,7 +258,7 @@ var modelMarketplaceProviderAdapters = map[string]modelMarketplaceProviderAdapte
 		},
 		textPath: "content.0.text",
 	},
-	ModelMarketplaceProviderGemini: {
+	modelMarketplaceProtocolGemini: {
 		// Gemini 把 model 名写在 URL path 上：/v1beta/models/{model}:generateContent
 		buildPath: func(model string) string { return fmt.Sprintf(modelMarketplaceProviderGeminiPathTemplate, model) },
 		buildBody: func(_, prompt string) ([]byte, error) {
@@ -213,16 +275,28 @@ var modelMarketplaceProviderAdapters = map[string]modelMarketplaceProviderAdapte
 		},
 		textPath: "candidates.0.content.parts.0.text",
 	},
+	modelMarketplaceProtocolZhipu: {
+		buildPath: func(model string) string { return fmt.Sprintf(modelMarketplaceProviderZhipuPathTemplate, model) },
+		buildBody: func(_, prompt string) ([]byte, error) {
+			return json.Marshal(map[string]any{
+				"prompt": []map[string]string{{"role": "user", "content": prompt}},
+			})
+		},
+		buildHeaders: func(apiKey string) map[string]string {
+			return map[string]string{"Authorization": buildModelMarketplaceZhipuToken(apiKey)}
+		},
+		textPath: "data.choices.0.content",
+	},
 }
 
 // isModelMarketplaceSupportedProvider 校验 provider 字符串是否在 adapter 表中。
 // 供 validate.go 的 validateProvider 复用，避免两份 switch 漂移。
 func isModelMarketplaceSupportedProvider(p string) bool {
-	_, ok := modelMarketplaceProviderAdapters[p]
+	_, ok := modelMarketplaceProviderProtocols[p]
 	return ok
 }
 
-// callModelMarketplaceProvider 通过 modelMarketplaceProviderAdapters 分发到具体实现。
+// callModelMarketplaceProvider 通过 provider -> protocol -> adapter 分发到具体实现。
 // opts 承载用户的自定义 headers / body 覆盖（可为 nil）。
 //
 // 返回值：
@@ -231,7 +305,7 @@ func isModelMarketplaceSupportedProvider(p string) bool {
 //   - status: HTTP 状态码
 //   - err: 网络 / 序列化错误
 func callModelMarketplaceProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *ModelMarketplaceCheckOptions) (extractedText, rawBody string, status int, err error) {
-	adapter, ok := modelMarketplaceProviderAdapters[provider]
+	adapter, ok := modelMarketplaceAdapterForProvider(provider)
 	if !ok {
 		return "", "", 0, fmt.Errorf("unsupported provider %q", provider)
 	}
@@ -246,6 +320,24 @@ func callModelMarketplaceProvider(ctx context.Context, provider, endpoint, apiKe
 		return "", "", status, err
 	}
 	return gjson.GetBytes(respBytes, adapter.textPath).String(), string(respBytes), status, nil
+}
+
+func modelMarketplaceAdapterForProvider(provider string) (modelMarketplaceProviderAdapter, bool) {
+	protocol, ok := modelMarketplaceProviderProtocols[provider]
+	if !ok {
+		return modelMarketplaceProviderAdapter{}, false
+	}
+	adapter, ok := modelMarketplaceProtocolAdapters[protocol]
+	if !ok {
+		return modelMarketplaceProviderAdapter{}, false
+	}
+	switch provider {
+	case ModelMarketplaceProviderMiniMax:
+		adapter.buildPath = func(string) string { return modelMarketplaceProviderMiniMaxPath }
+	case ModelMarketplaceProviderZhipuV4:
+		adapter.buildPath = func(string) string { return modelMarketplaceProviderZhipuV4Path }
+	}
+	return adapter, true
 }
 
 // mergeModelMarketplaceHeaders 把用户自定义 headers 合并到 adapter 默认 headers 上。
@@ -271,7 +363,7 @@ func mergeModelMarketplaceHeaders(base map[string]string, opts *ModelMarketplace
 //
 //   - off:     adapter 默认 body
 //   - merge:   adapter 默认 body 与 BodyOverride 浅合并；BodyOverride 中命中
-//     modelMarketplaceBodyMergeKeyDenyList[provider] 的 key 会被静默丢弃，避免破坏 challenge / model 路由
+//     modelMarketplaceBodyMergeKeyDenyList[protocol] 的 key 会被静默丢弃，避免破坏 challenge / model 路由
 //   - replace: 直接 marshal BodyOverride 作为完整 body
 //
 // 任何 mode 返回的 []byte 都已经是合法 JSON，可直接送入 postModelMarketplaceRawJSON。
@@ -301,7 +393,7 @@ func buildModelMarketplaceRequestBody(adapter modelMarketplaceProviderAdapter, p
 	if err := json.Unmarshal(defaultBody, &defaultMap); err != nil {
 		return nil, fmt.Errorf("unmarshal default body for merge: %w", err)
 	}
-	deny := modelMarketplaceBodyMergeKeyDenyList[provider]
+	deny := modelMarketplaceBodyMergeKeyDenyList[modelMarketplaceProviderProtocols[provider]]
 	for k, v := range opts.BodyOverride {
 		if deny[k] {
 			continue
@@ -321,9 +413,31 @@ func buildModelMarketplaceRequestBody(adapter modelMarketplaceProviderAdapter, p
 //
 //nolint:gochecknoglobals // 静态查表，初始化后不变。
 var modelMarketplaceBodyMergeKeyDenyList = map[string]map[string]bool{
-	ModelMarketplaceProviderOpenAI:    {"model": true, "messages": true, "stream": true},
-	ModelMarketplaceProviderAnthropic: {"model": true, "messages": true},
-	ModelMarketplaceProviderGemini:    {"contents": true},
+	modelMarketplaceProtocolOpenAICompatible: {"model": true, "messages": true, "stream": true},
+	modelMarketplaceProtocolAnthropic:        {"model": true, "messages": true},
+	modelMarketplaceProtocolGemini:           {"contents": true},
+	modelMarketplaceProtocolZhipu:            {"prompt": true, "incremental": true},
+}
+
+func buildModelMarketplaceZhipuToken(apiKey string) string {
+	parts := strings.Split(apiKey, ".")
+	if len(parts) != 2 {
+		return ""
+	}
+	nowMs := time.Now().UnixNano() / int64(time.Millisecond)
+	expMs := time.Now().Add(24*time.Hour).UnixNano() / int64(time.Millisecond)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"api_key":   parts[0],
+		"exp":       expMs,
+		"timestamp": nowMs,
+	})
+	token.Header["alg"] = "HS256"
+	token.Header["sign_type"] = "SIGN"
+	signed, err := token.SignedString([]byte(parts[1]))
+	if err != nil {
+		return ""
+	}
+	return signed
 }
 
 // postModelMarketplaceRawJSON 发送 POST + 已序列化好的 JSON 字节，限制响应体大小，返回响应字节、HTTP status、错误。

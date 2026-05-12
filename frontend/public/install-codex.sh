@@ -196,45 +196,106 @@ function selectModel(ids) {
   if (!ids.length) {
     throw new Error('No models were returned by the provider')
   }
-  const patterns = [
+  const preferredPatterns = [
     /^gpt-5/i,
     /codex/i,
     /^gpt-/i,
     /^o[0-9]/i,
   ]
-  for (const pattern of patterns) {
-    const candidates = ids.filter((id) => pattern.test(id))
-    if (candidates.length) {
-      return candidates.sort((a, b) => {
+  const fallbackPatterns = [
+    /^glm-5/i,
+    /minimax/i,
+    /claude.*sonnet/i,
+    /claude.*haiku/i,
+    /claude/i,
+  ]
+  const ordered = []
+  const pushCandidates = (patterns, sourceIds) => {
+    for (const pattern of patterns) {
+      const candidates = sourceIds.filter((id) => pattern.test(id))
+      candidates.sort((a, b) => {
         const keyCompare = modelSortKey(b).localeCompare(modelSortKey(a))
         return keyCompare || b.localeCompare(a)
-      })[0]
+      })
+      for (const candidate of candidates) {
+        if (!ordered.includes(candidate)) {
+          ordered.push(candidate)
+        }
+      }
     }
   }
-  const fallback = 'gpt-5.5'
-  console.error(`[XueDingToken] No Codex-compatible OpenAI models were returned by the provider. Using ${fallback}. Received: ${ids.join(', ')}`)
-  return fallback
+
+  pushCandidates(preferredPatterns, ids)
+  if (!ids.includes('gpt-5.5')) {
+    ordered.push('gpt-5.5')
+  }
+  pushCandidates(fallbackPatterns, ids)
+  const rest = ids
+    .filter((id) => !ordered.includes(id))
+    .sort((a, b) => {
+      const keyCompare = modelSortKey(b).localeCompare(modelSortKey(a))
+      return keyCompare || b.localeCompare(a)
+    })
+  ordered.push(...rest)
+  return ordered
+}
+
+async function canUseResponsesModel(model) {
+  const responsesUrl = `${String(apiUrl).replace(/\/+$/, '')}/responses`
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 20000)
+  try {
+    const response = await fetch(responsesUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        input: 'Reply with OK.',
+        max_output_tokens: 4,
+      }),
+      signal: controller.signal,
+    })
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`The API key was rejected by ${responsesUrl} with HTTP ${response.status}.`)
+    }
+    if (response.ok) {
+      return true
+    }
+    const text = await response.text().catch(() => '')
+    console.error(`[XueDingToken] Codex model probe failed for ${model}: HTTP ${response.status}${text ? ` ${text.slice(0, 160)}` : ''}`)
+    return false
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      console.error(`[XueDingToken] Codex model probe timed out for ${model}`)
+      return false
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function selectWorkingModel(ids) {
+  const candidates = selectModel(ids)
+  for (const candidate of candidates) {
+    if (await canUseResponsesModel(candidate)) {
+      if (!/^gpt-|codex|^o[0-9]/i.test(candidate)) {
+        console.error(`[XueDingToken] GPT/Codex models are not currently available through this key. Using working Responses model: ${candidate}`)
+      }
+      return candidate
+    }
+  }
+  throw new Error(`No returned model can be called through ${String(apiUrl).replace(/\/+$/, '')}/responses`)
 }
 
 async function resolveModel() {
   if (envModel) {
     return envModel
   }
-  const modelsUrl = `${String(apiUrl).replace(/\/+$/, '')}/models`
-  const response = await fetch(modelsUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (response.status === 401 || response.status === 403) {
-    throw new Error(`Unable to fetch provider models from ${modelsUrl}. The API key was rejected with HTTP ${response.status}.`)
-  }
-  if (!response.ok) {
-    throw new Error(`Unable to fetch provider models from ${modelsUrl}: HTTP ${response.status}`)
-  }
-  const payload = await response.json()
-  const ids = Array.isArray(payload.data)
-    ? payload.data.map((item) => String(item && item.id || '')).filter(Boolean)
-    : []
-  const selected = selectModel(ids)
+  const selected = 'gpt-5.5'
   console.error(`[XueDingToken] Selected Codex model: ${selected}`)
   return selected
 }
@@ -463,7 +524,17 @@ configure_apt_mirror_fallback() {
   tmpfile="$(mktemp)"
   case "$os_id" in
     ubuntu)
-      local mirror="${XDT_APT_MIRROR:-http://mirrors.aliyun.com/ubuntu/}"
+      local arch="unknown"
+      if command -v dpkg >/dev/null 2>&1; then
+        arch="$(dpkg --print-architecture 2>/dev/null || printf unknown)"
+      fi
+      local default_mirror="http://mirrors.aliyun.com/ubuntu/"
+      case "$arch" in
+        arm64|armhf|ppc64el|s390x|riscv64)
+          default_mirror="http://mirrors.aliyun.com/ubuntu-ports/"
+          ;;
+      esac
+      local mirror="${XDT_APT_MIRROR:-$default_mirror}"
       cat > "$tmpfile" <<EOF
 deb $mirror $codename main restricted universe multiverse
 deb $mirror $codename-updates main restricted universe multiverse

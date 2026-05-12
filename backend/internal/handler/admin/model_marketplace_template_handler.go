@@ -22,7 +22,7 @@ func NewModelMarketplaceTemplateHandler(templateService *service.ModelMarketplac
 
 type modelMarketplaceTemplateCreateRequest struct {
 	Name             string            `json:"name" binding:"required,max=100"`
-	Provider         string            `json:"provider" binding:"required,oneof=openai anthropic gemini"`
+	Provider         string            `json:"provider" binding:"required,max=50"`
 	Description      string            `json:"description" binding:"max=500"`
 	ExtraHeaders     map[string]string `json:"extra_headers"`
 	BodyOverrideMode string            `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`

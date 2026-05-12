@@ -16,6 +16,7 @@ import {
   PROVIDER_OPENAI,
   PROVIDER_ANTHROPIC,
   PROVIDER_GEMINI,
+  getModelMarketplaceProviderLabel,
   STATUS_OPERATIONAL,
   STATUS_DEGRADED,
   STATUS_FAILED,
@@ -57,10 +58,7 @@ export function useModelMarketplaceMonitorFormat() {
   }
 
   function providerLabel(p: Provider | string): string {
-    if (p === PROVIDER_OPENAI || p === PROVIDER_ANTHROPIC || p === PROVIDER_GEMINI) {
-      return t(`monitorCommon.providers.${p}`)
-    }
-    return p || '-'
+    return getModelMarketplaceProviderLabel(p)
   }
 
   function providerBadgeClass(p: Provider | string): string {

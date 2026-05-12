@@ -36,10 +36,10 @@
       <!-- Center: Primary navigation -->
       <nav
         v-if="user"
-        class="mx-2 flex min-w-0 flex-1 items-center justify-center lg:mx-4"
+        class="pointer-events-none absolute left-1/2 top-1/2 z-10 flex max-w-[calc(100vw-9rem)] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-x-auto px-1"
         aria-label="Primary navigation"
       >
-        <div class="flex max-w-full items-center gap-0.5 rounded-xl border border-gray-200/80 bg-white/85 p-1 shadow-sm backdrop-blur dark:border-dark-700/70 dark:bg-dark-800/75">
+        <div class="pointer-events-auto flex max-w-full items-center gap-0.5 rounded-xl border border-gray-200/80 bg-white/85 p-1 shadow-sm backdrop-blur dark:border-dark-700/70 dark:bg-dark-800/75">
           <router-link
             v-for="item in primaryTopNavItems"
             :key="item.path"
