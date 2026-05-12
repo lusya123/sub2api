@@ -3,17 +3,17 @@
     <!-- Background Decoration -->
     <div class="pointer-events-none fixed inset-0 bg-mesh-gradient"></div>
 
+    <!-- Global Header -->
+    <AppHeader :hide-sidebar="hideSidebar" />
+
     <!-- Sidebar -->
     <AppSidebar v-if="!hideSidebar" />
 
     <!-- Main Content Area -->
     <div
-      class="relative min-h-screen transition-all duration-300"
+      class="relative min-h-[calc(100vh_-_4rem)] transition-all duration-300"
       :class="mainAreaClass"
     >
-      <!-- Header -->
-      <AppHeader :hide-sidebar="hideSidebar" />
-
       <!-- Main Content -->
       <main :class="contentClass || 'p-4 md:p-6 lg:p-8'">
         <slot />

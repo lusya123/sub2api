@@ -1,8 +1,8 @@
 <template>
-  <header class="glass sticky top-0 z-30 border-b border-gray-200/50 dark:border-dark-700/50">
+  <header class="glass sticky top-0 z-50 border-b border-gray-200/50 dark:border-dark-700/50">
     <div class="relative flex h-16 items-center justify-between px-4 md:px-6">
-      <!-- Left: Mobile Menu Toggle + Page Title -->
-      <div class="flex flex-shrink-0 items-center gap-4">
+      <!-- Left: Mobile Menu Toggle + Brand + Page Title -->
+      <div class="flex min-w-0 flex-shrink-0 items-center gap-3">
         <button
           v-if="!hideSidebar"
           @click="toggleMobileSidebar"
@@ -13,17 +13,31 @@
         </button>
 
         <router-link
-          v-if="hideSidebar"
           :to="consolePath"
-          class="flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
+          class="flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
         >
-          <img src="/logo.png" :alt="siteName" class="h-8 w-8 rounded-lg">
-          <span class="hidden text-sm font-bold text-gray-950 dark:text-white sm:inline">
-            {{ siteName }}
+          <img :src="siteLogo || '/logo.png'" :alt="siteName" class="h-9 w-9 flex-shrink-0 rounded-xl object-contain shadow-glow">
+          <span class="hidden min-w-0 sm:block">
+            <span class="block truncate text-sm font-bold leading-5 text-gray-950 dark:text-white">
+              {{ siteName }}
+            </span>
+            <VersionBadge :version="siteVersion" class="-ml-1 scale-[0.82] origin-left" />
           </span>
         </router-link>
 
-        <div v-else class="hidden lg:block">
+        <div v-if="!hideSidebar && pageTitle" class="hidden min-w-0 items-center gap-3 xl:flex">
+          <div class="h-8 w-px bg-gray-200 dark:bg-dark-700"></div>
+          <div class="min-w-0">
+            <h1 class="truncate text-lg font-semibold text-gray-900 dark:text-white">
+              {{ pageTitle }}
+            </h1>
+            <p v-if="pageDescription" class="truncate text-xs text-gray-500 dark:text-dark-400">
+              {{ pageDescription }}
+            </p>
+          </div>
+        </div>
+
+        <div v-else-if="!hideSidebar" class="hidden lg:block">
           <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ pageTitle }}
           </h1>
@@ -255,6 +269,7 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
+import VersionBadge from '@/components/common/VersionBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const router = useRouter()
@@ -279,6 +294,8 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => appStore.docUrl)
 const siteName = computed(() => appStore.siteName || 'Sub2API')
+const siteLogo = computed(() => appStore.siteLogo)
+const siteVersion = computed(() => appStore.siteVersion)
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
 
 const consolePath = computed(() => {
