@@ -147,6 +147,7 @@ func validateAdminAPIKey(
 	})
 	c.Set(string(ContextKeyUserRole), admin.Role)
 	c.Set(string(ContextKeyUserEmail), admin.Email)
+	MarkTrustTier(c, TierUser)
 	c.Set("auth_method", "admin_api_key")
 	return true
 }
@@ -200,6 +201,7 @@ func validateJWTForAdmin(
 	})
 	c.Set(string(ContextKeyUserRole), user.Role)
 	c.Set(string(ContextKeyUserEmail), user.Email)
+	MarkTrustTier(c, TierUser)
 	c.Set("auth_method", "jwt")
 
 	return true

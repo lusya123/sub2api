@@ -62,6 +62,10 @@ func SetupRouter(
 		}
 		return nil
 	}))
+	r.Use(middleware2.TrustTierDetector())
+	r.Use(middleware2.NewBanCheck(redisClient))
+	r.Use(middleware2.NewGlobalRateLimiter(redisClient).Middleware())
+	r.Use(middleware2.NewBodyFingerprint(redisClient).Middleware())
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {

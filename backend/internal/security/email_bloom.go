@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"math/rand"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -90,7 +91,7 @@ func (f *emailBloomFilter) maybeContains(value string) bool {
 
 func InitEmailBloom(ctx context.Context, entClient *dbent.Client, cfg config.LoginProtectionConfig) error {
 	cfg = withLoginProtectionDefaults(cfg)
-	if !cfg.Enabled || !cfg.BloomEnabled {
+	if !cfg.Enabled || !cfg.BloomEnabled || os.Getenv("DEFENSE_BLOOM_FILTER_ENABLED") == "false" {
 		return nil
 	}
 	db, ok := SQLDBFromEnt(entClient)
@@ -147,6 +148,9 @@ WHERE provider_type = 'email'
 }
 
 func BloomMaybeContains(email string) bool {
+	if os.Getenv("DEFENSE_BLOOM_FILTER_ENABLED") == "false" {
+		return true
+	}
 	emailBloomMu.RLock()
 	defer emailBloomMu.RUnlock()
 	bf := emailBloom

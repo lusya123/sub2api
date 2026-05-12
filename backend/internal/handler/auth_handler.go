@@ -50,12 +50,18 @@ func (h *AuthHandler) ConfigureLoginDefense(loginDefense *security.LoginDefense)
 }
 
 func loginAttemptFromRequest(c *gin.Context, email string) security.LoginAttempt {
-	return security.NewLoginAttempt(
+	attempt := security.NewLoginAttempt(
 		email,
 		ip.GetClientIP(c),
 		c.GetHeader("X-Forwarded-For"),
 		c.GetHeader("User-Agent"),
 	)
+	if bodyHash, ok := c.Get("defense_body_hash"); ok {
+		if s, ok := bodyHash.(string); ok {
+			attempt.BodyHash = s
+		}
+	}
+	return attempt
 }
 
 func respondWithLoginDefenseError(c *gin.Context, err error) {

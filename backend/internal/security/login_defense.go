@@ -33,6 +33,7 @@ type LoginAttempt struct {
 	IP            string
 	XForwardedFor string
 	UserAgent     string
+	BodyHash      string
 	Started       time.Time
 }
 
@@ -124,6 +125,7 @@ func (d *LoginDefense) Audit(attempt LoginAttempt, result string) {
 		attempt.IP,
 		attempt.XForwardedFor,
 		attempt.UserAgent,
+		attempt.BodyHash,
 		result,
 		time.Since(attempt.Started),
 	)

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type loginAuditEvent struct {
 	XForwardedFor string
 	UserAgent     string
 	Fingerprint   string
+	BodyHash      string
 	Result        string
 	DurationMS    int
 }
@@ -50,8 +52,8 @@ func NewLoginAuditorFromEnt(entClient *dbent.Client, cfg config.LoginProtectionC
 	return a
 }
 
-func (a *LoginAuditor) AsyncLog(email, ip, xForwardedFor, userAgent, result string, duration time.Duration) {
-	if a == nil || !a.enabled {
+func (a *LoginAuditor) AsyncLog(email, ip, xForwardedFor, userAgent, bodyHash, result string, duration time.Duration) {
+	if a == nil || !a.enabled || os.Getenv("DEFENSE_LOGIN_AUDIT_ENABLED") == "false" {
 		return
 	}
 	event := loginAuditEvent{
@@ -61,6 +63,7 @@ func (a *LoginAuditor) AsyncLog(email, ip, xForwardedFor, userAgent, result stri
 		XForwardedFor: strings.TrimSpace(xForwardedFor),
 		UserAgent:     userAgent,
 		Fingerprint:   auditFingerprint(ip, xForwardedFor, userAgent),
+		BodyHash:      truncateString(strings.TrimSpace(bodyHash), 16),
 		Result:        truncateString(result, 32),
 		DurationMS:    int(duration.Milliseconds()),
 	}
@@ -99,15 +102,15 @@ func (a *LoginAuditor) flush(batch []loginAuditEvent) {
 	defer cancel()
 
 	var b strings.Builder
-	args := make([]any, 0, len(batch)*8)
-	_, _ = b.WriteString("INSERT INTO login_attempts (created_at, email, ip, x_forwarded_for, user_agent, fingerprint, result, duration_ms) VALUES ")
+	args := make([]any, 0, len(batch)*9)
+	_, _ = b.WriteString("INSERT INTO login_attempts (created_at, email, ip, x_forwarded_for, user_agent, fingerprint, body_hash, result, duration_ms) VALUES ")
 	for i, event := range batch {
 		if i > 0 {
 			_, _ = b.WriteString(",")
 		}
-		base := i*8 + 1
-		_, _ = b.WriteString(fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6, base+7))
-		args = append(args, event.CreatedAt, event.Email, event.IP, event.XForwardedFor, event.UserAgent, event.Fingerprint, event.Result, event.DurationMS)
+		base := i*9 + 1
+		_, _ = b.WriteString(fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8))
+		args = append(args, event.CreatedAt, event.Email, event.IP, event.XForwardedFor, event.UserAgent, event.Fingerprint, event.BodyHash, event.Result, event.DurationMS)
 	}
 	if _, err := a.db.ExecContext(ctx, b.String(), args...); err != nil {
 		slog.Warn("login audit flush failed", "error", err, "events", len(batch))
