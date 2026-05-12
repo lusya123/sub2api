@@ -1,9 +1,10 @@
 <template>
   <header class="glass sticky top-0 z-30 border-b border-gray-200/50 dark:border-dark-700/50">
-    <div class="flex h-16 items-center justify-between px-4 md:px-6">
+    <div class="relative flex h-16 items-center justify-between px-4 md:px-6">
       <!-- Left: Mobile Menu Toggle + Page Title -->
-      <div class="flex items-center gap-4">
+      <div class="flex flex-shrink-0 items-center gap-4">
         <button
+          v-if="!hideSidebar"
           @click="toggleMobileSidebar"
           class="btn-ghost btn-icon lg:hidden"
           aria-label="Toggle Menu"
@@ -11,7 +12,18 @@
           <Icon name="menu" size="md" />
         </button>
 
-        <div class="hidden lg:block">
+        <router-link
+          v-if="hideSidebar"
+          :to="consolePath"
+          class="flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
+        >
+          <img src="/logo.png" :alt="siteName" class="h-8 w-8 rounded-lg">
+          <span class="hidden text-sm font-bold text-gray-950 dark:text-white sm:inline">
+            {{ siteName }}
+          </span>
+        </router-link>
+
+        <div v-else class="hidden lg:block">
           <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ pageTitle }}
           </h1>
@@ -21,8 +33,30 @@
         </div>
       </div>
 
+      <!-- Center: Primary navigation -->
+      <nav
+        v-if="user"
+        class="mx-2 flex min-w-0 flex-1 items-center justify-center lg:mx-4"
+        aria-label="Primary navigation"
+      >
+        <div class="flex max-w-full items-center gap-0.5 rounded-xl border border-gray-200/80 bg-white/85 p-1 shadow-sm backdrop-blur dark:border-dark-700/70 dark:bg-dark-800/75">
+          <router-link
+            v-for="item in primaryTopNavItems"
+            :key="item.path"
+            :to="item.path"
+            class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-semibold transition-colors"
+            :class="isPrimaryTopNavActive(item.key)
+              ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-dark-700 dark:hover:text-white'"
+          >
+            <Icon :name="item.icon" size="sm" />
+            <span class="hidden sm:inline">{{ item.label }}</span>
+          </router-link>
+        </div>
+      </nav>
+
       <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
-      <div class="flex items-center gap-3">
+      <div class="flex flex-shrink-0 items-center gap-3">
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
@@ -226,17 +260,50 @@ import Icon from '@/components/icons/Icon.vue'
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+
+const props = withDefaults(defineProps<{
+  hideSidebar?: boolean
+}>(), {
+  hideSidebar: false,
+})
+
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
 
 const user = computed(() => authStore.user)
+const hideSidebar = computed(() => props.hideSidebar)
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => appStore.docUrl)
+const siteName = computed(() => appStore.siteName || 'Sub2API')
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
+
+const consolePath = computed(() => {
+  return authStore.canAccessAdmin ? '/admin/dashboard' : '/dashboard'
+})
+
+const primaryTopNavItems = computed(() => [
+  {
+    key: 'console',
+    path: consolePath.value,
+    label: t('nav.console'),
+    icon: 'home' as const,
+  },
+  {
+    key: 'marketplace',
+    path: '/model-marketplace',
+    label: t('nav.modelMarketplace'),
+    icon: 'grid' as const,
+  },
+])
+
+function isPrimaryTopNavActive(key: string): boolean {
+  if (key === 'marketplace') return route.path === '/model-marketplace'
+  return route.path !== '/model-marketplace'
+}
 
 // 只在标准模式的管理员下显示新手引导按钮
 const showOnboardingButton = computed(() => {

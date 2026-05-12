@@ -341,6 +341,7 @@ export default {
 
   // Navigation
   nav: {
+    console: 'Console',
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
@@ -1043,6 +1044,7 @@ export default {
     totalModels: '{count} models',
     visibleModels: '{count} models',
     paginationSummary: 'Showing {start}-{end} of {total}',
+    searchSummary: 'Search: {query}',
     allFilters: 'All enabled models from admin marketplace monitors',
     allProviders: 'All Providers',
     allStatuses: 'All Statuses',
@@ -1052,6 +1054,7 @@ export default {
     detailButton: 'Details',
     price: 'Price',
     priceUnavailable: 'Price unavailable',
+    unitPerThousandTokens: '/ 1K token',
     availability7d: '7d Availability',
     loadError: 'Failed to load model marketplace',
     detailLoadError: 'Failed to load model detail',
@@ -1112,7 +1115,9 @@ export default {
     },
     empty: {
       title: 'No models available',
-      description: 'No model marketplace entries have been configured yet.'
+      description: 'No model marketplace entries have been configured yet.',
+      filteredTitle: 'No matching models',
+      filteredDescription: 'Adjust the search keywords or filters and try again.'
     }
   },
 

@@ -341,6 +341,7 @@ export default {
 
   // Navigation
   nav: {
+    console: '控制台',
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',
@@ -1047,6 +1048,7 @@ export default {
     totalModels: '{count} 个模型',
     visibleModels: '{count} 个模型',
     paginationSummary: '显示第 {start}-{end} 个，共 {total} 个',
+    searchSummary: '搜索：{query}',
     allFilters: '展示管理员模型广场中已启用的全部模型',
     allProviders: '全部供应商',
     allStatuses: '全部状态',
@@ -1056,6 +1058,7 @@ export default {
     detailButton: '详情',
     price: '价格',
     priceUnavailable: '暂无价格',
+    unitPerThousandTokens: '/ 1K token',
     availability7d: '7 天可用率',
     loadError: '加载模型广场失败',
     detailLoadError: '加载模型详情失败',
@@ -1116,7 +1119,9 @@ export default {
     },
     empty: {
       title: '暂无可显示的模型',
-      description: '管理员尚未配置模型广场。'
+      description: '管理员尚未配置模型广场。',
+      filteredTitle: '没有匹配的模型',
+      filteredDescription: '请调整搜索关键词或筛选条件后重试。'
     }
   },
 

@@ -197,14 +197,10 @@ function selectModel(ids) {
     throw new Error('No models were returned by the provider')
   }
   const patterns = [
-    /codex/i,
     /^gpt-5/i,
+    /codex/i,
     /^gpt-/i,
     /^o[0-9]/i,
-    /^claude-sonnet/i,
-    /^claude-opus/i,
-    /^claude-haiku/i,
-    /^claude-/i,
   ]
   for (const pattern of patterns) {
     const candidates = ids.filter((id) => pattern.test(id))
@@ -215,7 +211,9 @@ function selectModel(ids) {
       })[0]
     }
   }
-  return ids.sort().reverse()[0]
+  const fallback = 'gpt-5.5'
+  console.error(`[XueDingToken] No Codex-compatible OpenAI models were returned by the provider. Using ${fallback}. Received: ${ids.join(', ')}`)
+  return fallback
 }
 
 async function resolveModel() {
@@ -253,16 +251,28 @@ fs.writeFileSync(
 )
 
 const tomlString = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+const trustedProjects = Array.from(new Set([os.homedir(), process.cwd()].filter(Boolean)))
+  .map((projectPath) => `\n[projects."${tomlString(projectPath)}"]\ntrust_level = "trusted"`)
+  .join('\n')
 fs.writeFileSync(
   path.join(codexDir, 'config.toml'),
   `model_provider = "xuedingtoken"
 model = "${tomlString(model)}"
+review_model = "${tomlString(model)}"
+model_reasoning_effort = "xhigh"
+approval_policy = "on-request"
+default_permissions = ":workspace"
+disable_response_storage = true
+network_access = "enabled"
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
 
 [model_providers.xuedingtoken]
 name = "XueDingToken"
 base_url = "${tomlString(apiUrl)}"
 wire_api = "responses"
 requires_openai_auth = true
+${trustedProjects}
 `,
   { mode: 0o600 },
 )
@@ -560,6 +570,30 @@ install_ccswitch() {
   esac
 }
 
+prewarm_codex_sandbox() {
+  if [[ "${XDT_SKIP_CODEX_SANDBOX_PREWARM:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  log "Preparing Codex sandbox"
+  case "$(uname -s)" in
+    Darwin)
+      if codex sandbox macos --permissions-profile :workspace --cd "$HOME" /usr/bin/true >/dev/null 2>&1; then
+        log "Codex sandbox is ready"
+      else
+        log "Codex sandbox prewarm failed; Codex will finish setup on first launch"
+      fi
+      ;;
+    Linux)
+      if codex sandbox linux --permissions-profile :workspace --cd "$HOME" /bin/true >/dev/null 2>&1; then
+        log "Codex sandbox is ready"
+      else
+        log "Codex sandbox prewarm failed; Codex will finish setup on first launch"
+      fi
+      ;;
+  esac
+}
+
 ensure_ccswitch() {
   local bin=""
   if bin="$(detect_ccswitch)"; then
@@ -602,15 +636,19 @@ main() {
       --homepage "https://xuedingtoken.com" \
       --icon codex \
       --switch
-    log "Codex CLI is configured through CC Switch"
+    write_codex_direct_config "$api_url" "$XDT_TOKEN"
+    log "Codex CLI is configured through CC Switch and normalized to the selected Codex model"
   else
     log "Configuring Codex CLI directly because CC Switch CLI does not support Codex import"
     write_codex_direct_config "$api_url" "$XDT_TOKEN"
     log "Codex CLI is configured directly"
   fi
 
+  prewarm_codex_sandbox
+
   if [[ "${XDT_SKIP_LAUNCH_CODEX:-0}" != "1" ]]; then
     log "Starting Codex CLI"
+    cd "$HOME"
     exec codex
   fi
 }

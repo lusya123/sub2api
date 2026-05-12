@@ -227,7 +227,7 @@ function Start-CodexTerminal {
   }
 
   Write-XdtLog 'Starting Codex CLI in a new terminal'
-  $command = 'codex'
+  $command = '$env:TERM="xterm-256color"; codex'
   $workingDirectory = [Environment]::GetFolderPath('UserProfile')
 
   if (Get-Command wt.exe -ErrorAction SilentlyContinue) {
@@ -250,6 +250,57 @@ function Start-CodexTerminal {
     '-Command',
     $command
   ) | Out-Null
+}
+
+function Initialize-CodexSandbox {
+  if ($env:XDT_SKIP_CODEX_SANDBOX_PREWARM -eq '1') {
+    return
+  }
+
+  if ([Console]::IsInputRedirected) {
+    Write-XdtLog 'Codex sandbox prewarm skipped because this is not an interactive terminal'
+    return
+  }
+
+  Write-XdtLog 'Preparing Codex sandbox'
+  $codexCommand = Get-Command codex.cmd -ErrorAction SilentlyContinue
+  if (-not $codexCommand) {
+    $codexCommand = Get-Command codex -ErrorAction SilentlyContinue
+  }
+  if (-not $codexCommand) {
+    Write-XdtLog 'Codex sandbox prewarm skipped because Codex CLI was not found on PATH'
+    return
+  }
+
+  $previousTerm = $env:TERM
+  if ([string]::IsNullOrWhiteSpace($env:TERM) -or $env:TERM -eq 'dumb') {
+    $env:TERM = 'xterm-256color'
+  }
+  try {
+    & $codexCommand.Source @(
+      'sandbox',
+      'windows',
+      '--permissions-profile',
+      ':workspace',
+      '--cd',
+      $env:USERPROFILE,
+      'cmd.exe',
+      '/c',
+      'exit',
+      '0'
+    )
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -eq 0) {
+      Write-XdtLog 'Codex sandbox is ready'
+    } else {
+      Write-XdtLog "Codex sandbox prewarm failed with exit code $exitCode; Codex will finish setup on first launch"
+    }
+  } catch {
+    Write-XdtLog "Codex sandbox prewarm failed; Codex will finish setup on first launch: $($_.Exception.Message)"
+  } finally {
+    $env:TERM = $previousTerm
+  }
 }
 
 function Test-VcRuntime {
@@ -674,14 +725,10 @@ function Select-CodexModel([string[]]$ModelIds) {
   }
 
   $patterns = @(
-    '(?i)codex',
     '(?i)^gpt-5',
+    '(?i)codex',
     '(?i)^gpt-',
-    '(?i)^o[0-9]',
-    '(?i)^claude-sonnet',
-    '(?i)^claude-opus',
-    '(?i)^claude-haiku',
-    '(?i)^claude-'
+    '(?i)^o[0-9]'
   )
 
   foreach ($pattern in $patterns) {
@@ -694,7 +741,9 @@ function Select-CodexModel([string[]]$ModelIds) {
     }
   }
 
-  return ($ModelIds | Sort-Object -Descending | Select-Object -First 1)
+  $fallback = 'gpt-5.5'
+  Write-XdtLog "No Codex-compatible OpenAI models were returned by the provider. Using $fallback. Received: $($ModelIds -join ', ')"
+  return $fallback
 }
 
 function Resolve-CodexModel([string]$ApiUrl, [string]$Token) {
@@ -737,16 +786,28 @@ function Write-CodexDirectConfig([string]$ApiUrl, [string]$Token) {
   $model = Resolve-CodexModel $ApiUrl $Token
   $escapedUrl = $ApiUrl.Replace('\', '\\').Replace('"', '\"')
   $escapedModel = $model.Replace('\', '\\').Replace('"', '\"')
+  $escapedProjectPath = $env:USERPROFILE.Replace('\', '\\').Replace('"', '\"')
   $configPath = Join-Path $codexDir 'config.toml'
-  $config = @"
+$config = @"
 model_provider = "xuedingtoken"
 model = "$escapedModel"
+review_model = "$escapedModel"
+model_reasoning_effort = "xhigh"
+approval_policy = "on-request"
+default_permissions = ":workspace"
+disable_response_storage = true
+network_access = "enabled"
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
 
 [model_providers.xuedingtoken]
 name = "XueDingToken"
 base_url = "$escapedUrl"
 wire_api = "responses"
 requires_openai_auth = true
+
+[projects."$escapedProjectPath"]
+trust_level = "trusted"
 "@
   [IO.File]::WriteAllText($configPath, $config, $utf8NoBom)
 
@@ -902,12 +963,14 @@ Install-CcSwitchShellIntegration $ccSwitch
 Write-XdtLog 'Importing and switching XueDingToken provider'
 if (Test-XdtImportSupport $ccSwitch) {
   Invoke-XdtImport $ccSwitch $apiUrl $env:XDT_TOKEN
-  Write-XdtLog 'Codex CLI is configured through CC Switch'
+  Write-CodexDirectConfig $apiUrl $env:XDT_TOKEN
+  Write-XdtLog 'Codex CLI is configured through CC Switch and normalized to the selected Codex model'
 } else {
   Write-XdtLog 'Configuring Codex CLI directly because CC Switch CLI does not support Codex import'
   Write-CodexDirectConfig $apiUrl $env:XDT_TOKEN
   Write-XdtLog 'Codex CLI is configured directly'
 }
 
+Initialize-CodexSandbox
 Start-CcSwitchGui $ccSwitch
 Start-CodexTerminal

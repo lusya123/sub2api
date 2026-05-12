@@ -1,33 +1,20 @@
 <template>
-  <AppLayout>
-    <div class="mx-auto max-w-[1680px] space-y-5">
-      <nav class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200/80 bg-white/80 p-1 shadow-sm backdrop-blur dark:border-dark-700/70 dark:bg-dark-800/70">
-        <router-link
-          v-for="item in topNavItems"
-          :key="item.path"
-          :to="item.path"
-          class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
-          :class="item.active ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-dark-700 dark:hover:text-white'"
-        >
-          <Icon :name="item.icon" size="sm" />
-          {{ item.label }}
-        </router-link>
-      </nav>
-
-      <section class="rounded-xl border border-gray-200/80 bg-white/85 p-4 shadow-sm backdrop-blur dark:border-dark-700/70 dark:bg-dark-800/75">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              <span>{{ t('modelMarketplaceStatus.title') }}</span>
-              <span class="h-1 w-1 rounded-full bg-gray-300 dark:bg-dark-600"></span>
-              <span>{{ t('modelMarketplaceStatus.totalModels', { count: modelCards.length }, `${modelCards.length} models`) }}</span>
-            </div>
-            <h2 class="mt-1 text-2xl font-bold text-gray-950 dark:text-white">
-              {{ t('modelMarketplaceStatus.squareHeading', 'Model Square') }}
-            </h2>
+  <AppLayout hide-sidebar content-class="p-0">
+    <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary-50/45 via-white to-white px-4 py-8 dark:from-dark-900 dark:via-dark-950 dark:to-dark-950 md:px-8 lg:px-10">
+      <div class="mx-auto max-w-[1500px] space-y-8">
+        <section class="mx-auto max-w-3xl pt-2 text-center md:pt-6">
+          <div class="text-sm font-semibold text-gray-500 dark:text-gray-400">
+            {{ t('modelMarketplaceStatus.title') }}
           </div>
+          <h1 class="mt-3 text-4xl font-black text-gray-950 dark:text-white md:text-5xl">
+            {{ t('modelMarketplaceStatus.squareHeading', 'Model Square') }}
+          </h1>
+          <p class="mx-auto mt-4 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">
+            {{ t('modelMarketplaceStatus.description') }}
+            {{ t('modelMarketplaceStatus.totalModels', { count: modelCards.length }, `${modelCards.length} models`) }}
+          </p>
 
-          <div class="relative w-full xl:w-[560px]">
+          <div class="relative mx-auto mt-7 w-full max-w-2xl">
             <Icon
               name="search"
               size="md"
@@ -43,25 +30,10 @@
               ⌘K
             </kbd>
           </div>
-        </div>
+        </section>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div
-            v-for="stat in summaryStats"
-            :key="stat.label"
-            class="rounded-lg border border-gray-100 bg-gray-50/70 px-4 py-3 dark:border-dark-700 dark:bg-dark-900/35"
-          >
-            <div class="text-xs text-gray-500 dark:text-gray-400">{{ stat.label }}</div>
-            <div class="mt-1 flex items-end justify-between gap-3">
-              <div class="font-mono text-xl font-bold text-gray-950 dark:text-white">{{ stat.value }}</div>
-              <span class="text-xs font-medium" :class="stat.tone">{{ stat.hint }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div class="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside class="space-y-4 rounded-xl border border-gray-200/80 bg-white/85 p-4 shadow-sm dark:border-dark-700/70 dark:bg-dark-800/75 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+        <div class="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside class="space-y-4 rounded-lg border border-gray-200/80 bg-white/90 p-4 shadow-sm backdrop-blur dark:border-dark-700/70 dark:bg-dark-900/80 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
           <div class="flex items-start justify-between gap-3">
             <div>
               <h3 class="text-base font-bold text-gray-950 dark:text-white">
@@ -120,9 +92,9 @@
         </aside>
 
         <section class="min-w-0 space-y-4">
-          <div class="flex flex-col gap-3 rounded-xl border border-gray-200/80 bg-white/85 p-4 shadow-sm dark:border-dark-700/70 dark:bg-dark-800/75 2xl:flex-row 2xl:items-center 2xl:justify-between">
+          <div class="flex flex-col gap-3 rounded-lg border border-gray-200/80 bg-white/90 p-3 shadow-sm dark:border-dark-700/70 dark:bg-dark-900/80 2xl:flex-row 2xl:items-center 2xl:justify-between">
             <div class="flex min-w-0 items-center gap-3">
-              <div class="grid h-10 w-10 place-items-center rounded-lg bg-gray-950 text-white dark:bg-white dark:text-gray-950">
+              <div class="grid h-9 w-9 place-items-center rounded-lg bg-gray-950 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">
                 {{ filteredModelCards.length }}
               </div>
               <div class="min-w-0">
@@ -196,27 +168,27 @@
 
           <EmptyState
             v-else-if="filteredModelCards.length === 0"
-            :title="t('modelMarketplaceStatus.empty.title')"
-            :description="t('modelMarketplaceStatus.empty.description')"
+            :title="emptyStateTitle"
+            :description="emptyStateDescription"
           />
 
           <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
             <article
               v-for="card in pagedModelCards"
               :key="card.key"
-              class="group flex min-h-[210px] min-w-0 flex-col rounded-xl border border-gray-200/80 bg-white/90 p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card-hover dark:border-dark-700/70 dark:bg-dark-800/75 dark:hover:border-primary-500/30"
+              class="group flex min-h-[188px] min-w-0 flex-col rounded-lg border border-gray-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-dark-700/70 dark:bg-dark-900/80 dark:hover:border-primary-500/30"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="flex min-w-0 items-start gap-3">
                   <span
-                    class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-xl ring-1 ring-black/5 dark:ring-white/10"
+                    class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-lg ring-1 ring-black/5 dark:ring-white/10"
                     :class="[providerGradient(card.provider), providerTintClass(card.provider)]"
                   >
-                    <ProviderIcon :provider="card.provider" :size="22" />
+                    <ProviderIcon :provider="card.provider" :size="20" />
                   </span>
 
                   <div class="min-w-0">
-                    <h3 class="truncate font-mono text-lg font-bold text-gray-950 dark:text-white">
+                    <h3 class="truncate font-mono text-base font-bold text-gray-950 dark:text-white">
                       {{ card.model }}
                     </h3>
                     <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
@@ -247,11 +219,11 @@
                 </div>
               </div>
 
-              <p class="mt-4 line-clamp-2 min-h-[40px] text-sm leading-5 text-gray-600 dark:text-gray-300">
+              <p class="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-gray-600 dark:text-gray-300">
                 {{ card.description }}
               </p>
 
-              <div class="mt-4 flex flex-wrap items-center gap-2">
+              <div class="mt-3 flex flex-wrap items-center gap-2">
                 <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="statusBadgeClass(card.status)">
                   {{ statusLabel(card.status) }}
                 </span>
@@ -270,21 +242,19 @@
                 </span>
               </div>
 
-              <div class="mt-auto grid grid-cols-3 gap-2 pt-4">
-                <MetricCell
-                  :label="t('monitorCommon.dialogLatency')"
-                  :value="formatLatency(card.latencyMs)"
-                  :suffix="card.latencyMs == null ? '' : 'ms'"
-                />
-                <MetricCell
-                  :label="t('monitorCommon.endpointPing')"
-                  :value="formatLatency(card.pingLatencyMs)"
-                  :suffix="card.pingLatencyMs == null ? '' : 'ms'"
-                />
-                <MetricCell
-                  :label="t('modelMarketplaceStatus.availability7d', '7d Availability')"
-                  :value="formatPercent(card.availability7d)"
-                />
+              <div class="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-dark-800 dark:text-gray-400">
+                <span>
+                  {{ t('monitorCommon.dialogLatency') }}
+                  <strong class="ml-1 font-mono text-gray-900 dark:text-gray-100">{{ formatMetric(formatLatency(card.latencyMs), card.latencyMs == null ? '' : 'ms') }}</strong>
+                </span>
+                <span>
+                  {{ t('monitorCommon.endpointPing') }}
+                  <strong class="ml-1 font-mono text-gray-900 dark:text-gray-100">{{ formatMetric(formatLatency(card.pingLatencyMs), card.pingLatencyMs == null ? '' : 'ms') }}</strong>
+                </span>
+                <span>
+                  {{ t('modelMarketplaceStatus.availability7d', '7d Availability') }}
+                  <strong class="ml-1 font-mono text-gray-900 dark:text-gray-100">{{ formatPercent(card.availability7d) }}</strong>
+                </span>
               </div>
             </article>
           </div>
@@ -298,10 +268,10 @@
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <select v-model.number="pageSize" class="input h-9 w-28 rounded-lg py-1 text-sm">
-                <option :value="12">12 / page</option>
-                <option :value="24">24 / page</option>
-                <option :value="48">48 / page</option>
-                <option :value="96">96 / page</option>
+                <option :value="12">{{ t('pagination.perPage') }} 12</option>
+                <option :value="24">{{ t('pagination.perPage') }} 24</option>
+                <option :value="48">{{ t('pagination.perPage') }} 48</option>
+                <option :value="96">{{ t('pagination.perPage') }} 96</option>
               </select>
               <button
                 type="button"
@@ -310,7 +280,7 @@
                 @click="currentPage = safeCurrentPage - 1"
               >
                 <Icon name="chevronLeft" size="xs" />
-                {{ t('common.previous', 'Previous') }}
+                {{ t('pagination.previous', 'Previous') }}
               </button>
               <span class="rounded-lg bg-gray-100 px-3 py-2 font-mono text-sm font-semibold text-gray-700 dark:bg-dark-700 dark:text-gray-200">
                 {{ safeCurrentPage }} / {{ totalPages }}
@@ -321,13 +291,14 @@
                 :disabled="safeCurrentPage >= totalPages"
                 @click="currentPage = safeCurrentPage + 1"
               >
-                {{ t('common.next', 'Next') }}
+                {{ t('pagination.next', 'Next') }}
                 <Icon name="chevronRight" size="xs" />
               </button>
             </div>
           </div>
         </section>
       </div>
+    </div>
     </div>
 
     <ModelMarketplaceDetailDialog
@@ -342,7 +313,6 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { PropType } from 'vue'
-import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -405,7 +375,6 @@ interface MarketplaceModelCard {
 }
 
 const { t } = useI18n()
-const route = useRoute()
 const appStore = useAppStore()
 const {
   statusLabel,
@@ -447,27 +416,6 @@ const PROVIDER_TINT: Record<string, string> = {
   anthropic: 'text-orange-600 dark:text-orange-300',
   gemini: 'text-sky-600 dark:text-sky-300',
 }
-
-const topNavItems = computed(() => [
-  {
-    path: '/model-marketplace',
-    label: t('nav.modelMarketplace'),
-    icon: 'grid' as const,
-    active: route.path === '/model-marketplace',
-  },
-  {
-    path: '/status',
-    label: t('nav.modelStatus'),
-    icon: 'chart' as const,
-    active: route.path === '/status',
-  },
-  {
-    path: '/available-channels',
-    label: t('nav.availableChannels'),
-    icon: 'server' as const,
-    active: route.path === '/available-channels',
-  },
-])
 
 const modelCards = computed<MarketplaceModelCard[]>(() => {
   return items.value.flatMap((monitor) => {
@@ -520,6 +468,18 @@ const paginationSummary = computed(() => {
   )
 })
 
+const emptyStateTitle = computed(() => {
+  return modelCards.value.length === 0
+    ? t('modelMarketplaceStatus.empty.title')
+    : t('modelMarketplaceStatus.empty.filteredTitle')
+})
+
+const emptyStateDescription = computed(() => {
+  return modelCards.value.length === 0
+    ? t('modelMarketplaceStatus.empty.description')
+    : t('modelMarketplaceStatus.empty.filteredDescription')
+})
+
 watch(
   [searchQuery, groupFilter, vendorFilter, tagFilter, billingFilter, endpointFilter, healthFilter, pageSize],
   () => {
@@ -527,41 +487,8 @@ watch(
   },
 )
 
-const summaryStats = computed(() => {
-  const available = modelCards.value.filter((m) => m.health === 'available').length
-  const degraded = modelCards.value.filter((m) => m.health === 'degraded').length
-  const unavailable = modelCards.value.filter((m) => m.health === 'unavailable').length
-  const providerCount = new Set(modelCards.value.map((m) => m.vendor)).size
-  return [
-    {
-      label: t('modelMarketplaceStatus.stats.total', 'Total models'),
-      value: modelCards.value.length,
-      hint: `${providerCount} ${t('modelMarketplaceStatus.stats.providers', 'providers')}`,
-      tone: 'text-gray-500 dark:text-gray-400',
-    },
-    {
-      label: t('modelMarketplaceStatus.stats.available', 'Available'),
-      value: available,
-      hint: modelCards.value.length ? `${Math.round((available / modelCards.value.length) * 100)}%` : '-',
-      tone: 'text-emerald-600 dark:text-emerald-300',
-    },
-    {
-      label: t('modelMarketplaceStatus.stats.degraded', 'Degraded'),
-      value: degraded,
-      hint: t('monitorCommon.status.degraded'),
-      tone: 'text-amber-600 dark:text-amber-300',
-    },
-    {
-      label: t('modelMarketplaceStatus.stats.unavailable', 'Unavailable'),
-      value: unavailable,
-      hint: t('monitorCommon.status.failed'),
-      tone: 'text-red-600 dark:text-red-300',
-    },
-  ]
-})
-
 const activeFilterSummary = computed(() => {
-  const parts = [
+  const parts = [searchFilterSummary.value,
     labelForActive(groupOptions.value, groupFilter.value),
     labelForActive(vendorOptions.value, vendorFilter.value),
     labelForActive(tagOptions.value, tagFilter.value),
@@ -573,6 +500,12 @@ const activeFilterSummary = computed(() => {
     return t('modelMarketplaceStatus.allFilters', 'All configured models from admin marketplace monitors')
   }
   return parts.join(' / ')
+})
+
+const searchFilterSummary = computed(() => {
+  const query = searchQuery.value.trim()
+  if (!query) return ''
+  return t('modelMarketplaceStatus.searchSummary', { query }, `Search: ${query}`)
 })
 
 const groupOptions = computed<FilterOption[]>(() => {
@@ -588,13 +521,13 @@ const groupOptions = computed<FilterOption[]>(() => {
 })
 
 const vendorOptions = computed<FilterOption[]>(() => {
-  const values = uniqueSorted(modelCards.value.map((m) => m.vendor))
+  const values = uniqueSorted(modelCards.value.map((m) => m.provider))
   return [
     { value: 'all', label: t('modelMarketplaceStatus.filters.allProviders', 'All Providers'), count: filterCards(['vendor']).length },
     ...values.map((value) => ({
       value,
-      label: value,
-      count: filterCards(['vendor']).filter((m) => m.vendor === value).length,
+      label: providerLabel(value as Provider),
+      count: filterCards(['vendor']).filter((m) => m.provider === value).length,
     })),
   ]
 })
@@ -725,7 +658,7 @@ function filterCards(ignore: FilterKey[]): MarketplaceModelCard[] {
       const group = card.groupName || t('modelMarketplaceStatus.ungrouped', 'Ungrouped')
       if (group !== groupFilter.value) return false
     }
-    if (!ignore.includes('vendor') && vendorFilter.value !== 'all' && card.vendor !== vendorFilter.value) return false
+    if (!ignore.includes('vendor') && vendorFilter.value !== 'all' && card.provider !== vendorFilter.value) return false
     if (!ignore.includes('tag') && tagFilter.value !== 'all' && !card.tags.includes(tagFilter.value)) return false
     if (!ignore.includes('billing') && billingFilter.value !== 'all' && card.billingType !== billingFilter.value) return false
     if (!ignore.includes('endpoint') && endpointFilter.value !== 'all' && !card.endpointTypes.includes(endpointFilter.value)) return false
@@ -866,11 +799,17 @@ function pricePieces(card: MarketplaceModelCard): string[] {
   }
   if (pricing.billing_mode !== BILLING_MODE_TOKEN) return []
   const scale = priceUnit.value === '1M' ? 1_000_000 : 1_000
-  const unit = priceUnit.value === '1M' ? t('availableChannels.pricing.unitPerMillion') : '/ 1K token'
+  const unit = priceUnit.value === '1M'
+    ? t('availableChannels.pricing.unitPerMillion')
+    : t('modelMarketplaceStatus.unitPerThousandTokens')
   return [
     pricing.input_price == null ? '' : `${t('availableChannels.pricing.inputPrice')} ${formatScaled(pricing.input_price, scale)}${unit}`,
     pricing.output_price == null ? '' : `${t('availableChannels.pricing.outputPrice')} ${formatScaled(pricing.output_price, scale)}${unit}`,
   ].filter(Boolean)
+}
+
+function formatMetric(value: string, suffix = ''): string {
+  return value === '-' || !suffix ? value : `${value}${suffix}`
 }
 
 async function reload(silent = false) {
@@ -969,21 +908,4 @@ const FilterSection = defineComponent({
   },
 })
 
-const MetricCell = defineComponent({
-  name: 'MetricCell',
-  props: {
-    label: { type: String, required: true },
-    value: { type: String, required: true },
-    suffix: { type: String, default: '' },
-  },
-  setup(props) {
-    return () => h('div', { class: 'rounded-lg bg-gray-50 px-3 py-2 dark:bg-dark-900/40' }, [
-      h('div', { class: 'truncate text-[11px] text-gray-500 dark:text-gray-400' }, props.label),
-      h('div', { class: 'mt-1 truncate font-mono text-sm font-semibold text-gray-950 dark:text-white' }, [
-        props.value,
-        props.suffix ? h('span', { class: 'text-xs font-normal text-gray-400' }, props.suffix) : null,
-      ]),
-    ])
-  },
-})
 </script>
