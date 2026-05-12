@@ -1,9 +1,6 @@
 name: Sync Upstream
 
 on:
-  schedule:
-    # 每天北京时间早上 9 点（UTC 1:00）自动同步
-    - cron: '0 1 * * *'
   workflow_dispatch: # 也支持手动触发
 
 permissions:
