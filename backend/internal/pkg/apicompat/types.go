@@ -356,7 +356,7 @@ type ResponsesStreamEvent struct {
 }
 
 func (e ResponsesStreamEvent) MarshalJSON() ([]byte, error) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"type":            e.Type,
 		"sequence_number": e.SequenceNumber,
 	}

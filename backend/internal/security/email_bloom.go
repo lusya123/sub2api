@@ -38,7 +38,7 @@ func newEmailBloomFilter(capacity int, falsePositiveRate float64) *emailBloomFil
 	if falsePositiveRate <= 0 || falsePositiveRate >= 1 {
 		falsePositiveRate = defaultBloomFalsePositiveRate
 	}
-	m := uint64(math.Ceil(-float64(capacity) * math.Log(falsePositiveRate) / math.Pow(math.Ln2, 2)))
+	m := uint64(math.Ceil(-float64(capacity) * math.Log(falsePositiveRate) / (math.Ln2 * math.Ln2)))
 	if m < 64 {
 		m = 64
 	}
@@ -119,7 +119,11 @@ WHERE provider_type = 'email'
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			slog.Warn("login email bloom rows close failed", "error", err)
+		}
+	}()
 
 	var count int
 	for rows.Next() {

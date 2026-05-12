@@ -423,6 +423,10 @@ func (h *AuthHandler) entClient() *dbent.Client {
 	return h.authService.EntClient()
 }
 
+func (h *AuthHandler) EntClient() *dbent.Client {
+	return h.entClient()
+}
+
 func (h *AuthHandler) isForceEmailOnThirdPartySignup(ctx context.Context) bool {
 	if h == nil || h.settingSvc == nil {
 		return false

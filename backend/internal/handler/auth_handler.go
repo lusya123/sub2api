@@ -15,7 +15,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 )
 
 // AuthHandler handles authentication-related requests
@@ -43,11 +42,11 @@ func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userSe
 	}
 }
 
-func (h *AuthHandler) ConfigureLoginDefense(redisClient *redis.Client) {
-	if h == nil || h.cfg == nil || h.authService == nil || !h.cfg.LoginProtection.Enabled {
+func (h *AuthHandler) ConfigureLoginDefense(loginDefense *security.LoginDefense) {
+	if h == nil {
 		return
 	}
-	h.loginDefense = security.NewLoginDefense(h.cfg.LoginProtection, h.authService.EntClient(), redisClient)
+	h.loginDefense = loginDefense
 }
 
 func loginAttemptFromRequest(c *gin.Context, email string) security.LoginAttempt {

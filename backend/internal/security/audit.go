@@ -100,13 +100,13 @@ func (a *LoginAuditor) flush(batch []loginAuditEvent) {
 
 	var b strings.Builder
 	args := make([]any, 0, len(batch)*8)
-	b.WriteString("INSERT INTO login_attempts (created_at, email, ip, x_forwarded_for, user_agent, fingerprint, result, duration_ms) VALUES ")
+	_, _ = b.WriteString("INSERT INTO login_attempts (created_at, email, ip, x_forwarded_for, user_agent, fingerprint, result, duration_ms) VALUES ")
 	for i, event := range batch {
 		if i > 0 {
-			b.WriteString(",")
+			_, _ = b.WriteString(",")
 		}
 		base := i*8 + 1
-		b.WriteString(fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6, base+7))
+		_, _ = b.WriteString(fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6, base+7))
 		args = append(args, event.CreatedAt, event.Email, event.IP, event.XForwardedFor, event.UserAgent, event.Fingerprint, event.Result, event.DurationMS)
 	}
 	if _, err := a.db.ExecContext(ctx, b.String(), args...); err != nil {
@@ -117,8 +117,8 @@ func (a *LoginAuditor) flush(batch []loginAuditEvent) {
 func auditFingerprint(parts ...string) string {
 	h := sha256.New()
 	for _, part := range parts {
-		h.Write([]byte(part))
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(part))
+		_, _ = h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

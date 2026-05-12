@@ -8,6 +8,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	"github.com/Wei-Shaw/sub2api/internal/security"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/routes"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -82,7 +83,7 @@ func SetupRouter(
 	}
 
 	if handlers != nil && handlers.Auth != nil {
-		handlers.Auth.ConfigureLoginDefense(redisClient)
+		handlers.Auth.ConfigureLoginDefense(security.NewLoginDefense(cfg.LoginProtection, handlers.Auth.EntClient(), redisClient))
 	}
 
 	// 注册路由
