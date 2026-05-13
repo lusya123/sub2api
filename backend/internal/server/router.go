@@ -66,6 +66,9 @@ func SetupRouter(
 	r.Use(middleware2.NewBanCheck(redisClient))
 	r.Use(middleware2.NewGlobalRateLimiter(redisClient).Middleware())
 	r.Use(middleware2.NewBodyFingerprint(redisClient).Middleware())
+	if redisClient != nil {
+		r.Use(web.SPAProtect(redisClient))
+	}
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {

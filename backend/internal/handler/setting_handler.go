@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"net/http"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -48,7 +50,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		TurnstileEnabled:                 settings.TurnstileEnabled,
 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
 		SiteName:                         settings.SiteName,
-		SiteLogo:                         settings.SiteLogo,
+		SiteLogo:                         service.PublicSiteLogoForClient(settings.SiteLogo),
 		SiteSubtitle:                     settings.SiteSubtitle,
 		APIBaseURL:                       settings.APIBaseURL,
 		ContactInfo:                      settings.ContactInfo,
@@ -94,6 +96,32 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 		RiskControlEnabled: settings.RiskControlEnabled,
 	})
+}
+
+// GetPublicLogo serves the configured inline logo as a versioned public asset.
+// GET /api/v1/settings/logo?v=<hash>
+func (h *SettingHandler) GetPublicLogo(c *gin.Context) {
+	settings, err := h.settingService.GetPublicSettings(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	data, contentType, ok := service.DecodeInlineImageDataURL(settings.SiteLogo)
+	if !ok {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	etag := `"` + service.PublicSiteLogoVersion(settings.SiteLogo) + `"`
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	c.Header("ETag", etag)
+	if c.GetHeader("If-None-Match") == etag {
+		c.Status(http.StatusNotModified)
+		return
+	}
+
+	c.Data(http.StatusOK, contentType, data)
 }
 
 func publicLoginAgreementDocumentsToDTO(items []service.LoginAgreementDocument) []dto.LoginAgreementDocument {

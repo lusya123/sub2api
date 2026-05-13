@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -28,6 +29,8 @@ type AuthHandler struct {
 	totpService   *service.TotpService
 	loginDefense  *security.LoginDefense
 }
+
+const spaProtectTokenCookieName = "token"
 
 // NewAuthHandler creates a new AuthHandler
 func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService, promoService *service.PromoService, redeemService *service.RedeemService, totpService *service.TotpService) *AuthHandler {
@@ -135,6 +138,7 @@ func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
 			response.InternalError(c, "Failed to generate token")
 			return
 		}
+		h.setSPAProtectTokenCookie(c, 0)
 		response.Success(c, AuthResponse{
 			AccessToken: token,
 			TokenType:   "Bearer",
@@ -142,6 +146,7 @@ func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
 		})
 		return
 	}
+	h.setSPAProtectTokenCookie(c, tokenPair.ExpiresIn)
 	response.Success(c, AuthResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
@@ -741,6 +746,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	h.setSPAProtectTokenCookie(c, result.ExpiresIn)
 	response.Success(c, RefreshTokenResponse{
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
@@ -775,6 +781,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 	h.consumePendingOAuthSessionOnLogout(c)
 	clearOAuthLogoutCookies(c)
+	clearSPAProtectTokenCookie(c, isRequestHTTPS(c))
 
 	response.Success(c, LogoutResponse{
 		Message: "Logged out successfully",
@@ -801,7 +808,54 @@ func (h *AuthHandler) RevokeAllSessions(c *gin.Context) {
 		return
 	}
 
+	clearSPAProtectTokenCookie(c, isRequestHTTPS(c))
 	response.Success(c, RevokeAllSessionsResponse{
 		Message: "All sessions have been revoked. Please log in again.",
+	})
+}
+
+func (h *AuthHandler) setSPAProtectTokenCookie(c *gin.Context, maxAgeSec int) {
+	if maxAgeSec <= 0 {
+		maxAgeSec = h.defaultSPAProtectTokenCookieMaxAge()
+	}
+	setSPAProtectTokenCookie(c, maxAgeSec)
+}
+
+func setSPAProtectTokenCookie(c *gin.Context, maxAgeSec int) {
+	if maxAgeSec <= 0 {
+		maxAgeSec = 24 * 3600
+	}
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     spaProtectTokenCookieName,
+		Value:    "1",
+		Path:     "/",
+		MaxAge:   maxAgeSec,
+		HttpOnly: true,
+		Secure:   isRequestHTTPS(c),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (h *AuthHandler) defaultSPAProtectTokenCookieMaxAge() int {
+	if h != nil && h.cfg != nil {
+		if h.cfg.JWT.AccessTokenExpireMinutes > 0 {
+			return h.cfg.JWT.AccessTokenExpireMinutes * 60
+		}
+		if h.cfg.JWT.ExpireHour > 0 {
+			return h.cfg.JWT.ExpireHour * 3600
+		}
+	}
+	return 24 * 3600
+}
+
+func clearSPAProtectTokenCookie(c *gin.Context, secure bool) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     spaProtectTokenCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
 	})
 }

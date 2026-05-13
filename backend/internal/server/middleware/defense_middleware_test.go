@@ -140,6 +140,105 @@ func TestGlobalRateLimiterTiers(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, rec.Code, "fake API key on public path must not bypass anonymous limit")
 }
 
+func TestGlobalRateLimiterUsesGlobalOnlyLimitForFrontendDocuments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+	t.Setenv("DEFENSE_FRONTEND_DOC_GLOBAL_PER_2S", "40")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/model-marketplace", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for i := 0; i < 40; i++ {
+		rec := performDefenseRequest(router, http.MethodGet, "/model-marketplace", nil, nil)
+		require.Equal(t, http.StatusOK, rec.Code, "SPA request %d should be under global frontend limit", i+1)
+	}
+	rec := performDefenseRequest(router, http.MethodGet, "/model-marketplace", nil, nil)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	require.Contains(t, rec.Body.String(), "rate limited (frontend global)")
+}
+
+func TestGlobalRateLimiterFrontendDocumentGlobalFailOpen(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+	t.Setenv("DEFENSE_FRONTEND_DOC_GLOBAL_PER_2S", "1")
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr:         "127.0.0.1:1",
+		DialTimeout:  10 * time.Millisecond,
+		ReadTimeout:  10 * time.Millisecond,
+		WriteTimeout: 10 * time.Millisecond,
+	})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/model-marketplace", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	rec := performDefenseRequest(router, http.MethodGet, "/model-marketplace", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestGlobalRateLimiterFailOpenOnRedisError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr:         "127.0.0.1:1",
+		DialTimeout:  10 * time.Millisecond,
+		ReadTimeout:  10 * time.Millisecond,
+		WriteTimeout: 10 * time.Millisecond,
+	})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/api/v1/model-marketplace", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	rec := performDefenseRequest(router, http.MethodGet, "/api/v1/model-marketplace", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestGlobalRateLimiterProtectsFrontendDocumentsWhenSPAProtectDisabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+	t.Setenv("SPA_PROTECT_ENABLED", "false")
+	t.Setenv("DEFENSE_FRONTEND_DOC_GLOBAL_PER_2S", "30")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/model-marketplace", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for i := 0; i < 30; i++ {
+		rec := performDefenseRequest(router, http.MethodGet, "/model-marketplace", nil, nil)
+		require.Equal(t, http.StatusOK, rec.Code, "SPA request %d should remain under fallback global limit", i+1)
+	}
+	rec := performDefenseRequest(router, http.MethodGet, "/model-marketplace", nil, nil)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+}
+
 func TestBodyFingerprintBlocksAnonymousReplayAndSkipsAPIPaths(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")

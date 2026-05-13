@@ -28,6 +28,14 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		if isFrontendDocumentRequest(c) {
+			if !g.allowFrontendDocumentGlobal(c) {
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (frontend global)")
+				return
+			}
+			c.Next()
+			return
+		}
 
 		switch GetTrustTier(c) {
 		case TierAPIKey:
@@ -62,7 +70,7 @@ func (g *GlobalRateLimiter) allow(ctx context.Context, key string, limit int, wi
 	}
 	cnt, err := g.rdb.Incr(ctx, key).Result()
 	if err != nil {
-		return false
+		return true
 	}
 	if cnt == 1 {
 		_ = g.rdb.Expire(ctx, key, window).Err()
@@ -70,8 +78,93 @@ func (g *GlobalRateLimiter) allow(ctx context.Context, key string, limit int, wi
 	return cnt <= int64(limit)
 }
 
+func (g *GlobalRateLimiter) allowFrontendDocumentGlobal(c *gin.Context) bool {
+	limit := defenseEnvInt("DEFENSE_FRONTEND_DOC_GLOBAL_PER_2S", 2000)
+	if limit <= 0 {
+		return true
+	}
+	bucket := strconv.FormatInt(time.Now().UTC().Unix()/2, 10)
+	ctx := c.Request.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	key := "rl:frontend:global:" + bucket
+	cnt, err := g.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return true
+	}
+	if cnt == 1 {
+		_ = g.rdb.Expire(ctx, key, 2*time.Second).Err()
+	}
+	return cnt <= int64(limit)
+}
+
+func defenseEnvInt(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return defaultVal
+}
+
+func isFrontendDocumentRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+		return false
+	}
+
+	path := strings.TrimSpace(c.Request.URL.Path)
+	if globalRateLimitBypassFrontend(path) || globalRateLimitStaticAsset(path) {
+		return false
+	}
+	return true
+}
+
+func globalRateLimitBypassFrontend(path string) bool {
+	return path == "/v1" ||
+		strings.HasPrefix(path, "/v1/") ||
+		path == "/v1beta" ||
+		strings.HasPrefix(path, "/v1beta/") ||
+		path == "/responses" ||
+		strings.HasPrefix(path, "/responses/") ||
+		strings.HasPrefix(path, "/api/") ||
+		strings.HasPrefix(path, "/backend-api/") ||
+		strings.HasPrefix(path, "/openai/") ||
+		strings.HasPrefix(path, "/antigravity/") ||
+		strings.HasPrefix(path, "/setup/") ||
+		path == "/health"
+}
+
+func globalRateLimitStaticAsset(path string) bool {
+	if strings.HasPrefix(path, "/assets/") ||
+		strings.HasPrefix(path, "/static/") ||
+		strings.HasPrefix(path, "/images/") {
+		return true
+	}
+	switch path {
+	case "/favicon.ico", "/logo.png", "/robots.txt", "/sitemap.xml", "/manifest.json":
+		return true
+	}
+	staticExts := []string{
+		".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+		".woff", ".woff2", ".ttf", ".eot", ".ico", ".map",
+	}
+	for _, ext := range staticExts {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 func ClientFingerprint(c *gin.Context) string {
-	ip := strings.TrimSpace(c.GetHeader("X-Real-IP"))
+	ip := strings.TrimSpace(c.GetHeader("CF-Connecting-IP"))
+	if ip == "" {
+		ip = strings.TrimSpace(c.GetHeader("X-Real-IP"))
+	}
 	if ip == "" {
 		ip = strings.TrimSpace(c.GetHeader("X-Forwarded-For"))
 		if i := strings.Index(ip, ","); i > 0 {

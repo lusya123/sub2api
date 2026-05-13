@@ -205,6 +205,7 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 	fragment.Set("expires_in", fmt.Sprintf("%d", tokenPair.ExpiresIn))
 	fragment.Set("token_type", "Bearer")
 	fragment.Set("redirect", redirectTo)
+	setSPAProtectTokenCookie(c, tokenPair.ExpiresIn)
 	redirectWithFragment(c, frontendCallback, fragment)
 }
 

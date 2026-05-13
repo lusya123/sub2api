@@ -98,6 +98,7 @@ func provideCleanup(
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
+	modelMarketplaceMonitorRunner *service.ModelMarketplaceMonitorRunner,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -243,6 +244,12 @@ func provideCleanup(
 			{"ChannelMonitorRunner", func() error {
 				if channelMonitorRunner != nil {
 					channelMonitorRunner.Stop()
+				}
+				return nil
+			}},
+			{"ModelMarketplaceMonitorRunner", func() error {
+				if modelMarketplaceMonitorRunner != nil {
+					modelMarketplaceMonitorRunner.Stop()
 				}
 				return nil
 			}},

@@ -4,9 +4,11 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -17,6 +19,56 @@ import (
 
 type settingHandlerPublicRepoStub struct {
 	values map[string]string
+}
+
+func TestSettingHandler_PublicLogoUsesVersionedAssetURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rawLogo := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("custom-logo"))
+	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeySiteLogo: rawLogo,
+		},
+	}, &config.Config{}), "test-version")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+
+	h.GetPublicSettings(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp struct {
+		Code int `json:"code"`
+		Data struct {
+			SiteLogo string `json:"site_logo"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, 0, resp.Code)
+	require.True(t, strings.HasPrefix(resp.Data.SiteLogo, "/api/v1/settings/logo?v="))
+	require.NotContains(t, resp.Data.SiteLogo, "base64")
+}
+
+func TestSettingHandler_GetPublicLogoServesInlineLogoWithImmutableCache(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rawLogo := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("custom-logo"))
+	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeySiteLogo: rawLogo,
+		},
+	}, &config.Config{}), "test-version")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/logo?v=test", nil)
+
+	h.GetPublicLogo(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
+	require.Equal(t, "public, max-age=31536000, immutable", recorder.Header().Get("Cache-Control"))
+	require.Equal(t, "custom-logo", recorder.Body.String())
 }
 
 func (s *settingHandlerPublicRepoStub) Get(ctx context.Context, key string) (*service.Setting, error) {

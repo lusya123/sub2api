@@ -1529,6 +1529,7 @@ func (h *AuthHandler) transitionPendingOAuthAccountToChoiceState(
 }
 
 func writeOAuthTokenPairResponse(c *gin.Context, tokenPair *service.TokenPair) {
+	setSPAProtectTokenCookie(c, tokenPair.ExpiresIn)
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokenPair.AccessToken,
 		"refresh_token": tokenPair.RefreshToken,
@@ -1943,6 +1944,7 @@ func (h *AuthHandler) ExchangePendingOAuthCompletion(c *gin.Context) {
 		payload["refresh_token"] = tokenPair.RefreshToken
 		payload["expires_in"] = tokenPair.ExpiresIn
 		payload["token_type"] = "Bearer"
+		setSPAProtectTokenCookie(c, tokenPair.ExpiresIn)
 	}
 
 	clearCookies()

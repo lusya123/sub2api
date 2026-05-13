@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,9 +79,25 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // backupSvc
 		nil, // paymentOrderExpiry
 		nil, // channelMonitorRunner
+		nil, // modelMarketplaceMonitorRunner
 	)
 
 	require.NotPanics(t, func() {
 		cleanup()
 	})
+}
+
+func TestWireGenStartsAndCleansUpModelMarketplaceRunner(t *testing.T) {
+	src, err := os.ReadFile("wire_gen.go")
+	require.NoError(t, err)
+
+	text := string(src)
+	require.Contains(t, text, "service.ProvideModelMarketplaceMonitorRunner(modelMarketplaceMonitorService)")
+	require.Contains(t, text, "modelMarketplaceMonitorRunner.Stop()")
+
+	startIdx := strings.Index(text, "service.ProvideModelMarketplaceMonitorRunner(modelMarketplaceMonitorService)")
+	cleanupIdx := strings.Index(text, "provideCleanup(client, redisClient")
+	require.NotEqual(t, -1, startIdx)
+	require.NotEqual(t, -1, cleanupIdx)
+	require.Less(t, startIdx, cleanupIdx)
 }
