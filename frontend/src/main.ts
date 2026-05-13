@@ -12,11 +12,34 @@ function initThemeClass() {
     savedTheme === 'dark' ||
     (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
   document.documentElement.classList.toggle('dark', shouldUseDark)
+  syncThemeChrome()
+}
+
+function syncThemeChrome() {
+  const isDark = document.documentElement.classList.contains('dark')
+  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+  if (!meta) {
+    meta = document.createElement('meta')
+    meta.name = 'theme-color'
+    document.head.appendChild(meta)
+  }
+  meta.content = isDark ? '#0f172a' : '#ffffff'
+}
+
+function observeThemeClass() {
+  const observer = new MutationObserver(syncThemeChrome)
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class'],
+  })
 }
 
 async function bootstrap() {
   // Apply theme class globally before app mount to keep all routes consistent.
   initThemeClass()
+  observeThemeClass()
 
   const app = createApp(App)
   const pinia = createPinia()

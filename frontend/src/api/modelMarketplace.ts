@@ -11,11 +11,16 @@ export type { Provider, MonitorStatus } from './admin/modelMarketplaceMonitor'
 
 export interface UserModelMarketplaceExtraModel {
   model: string
+  display_name_zh: string
+  display_name_en: string
+  call_model: string
+  request_url: string
   status: MonitorStatus
   latency_ms: number | null
   ping_latency_ms: number | null
   availability_7d: number
   pricing: UserSupportedModelPricing | null
+  timeline: ModelMarketplaceTimelinePoint[]
 }
 
 export interface ModelMarketplaceTimelinePoint {
@@ -31,6 +36,10 @@ export interface UserModelMarketplaceView {
   provider: Provider
   group_name: string
   primary_model: string
+  primary_display_name_zh: string
+  primary_display_name_en: string
+  primary_call_model: string
+  primary_request_url: string
   primary_status: MonitorStatus
   primary_latency_ms: number | null
   primary_ping_latency_ms: number | null
@@ -46,6 +55,10 @@ export interface UserModelMarketplaceListResponse {
 
 export interface UserModelMarketplaceModelDetail {
   model: string
+  display_name_zh: string
+  display_name_en: string
+  call_model: string
+  request_url: string
   latest_status: MonitorStatus
   latest_latency_ms: number | null
   availability_7d: number

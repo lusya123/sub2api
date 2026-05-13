@@ -6,6 +6,8 @@
       { '-translate-x-full lg:translate-x-0': !mobileOpen }
     ]"
   >
+    <!-- Brand lives in the global top bar; sidebar opens directly with the nav list. -->
+
     <!-- Navigation -->
     <nav class="sidebar-nav scrollbar-hide">
       <!-- Admin View: Admin menu first, then personal menu -->
@@ -281,6 +283,8 @@ const purchaseRedirectUrl = computed(() => getPurchaseRedirectUrl(appStore.cache
 
 // Track which parent nav groups are expanded
 const expandedGroups = ref<Set<string>>(new Set())
+
+// Brand (logo/name/version) is rendered in the global top bar — see AppHeader.
 
 // SVG Icon Components
 const DashboardIcon = {
@@ -954,6 +958,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Pull the sidebar below the global top bar (48px) so the top bar visually
+   spans the full viewport width above the sidebar + content. */
+aside.sidebar {
+  top: 3rem;
+}
+
 .sidebar-logo {
   flex: 0 0 2.25rem;
   min-width: 2.25rem;

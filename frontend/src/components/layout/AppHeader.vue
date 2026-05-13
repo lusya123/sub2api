@@ -1,72 +1,53 @@
 <template>
-  <header class="glass sticky top-0 z-50 border-b border-gray-200/50 dark:border-dark-700/50">
-    <div class="relative flex h-16 items-center justify-between px-4 md:px-6">
-      <!-- Left: Mobile Menu Toggle + Brand + Page Title -->
-      <div class="flex min-w-0 flex-shrink-0 items-center gap-3">
+  <header class="app-topbar">
+    <div class="relative flex h-12 items-center justify-between gap-2 px-2 sm:px-3 md:px-4">
+      <!-- Left: Mobile menu button (below lg) + Brand -->
+      <div class="flex flex-shrink-0 items-center gap-1 min-w-0">
         <button
           v-if="!hideSidebar"
+          type="button"
+          class="app-topbar-menu-btn"
+          aria-label="Toggle menu"
           @click="toggleMobileSidebar"
-          class="btn-ghost btn-icon lg:hidden"
-          aria-label="Toggle Menu"
         >
-          <Icon name="menu" size="md" />
+          <Icon name="menu" size="sm" />
         </button>
 
         <router-link
           :to="consolePath"
-          class="flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
+          class="app-brand"
+          :title="siteName"
         >
-          <img :src="siteLogo || '/logo.png'" :alt="siteName" class="h-9 w-9 flex-shrink-0 rounded-xl object-contain shadow-glow">
-          <span class="hidden min-w-0 sm:block">
-            <span class="block truncate text-sm font-bold leading-5 text-gray-950 dark:text-white">
-              {{ siteName }}
-            </span>
-            <VersionBadge :version="siteVersion" class="-ml-1 scale-[0.82] origin-left" />
+          <span class="app-brand__logo">
+            <img v-if="settingsLoaded" :src="siteLogo || '/logo.png'" :alt="siteName" />
           </span>
+          <span class="app-brand__name">{{ siteName }}</span>
         </router-link>
-
-        <div v-if="!hideSidebar && pageTitle" class="hidden min-w-0 items-center gap-3 xl:flex">
-          <div class="h-8 w-px bg-gray-200 dark:bg-dark-700"></div>
-          <div class="min-w-0">
-            <h1 class="truncate text-lg font-semibold text-gray-900 dark:text-white">
-              {{ pageTitle }}
-            </h1>
-            <p v-if="pageDescription" class="truncate text-xs text-gray-500 dark:text-dark-400">
-              {{ pageDescription }}
-            </p>
-          </div>
-        </div>
-
-        <div v-else-if="!hideSidebar" class="hidden lg:block">
-          <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
-            {{ pageTitle }}
-          </h1>
-          <p v-if="pageDescription" class="text-xs text-gray-500 dark:text-dark-400">
-            {{ pageDescription }}
-          </p>
-        </div>
       </div>
 
-      <!-- Center: Primary navigation -->
+      <!-- Center: Primary navigation (workspace tabs) -->
       <nav
         v-if="user"
-        class="pointer-events-none absolute left-1/2 top-1/2 z-10 flex max-w-[calc(100vw-9rem)] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-x-auto px-1"
+        ref="navRef"
+        class="app-topbar-nav"
         aria-label="Primary navigation"
       >
-        <div class="pointer-events-auto flex max-w-full items-center gap-0.5 rounded-xl border border-gray-200/80 bg-white/85 p-1 shadow-sm backdrop-blur dark:border-dark-700/70 dark:bg-dark-800/75">
-          <router-link
-            v-for="item in primaryTopNavItems"
-            :key="item.path"
-            :to="item.path"
-            class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-semibold transition-colors"
-            :class="isPrimaryTopNavActive(item.key)
-              ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
-              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-dark-700 dark:hover:text-white'"
-          >
-            <Icon :name="item.icon" size="sm" />
-            <span class="hidden sm:inline">{{ item.label }}</span>
-          </router-link>
-        </div>
+        <router-link
+          v-for="item in primaryTopNavItems"
+          :key="item.path"
+          :to="item.path"
+          class="app-topbar-nav__item"
+          :class="isPrimaryTopNavActive(item.key)
+            ? 'app-topbar-nav__item--active'
+            : 'app-topbar-nav__item--idle'"
+        >
+          {{ item.label }}
+        </router-link>
+        <span
+          class="app-topbar-nav__indicator"
+          :style="indicatorStyle"
+          aria-hidden="true"
+        ></span>
       </nav>
 
       <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
@@ -261,15 +242,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
-import { useAdminSettingsStore } from '@/stores/adminSettings'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
-import VersionBadge from '@/components/common/VersionBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const router = useRouter()
@@ -282,20 +261,20 @@ const props = withDefaults(defineProps<{
   hideSidebar: false,
 })
 
+const hideSidebar = computed(() => props.hideSidebar)
+
 const appStore = useAppStore()
 const authStore = useAuthStore()
-const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
 
 const user = computed(() => authStore.user)
-const hideSidebar = computed(() => props.hideSidebar)
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => appStore.docUrl)
 const siteName = computed(() => appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => appStore.siteLogo)
-const siteVersion = computed(() => appStore.siteVersion)
+const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
 
 const consolePath = computed(() => {
@@ -322,6 +301,37 @@ function isPrimaryTopNavActive(key: string): boolean {
   return route.path !== '/model-marketplace'
 }
 
+// Sliding underline indicator — measures the active tab's offsetLeft/Width and
+// animates a single absolutely-positioned element between tabs. The motion is
+// the only "signature" — everything else stays quiet.
+const navRef = ref<HTMLElement | null>(null)
+const indicatorStyle = ref<Record<string, string>>({ opacity: '0' })
+
+function updateIndicator() {
+  const nav = navRef.value
+  if (!nav) return
+  const active = nav.querySelector<HTMLElement>('.app-topbar-nav__item--active')
+  if (!active) {
+    indicatorStyle.value = { ...indicatorStyle.value, opacity: '0' }
+    return
+  }
+  indicatorStyle.value = {
+    opacity: '1',
+    transform: `translate3d(${active.offsetLeft}px, 0, 0)`,
+    width: `${active.offsetWidth}px`,
+  }
+}
+
+// Watch both route AND user: when the nav mounts later (auth fetch resolves
+// after the layout), navRef goes from null to an element and the indicator
+// must measure once it exists. Without the user watch the indicator stays
+// at opacity 0 on first load.
+watch(
+  [() => route.path, user],
+  () => { nextTick(updateIndicator) },
+  { flush: 'post' }
+)
+
 // 只在标准模式的管理员下显示新手引导按钮
 const showOnboardingButton = computed(() => {
   return !authStore.isSimpleMode && user.value?.role === 'admin'
@@ -346,29 +356,8 @@ const displayName = computed(() => {
   return user.value.username || user.value.email?.split('@')[0] || ''
 })
 
-const pageTitle = computed(() => {
-  // For custom pages, use the menu item's label instead of generic "自定义页面"
-  if (route.name === 'CustomPage') {
-    const id = route.params.id as string
-    const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []
-    const menuItem = publicItems.find((item) => item.id === id)
-      ?? (authStore.isAdmin ? adminSettingsStore.customMenuItems.find((item) => item.id === id) : undefined)
-    if (menuItem?.label) return menuItem.label
-  }
-  const titleKey = route.meta.titleKey as string
-  if (titleKey) {
-    return t(titleKey)
-  }
-  return (route.meta.title as string) || ''
-})
-
-const pageDescription = computed(() => {
-  const descKey = route.meta.descriptionKey as string
-  if (descKey) {
-    return t(descKey)
-  }
-  return (route.meta.description as string) || ''
-})
+// Page title / description are no longer rendered in the header (the active
+// sidebar item carries that context). The brand on the left identifies the app.
 
 function toggleMobileSidebar() {
   appStore.toggleMobileSidebar()
@@ -406,10 +395,13 @@ function handleClickOutside(event: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  nextTick(updateIndicator)
+  window.addEventListener('resize', updateIndicator)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  window.removeEventListener('resize', updateIndicator)
 })
 </script>
 
@@ -423,5 +415,183 @@ onBeforeUnmount(() => {
 .dropdown-leave-to {
   opacity: 0;
   transform: scale(0.95) translateY(-4px);
+}
+
+/* ============ Global Top Bar — whisper-quiet, naturally lively ============
+   Design intent: the bar itself feels like air — no hard border, no shadow.
+   The only motion that exists is one signature element: a single soft
+   underline that GLIDES between tabs on route change. Everything else
+   stays out of the way. */
+.app-topbar {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 50;
+  height: 3rem;
+  background: var(--app-shell-topbar-bg);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  transition: background 0.25s ease;
+}
+
+/* Hairline that fades in from the edges — barely visible, no hard cut. */
+.app-topbar::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--app-shell-hairline);
+  pointer-events: none;
+  transition: background 0.25s ease;
+}
+
+/* ============ Mobile / tablet menu button ============
+   Strictly hidden at lg (≥ 1024px) so it cannot leak to desktop the way the
+   old Tailwind lg:hidden did. Below lg, opens the sidebar overlay drawer. */
+.app-topbar-menu-btn {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .app-topbar-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    width: 2rem;
+    border-radius: 0.5rem;
+    color: var(--app-shell-muted-strong);
+    transition: background-color 0.16s ease, color 0.16s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.app-topbar-menu-btn:hover {
+  background: var(--app-shell-hover-bg);
+  color: var(--app-shell-text);
+}
+
+.app-topbar-menu-btn:active {
+  background: var(--app-shell-active-bg);
+}
+
+/* ============ Brand — quiet, no hover pill ============ */
+.app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2rem;
+  padding: 0 0.25rem;
+  min-width: 0;
+  transition: opacity 0.2s ease;
+}
+
+.app-brand:hover {
+  opacity: 0.68;
+}
+
+.app-brand__logo {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.375rem;
+  width: 1.375rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.375rem;
+}
+
+.app-brand__logo img {
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
+}
+
+.app-brand__name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--app-shell-text);
+  white-space: nowrap;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.22s ease;
+}
+
+@media (max-width: 639px) {
+  .app-brand__name {
+    display: none;
+  }
+}
+
+/* ============ Workspace tabs — text only, JS-driven sliding underline ============ */
+.app-topbar-nav {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  max-width: calc(100vw - 2rem);
+  transform: translateX(-50%);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.app-topbar-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.app-topbar-nav__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--app-shell-muted);
+  transition: color 0.22s ease;
+}
+
+.app-topbar-nav__item:hover {
+  color: var(--app-shell-text);
+}
+
+.app-topbar-nav__item--active,
+.app-topbar-nav__item--active:hover {
+  color: var(--app-shell-text);
+  font-weight: 600;
+}
+
+/* The signature: one element that glides between tabs on route change.
+   Spring-curve easing creates the "灵动" moment. The gradient softens the
+   ends so it feels like brushed light rather than a hard rule. */
+.app-topbar-nav__indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  pointer-events: none;
+  will-change: transform, width;
+  background: var(--app-shell-indicator);
+  border-radius: 2px;
+  transition:
+    transform 0.44s cubic-bezier(0.32, 0.72, 0, 1),
+    width 0.44s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.22s ease;
+}
+
+/* On mobile (< md) the workspace tabs move to the fixed bottom nav
+   rendered by AppBottomNav.vue. Hide them from the top bar entirely. */
+@media (max-width: 767px) {
+  .app-topbar-nav {
+    display: none;
+  }
 }
 </style>

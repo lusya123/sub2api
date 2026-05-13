@@ -28,36 +28,40 @@ const (
 )
 
 type modelMarketplaceMonitorCreateRequest struct {
-	Name             string            `json:"name" binding:"required,max=100"`
-	Provider         string            `json:"provider" binding:"required,max=50"`
-	Endpoint         string            `json:"endpoint" binding:"required,max=500"`
-	APIKey           string            `json:"api_key" binding:"required,max=2000"`
-	PrimaryModel     string            `json:"primary_model" binding:"required,max=200"`
-	ExtraModels      []string          `json:"extra_models"`
-	GroupName        string            `json:"group_name" binding:"max=100"`
-	Enabled          *bool             `json:"enabled"`
-	IntervalSeconds  int               `json:"interval_seconds" binding:"required,min=15,max=3600"`
-	TemplateID       *int64            `json:"template_id"`
-	ExtraHeaders     map[string]string `json:"extra_headers"`
-	BodyOverrideMode string            `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
-	BodyOverride     map[string]any    `json:"body_override"`
+	Name              string                                              `json:"name" binding:"required,max=100"`
+	Provider          string                                              `json:"provider" binding:"required,max=50"`
+	Endpoint          string                                              `json:"endpoint" binding:"required,max=500"`
+	APIKey            string                                              `json:"api_key" binding:"required,max=2000"`
+	PrimaryModel      string                                              `json:"primary_model" binding:"required,max=200"`
+	ExtraModels       []string                                            `json:"extra_models"`
+	ModelDisplayNames map[string]service.ModelMarketplaceModelDisplayName `json:"model_display_names"`
+	ModelCallConfigs  map[string]service.ModelMarketplaceModelCallConfig  `json:"model_call_configs"`
+	GroupName         string                                              `json:"group_name" binding:"max=100"`
+	Enabled           *bool                                               `json:"enabled"`
+	IntervalSeconds   int                                                 `json:"interval_seconds" binding:"required,min=15,max=3600"`
+	TemplateID        *int64                                              `json:"template_id"`
+	ExtraHeaders      map[string]string                                   `json:"extra_headers"`
+	BodyOverrideMode  string                                              `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
+	BodyOverride      map[string]any                                      `json:"body_override"`
 }
 
 type modelMarketplaceMonitorUpdateRequest struct {
-	Name             *string            `json:"name" binding:"omitempty,max=100"`
-	Provider         *string            `json:"provider" binding:"omitempty,max=50"`
-	Endpoint         *string            `json:"endpoint" binding:"omitempty,max=500"`
-	APIKey           *string            `json:"api_key" binding:"omitempty,max=2000"`
-	PrimaryModel     *string            `json:"primary_model" binding:"omitempty,max=200"`
-	ExtraModels      *[]string          `json:"extra_models"`
-	GroupName        *string            `json:"group_name" binding:"omitempty,max=100"`
-	Enabled          *bool              `json:"enabled"`
-	IntervalSeconds  *int               `json:"interval_seconds" binding:"omitempty,min=15,max=3600"`
-	TemplateID       *int64             `json:"template_id"`
-	ClearTemplate    bool               `json:"clear_template"`
-	ExtraHeaders     *map[string]string `json:"extra_headers"`
-	BodyOverrideMode *string            `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
-	BodyOverride     *map[string]any    `json:"body_override"`
+	Name              *string                                              `json:"name" binding:"omitempty,max=100"`
+	Provider          *string                                              `json:"provider" binding:"omitempty,max=50"`
+	Endpoint          *string                                              `json:"endpoint" binding:"omitempty,max=500"`
+	APIKey            *string                                              `json:"api_key" binding:"omitempty,max=2000"`
+	PrimaryModel      *string                                              `json:"primary_model" binding:"omitempty,max=200"`
+	ExtraModels       *[]string                                            `json:"extra_models"`
+	ModelDisplayNames *map[string]service.ModelMarketplaceModelDisplayName `json:"model_display_names"`
+	ModelCallConfigs  *map[string]service.ModelMarketplaceModelCallConfig  `json:"model_call_configs"`
+	GroupName         *string                                              `json:"group_name" binding:"omitempty,max=100"`
+	Enabled           *bool                                                `json:"enabled"`
+	IntervalSeconds   *int                                                 `json:"interval_seconds" binding:"omitempty,min=15,max=3600"`
+	TemplateID        *int64                                               `json:"template_id"`
+	ClearTemplate     bool                                                 `json:"clear_template"`
+	ExtraHeaders      *map[string]string                                   `json:"extra_headers"`
+	BodyOverrideMode  *string                                              `json:"body_override_mode" binding:"omitempty,oneof=off merge replace"`
+	BodyOverride      *map[string]any                                      `json:"body_override"`
 }
 
 type modelMarketplaceExtraModelStatusResponse struct {
@@ -67,29 +71,31 @@ type modelMarketplaceExtraModelStatusResponse struct {
 }
 
 type modelMarketplaceMonitorResponse struct {
-	ID                  int64                                      `json:"id"`
-	Name                string                                     `json:"name"`
-	Provider            string                                     `json:"provider"`
-	Endpoint            string                                     `json:"endpoint"`
-	APIKeyMasked        string                                     `json:"api_key_masked"`
-	APIKeyDecryptFailed bool                                       `json:"api_key_decrypt_failed"`
-	PrimaryModel        string                                     `json:"primary_model"`
-	ExtraModels         []string                                   `json:"extra_models"`
-	GroupName           string                                     `json:"group_name"`
-	Enabled             bool                                       `json:"enabled"`
-	IntervalSeconds     int                                        `json:"interval_seconds"`
-	LastCheckedAt       *string                                    `json:"last_checked_at"`
-	CreatedBy           int64                                      `json:"created_by"`
-	CreatedAt           string                                     `json:"created_at"`
-	UpdatedAt           string                                     `json:"updated_at"`
-	PrimaryStatus       string                                     `json:"primary_status"`
-	PrimaryLatencyMs    *int                                       `json:"primary_latency_ms"`
-	Availability7d      float64                                    `json:"availability_7d"`
-	ExtraModelsStatus   []modelMarketplaceExtraModelStatusResponse `json:"extra_models_status"`
-	TemplateID          *int64                                     `json:"template_id"`
-	ExtraHeaders        map[string]string                          `json:"extra_headers"`
-	BodyOverrideMode    string                                     `json:"body_override_mode"`
-	BodyOverride        map[string]any                             `json:"body_override"`
+	ID                  int64                                               `json:"id"`
+	Name                string                                              `json:"name"`
+	Provider            string                                              `json:"provider"`
+	Endpoint            string                                              `json:"endpoint"`
+	APIKeyMasked        string                                              `json:"api_key_masked"`
+	APIKeyDecryptFailed bool                                                `json:"api_key_decrypt_failed"`
+	PrimaryModel        string                                              `json:"primary_model"`
+	ExtraModels         []string                                            `json:"extra_models"`
+	ModelDisplayNames   map[string]service.ModelMarketplaceModelDisplayName `json:"model_display_names"`
+	ModelCallConfigs    map[string]service.ModelMarketplaceModelCallConfig  `json:"model_call_configs"`
+	GroupName           string                                              `json:"group_name"`
+	Enabled             bool                                                `json:"enabled"`
+	IntervalSeconds     int                                                 `json:"interval_seconds"`
+	LastCheckedAt       *string                                             `json:"last_checked_at"`
+	CreatedBy           int64                                               `json:"created_by"`
+	CreatedAt           string                                              `json:"created_at"`
+	UpdatedAt           string                                              `json:"updated_at"`
+	PrimaryStatus       string                                              `json:"primary_status"`
+	PrimaryLatencyMs    *int                                                `json:"primary_latency_ms"`
+	Availability7d      float64                                             `json:"availability_7d"`
+	ExtraModelsStatus   []modelMarketplaceExtraModelStatusResponse          `json:"extra_models_status"`
+	TemplateID          *int64                                              `json:"template_id"`
+	ExtraHeaders        map[string]string                                   `json:"extra_headers"`
+	BodyOverrideMode    string                                              `json:"body_override_mode"`
+	BodyOverride        map[string]any                                      `json:"body_override"`
 }
 
 type modelMarketplaceCheckResultResponse struct {
@@ -132,6 +138,8 @@ func modelMarketplaceMonitorToResponse(m *service.ModelMarketplaceMonitor) *mode
 		APIKeyDecryptFailed: m.APIKeyDecryptFailed,
 		PrimaryModel:        m.PrimaryModel,
 		ExtraModels:         extras,
+		ModelDisplayNames:   emptyModelMarketplaceDisplayNamesResponse(m.ModelDisplayNames),
+		ModelCallConfigs:    emptyModelMarketplaceCallConfigsResponse(m.ModelCallConfigs),
 		GroupName:           m.GroupName,
 		Enabled:             m.Enabled,
 		IntervalSeconds:     m.IntervalSeconds,
@@ -148,6 +156,20 @@ func modelMarketplaceMonitorToResponse(m *service.ModelMarketplaceMonitor) *mode
 		resp.LastCheckedAt = &s
 	}
 	return resp
+}
+
+func emptyModelMarketplaceDisplayNamesResponse(in map[string]service.ModelMarketplaceModelDisplayName) map[string]service.ModelMarketplaceModelDisplayName {
+	if in == nil {
+		return map[string]service.ModelMarketplaceModelDisplayName{}
+	}
+	return in
+}
+
+func emptyModelMarketplaceCallConfigsResponse(in map[string]service.ModelMarketplaceModelCallConfig) map[string]service.ModelMarketplaceModelCallConfig {
+	if in == nil {
+		return map[string]service.ModelMarketplaceModelCallConfig{}
+	}
+	return in
 }
 
 func modelMarketplaceCheckResultToResponse(r *service.ModelMarketplaceCheckResult) modelMarketplaceCheckResultResponse {
@@ -294,20 +316,22 @@ func (h *ModelMarketplaceMonitorHandler) Create(c *gin.Context) {
 		enabled = *req.Enabled
 	}
 	m, err := h.monitorService.Create(c.Request.Context(), service.ModelMarketplaceMonitorCreateParams{
-		Name:             req.Name,
-		Provider:         req.Provider,
-		Endpoint:         req.Endpoint,
-		APIKey:           req.APIKey,
-		PrimaryModel:     req.PrimaryModel,
-		ExtraModels:      req.ExtraModels,
-		GroupName:        req.GroupName,
-		Enabled:          enabled,
-		IntervalSeconds:  req.IntervalSeconds,
-		CreatedBy:        subject.UserID,
-		TemplateID:       req.TemplateID,
-		ExtraHeaders:     req.ExtraHeaders,
-		BodyOverrideMode: req.BodyOverrideMode,
-		BodyOverride:     req.BodyOverride,
+		Name:              req.Name,
+		Provider:          req.Provider,
+		Endpoint:          req.Endpoint,
+		APIKey:            req.APIKey,
+		PrimaryModel:      req.PrimaryModel,
+		ExtraModels:       req.ExtraModels,
+		ModelDisplayNames: req.ModelDisplayNames,
+		ModelCallConfigs:  req.ModelCallConfigs,
+		GroupName:         req.GroupName,
+		Enabled:           enabled,
+		IntervalSeconds:   req.IntervalSeconds,
+		CreatedBy:         subject.UserID,
+		TemplateID:        req.TemplateID,
+		ExtraHeaders:      req.ExtraHeaders,
+		BodyOverrideMode:  req.BodyOverrideMode,
+		BodyOverride:      req.BodyOverride,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -327,20 +351,22 @@ func (h *ModelMarketplaceMonitorHandler) Update(c *gin.Context) {
 		return
 	}
 	m, err := h.monitorService.Update(c.Request.Context(), id, service.ModelMarketplaceMonitorUpdateParams{
-		Name:             req.Name,
-		Provider:         req.Provider,
-		Endpoint:         req.Endpoint,
-		APIKey:           req.APIKey,
-		PrimaryModel:     req.PrimaryModel,
-		ExtraModels:      req.ExtraModels,
-		GroupName:        req.GroupName,
-		Enabled:          req.Enabled,
-		IntervalSeconds:  req.IntervalSeconds,
-		TemplateID:       req.TemplateID,
-		ClearTemplate:    req.ClearTemplate,
-		ExtraHeaders:     req.ExtraHeaders,
-		BodyOverrideMode: req.BodyOverrideMode,
-		BodyOverride:     req.BodyOverride,
+		Name:              req.Name,
+		Provider:          req.Provider,
+		Endpoint:          req.Endpoint,
+		APIKey:            req.APIKey,
+		PrimaryModel:      req.PrimaryModel,
+		ExtraModels:       req.ExtraModels,
+		ModelDisplayNames: req.ModelDisplayNames,
+		ModelCallConfigs:  req.ModelCallConfigs,
+		GroupName:         req.GroupName,
+		Enabled:           req.Enabled,
+		IntervalSeconds:   req.IntervalSeconds,
+		TemplateID:        req.TemplateID,
+		ClearTemplate:     req.ClearTemplate,
+		ExtraHeaders:      req.ExtraHeaders,
+		BodyOverrideMode:  req.BodyOverrideMode,
+		BodyOverride:      req.BodyOverride,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

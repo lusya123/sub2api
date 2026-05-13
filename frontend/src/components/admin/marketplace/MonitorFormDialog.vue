@@ -70,6 +70,58 @@
         />
       </div>
 
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.displayNameZh') }}</label>
+          <input
+            :value="displayNameFor(form.primary_model).zh || ''"
+            type="text"
+            class="input"
+            :placeholder="t('admin.modelMarketplaceMonitor.form.displayNameZhPlaceholder')"
+            @input="updateModelDisplayName(form.primary_model, 'zh', ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.displayNameEn') }}</label>
+          <input
+            :value="displayNameFor(form.primary_model).en || ''"
+            type="text"
+            class="input"
+            :placeholder="t('admin.modelMarketplaceMonitor.form.displayNameEnPlaceholder')"
+            @input="updateModelDisplayName(form.primary_model, 'en', ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+      </div>
+      <p class="-mt-3 text-xs text-gray-400">
+        {{ t('admin.modelMarketplaceMonitor.form.displayNameHint') }}
+      </p>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.callModel') }}</label>
+          <input
+            :value="callConfigFor(form.primary_model).model || ''"
+            type="text"
+            class="input font-mono"
+            :placeholder="form.primary_model || t('admin.modelMarketplaceMonitor.form.primaryModelPlaceholder')"
+            @input="updateModelCallConfig(form.primary_model, 'model', ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.requestUrl') }}</label>
+          <input
+            :value="callConfigFor(form.primary_model).request_url || ''"
+            type="text"
+            class="input font-mono"
+            :placeholder="defaultRequestUrlFor(form.provider, callConfigFor(form.primary_model).model || form.primary_model)"
+            @input="updateModelCallConfig(form.primary_model, 'request_url', ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+      </div>
+      <p class="-mt-3 text-xs text-gray-400">
+        {{ t('admin.modelMarketplaceMonitor.form.callConfigHint') }}
+      </p>
+
       <div>
         <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.extraModels') }}</label>
         <ModelTagInput
@@ -78,6 +130,51 @@
           :placeholder="t('admin.modelMarketplaceMonitor.form.extraModelsPlaceholder')"
           @update:models="form.extra_models = $event"
         />
+      </div>
+
+      <div v-if="form.extra_models.length > 0" class="space-y-3 rounded-lg border border-gray-200 bg-gray-50/60 p-3 dark:border-dark-700 dark:bg-dark-900/30">
+        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200">
+          {{ t('admin.modelMarketplaceMonitor.form.extraDisplayNames') }}
+        </div>
+        <div
+          v-for="model in form.extra_models"
+          :key="model"
+          class="rounded-lg border border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-950"
+        >
+          <div class="truncate font-mono text-xs font-semibold text-gray-600 dark:text-gray-300" :title="model">
+            {{ model }}
+          </div>
+          <div class="mt-2 grid gap-2 sm:grid-cols-2">
+            <input
+              :value="displayNameFor(model).zh || ''"
+              type="text"
+              class="input"
+              :placeholder="t('admin.modelMarketplaceMonitor.form.displayNameZh')"
+              @input="updateModelDisplayName(model, 'zh', ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              :value="displayNameFor(model).en || ''"
+              type="text"
+              class="input"
+              :placeholder="t('admin.modelMarketplaceMonitor.form.displayNameEn')"
+              @input="updateModelDisplayName(model, 'en', ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              :value="callConfigFor(model).model || ''"
+              type="text"
+              class="input font-mono"
+              :placeholder="t('admin.modelMarketplaceMonitor.form.callModel')"
+              @input="updateModelCallConfig(model, 'model', ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              :value="callConfigFor(model).request_url || ''"
+              type="text"
+              class="input font-mono"
+              :placeholder="defaultRequestUrlFor(form.provider, callConfigFor(model).model || model)"
+              @input="updateModelCallConfig(model, 'request_url', ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+        </div>
       </div>
 
       <div>
@@ -168,6 +265,8 @@ import type {
   BodyOverrideMode,
   ModelMarketplaceMonitor,
   CreateParams,
+  ModelCallConfig,
+  ModelDisplayName,
   Provider,
   UpdateParams,
 } from '@/api/admin/modelMarketplaceMonitor'
@@ -222,6 +321,8 @@ interface MonitorForm {
   api_key: string
   primary_model: string
   extra_models: string[]
+  model_display_names: Record<string, ModelDisplayName>
+  model_call_configs: Record<string, ModelCallConfig>
   group_name: string
   interval_seconds: number
   enabled: boolean
@@ -239,6 +340,8 @@ const form = reactive<MonitorForm>({
   api_key: '',
   primary_model: '',
   extra_models: [],
+  model_display_names: {},
+  model_call_configs: {},
   group_name: '',
   interval_seconds: systemDefaultInterval.value,
   enabled: true,
@@ -321,6 +424,8 @@ function resetForm() {
   form.api_key = ''
   form.primary_model = ''
   form.extra_models = []
+  form.model_display_names = {}
+  form.model_call_configs = {}
   form.group_name = ''
   form.interval_seconds = systemDefaultInterval.value
   form.enabled = true
@@ -337,6 +442,8 @@ function loadFromMonitor(m: ModelMarketplaceMonitor) {
   form.api_key = ''
   form.primary_model = m.primary_model
   form.extra_models = [...(m.extra_models || [])]
+  form.model_display_names = { ...(m.model_display_names || {}) }
+  form.model_call_configs = { ...(m.model_call_configs || {}) }
   form.group_name = m.group_name || ''
   form.interval_seconds = m.interval_seconds || systemDefaultInterval.value
   form.enabled = m.enabled
@@ -400,6 +507,8 @@ function buildPayload(): CreateParams {
     api_key: form.api_key.trim(),
     primary_model: form.primary_model.trim(),
     extra_models: form.extra_models,
+    model_display_names: normalizedModelDisplayNames(),
+    model_call_configs: normalizedModelCallConfigs(),
     group_name: form.group_name.trim(),
     enabled: form.enabled,
     interval_seconds: form.interval_seconds,
@@ -408,6 +517,74 @@ function buildPayload(): CreateParams {
     body_override_mode: form.body_override_mode,
     body_override: form.body_override,
   }
+}
+
+function displayNameFor(model: string): ModelDisplayName {
+  const key = model.trim()
+  if (!key) return {}
+  return form.model_display_names[key] || {}
+}
+
+function updateModelDisplayName(model: string, field: keyof ModelDisplayName, value: string) {
+  const key = model.trim()
+  if (!key) return
+  const next = { ...(form.model_display_names[key] || {}), [field]: value }
+  if (!String(next.zh || '').trim() && !String(next.en || '').trim()) {
+    delete form.model_display_names[key]
+    return
+  }
+  form.model_display_names[key] = next
+}
+
+function normalizedModelDisplayNames(): Record<string, ModelDisplayName> {
+  const allowed = new Set([form.primary_model.trim(), ...form.extra_models.map((m) => m.trim())].filter(Boolean))
+  const out: Record<string, ModelDisplayName> = {}
+  for (const model of allowed) {
+    const names = form.model_display_names[model]
+    if (!names) continue
+    const zh = String(names.zh || '').trim()
+    const en = String(names.en || '').trim()
+    if (zh || en) out[model] = { ...(zh ? { zh } : {}), ...(en ? { en } : {}) }
+  }
+  return out
+}
+
+function callConfigFor(model: string): ModelCallConfig {
+  const key = model.trim()
+  if (!key) return {}
+  return form.model_call_configs[key] || {}
+}
+
+function updateModelCallConfig(model: string, field: keyof ModelCallConfig, value: string) {
+  const key = model.trim()
+  if (!key) return
+  const next = { ...(form.model_call_configs[key] || {}), [field]: value }
+  if (!String(next.model || '').trim() && !String(next.request_url || '').trim()) {
+    delete form.model_call_configs[key]
+    return
+  }
+  form.model_call_configs[key] = next
+}
+
+function normalizedModelCallConfigs(): Record<string, ModelCallConfig> {
+  const allowed = new Set([form.primary_model.trim(), ...form.extra_models.map((m) => m.trim())].filter(Boolean))
+  const out: Record<string, ModelCallConfig> = {}
+  for (const model of allowed) {
+    const cfg = form.model_call_configs[model]
+    if (!cfg) continue
+    const callModel = String(cfg.model || '').trim()
+    const requestUrl = String(cfg.request_url || '').trim()
+    if (callModel || requestUrl) out[model] = { ...(callModel ? { model: callModel } : {}), ...(requestUrl ? { request_url: requestUrl } : {}) }
+  }
+  return out
+}
+
+function defaultRequestUrlFor(provider: Provider, model: string): string {
+  const origin = window.location.origin.replace(/\/+$/, '')
+  const callModel = encodeURIComponent(String(model || '').trim())
+  if (provider === 'anthropic') return `${origin}/v1/messages`
+  if (provider === 'gemini') return callModel ? `${origin}/v1beta/models/${callModel}:generateContent` : `${origin}/v1beta/models/{model}:generateContent`
+  return `${origin}/v1/chat/completions`
 }
 
 async function handleSubmit() {

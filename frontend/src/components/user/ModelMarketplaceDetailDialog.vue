@@ -31,7 +31,23 @@
             :key="m.model"
             class="border-b border-gray-100 dark:border-dark-800"
           >
-            <td class="py-2 pr-3 font-medium text-gray-900 dark:text-gray-100">{{ m.model }}</td>
+            <td class="py-2 pr-3">
+              <div v-if="localizedConfiguredModelName(m.display_name_zh, m.display_name_en)" class="font-medium text-gray-900 dark:text-gray-100">
+                {{ localizedConfiguredModelName(m.display_name_zh, m.display_name_en) }}
+              </div>
+              <div
+                class="font-mono text-xs text-gray-400"
+                :class="{ 'mt-0.5': localizedConfiguredModelName(m.display_name_zh, m.display_name_en) }"
+              >
+                {{ m.model }}
+              </div>
+              <div class="mt-1 max-w-[320px] truncate font-mono text-[11px] text-gray-500 dark:text-gray-400" :title="m.call_model || m.model">
+                {{ t('modelMarketplaceStatus.callModel', 'Call model') }}: {{ m.call_model || m.model }}
+              </div>
+              <div class="mt-0.5 max-w-[320px] truncate font-mono text-[11px] text-gray-500 dark:text-gray-400" :title="requestUrlFor(m)">
+                {{ t('modelMarketplaceStatus.requestUrl', 'Request URL') }}: {{ requestUrlFor(m) }}
+              </div>
+            </td>
             <td class="py-2 pr-3 text-gray-700 dark:text-gray-300">
               <div v-if="priceSummary(m.pricing).length > 0" class="flex flex-col gap-0.5 font-mono text-xs">
                 <span v-for="line in priceSummary(m.pricing)" :key="line">{{ line }}</span>
@@ -74,6 +90,7 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import {
   status as fetchModelMarketplaceDetail,
   type UserModelMarketplaceDetail,
+  type UserModelMarketplaceModelDetail,
 } from '@/api/modelMarketplace'
 import type { UserSupportedModelPricing } from '@/api/channels'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -91,7 +108,7 @@ defineEmits<{
   (e: 'close'): void
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const appStore = useAppStore()
 const { statusLabel, statusBadgeClass, formatLatency, formatPercent } = useModelMarketplaceMonitorFormat()
 
@@ -133,6 +150,25 @@ function priceSummary(pricing: UserSupportedModelPricing | null): string[] {
       : `${t('availableChannels.pricing.cacheReadPrice')} ${formatScaled(pricing.cache_read_price, 1_000_000)} ${unit}`,
   ]
   return lines.filter(Boolean)
+}
+
+function localizedConfiguredModelName(zh: string | undefined, en: string | undefined): string {
+  const zhName = String(zh || '').trim()
+  const enName = String(en || '').trim()
+  if (String(locale.value).toLowerCase().startsWith('zh')) {
+    return zhName || enName
+  }
+  return enName
+}
+
+function requestUrlFor(m: UserModelMarketplaceModelDetail): string {
+  if (m.request_url) return m.request_url
+  const origin = window.location.origin.replace(/\/+$/, '')
+  const callModel = encodeURIComponent(String(m.call_model || m.model || '').trim())
+  const provider = detail.value?.provider || ''
+  if (provider === 'anthropic') return `${origin}/v1/messages`
+  if (provider === 'gemini') return callModel ? `${origin}/v1beta/models/${callModel}:generateContent` : `${origin}/v1beta/models/{model}:generateContent`
+  return `${origin}/v1/chat/completions`
 }
 
 watch(

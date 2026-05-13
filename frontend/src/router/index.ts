@@ -72,6 +72,14 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
     }
   },
   {
+    path: '/manus/launch',
+    name: 'ManusLaunch',
+    component: () => import('@/views/auth/ManusLaunchView.vue'),
+    meta: {
+      title: 'Open Manus'
+    }
+  },
+  {
     path: '/auth/callback',
     name: 'OAuthCallback',
     alias: '/auth/oauth/callback',

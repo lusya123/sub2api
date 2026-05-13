@@ -23,15 +23,17 @@ func NewModelMarketplaceMonitorRepository(_ *dbent.Client, db *sql.DB) service.M
 
 func (r *modelMarketplaceMonitorRepository) Create(ctx context.Context, m *service.ModelMarketplaceMonitor) error {
 	extras, _ := json.Marshal(emptyModelMarketplaceSliceIfNil(m.ExtraModels))
+	displayNames, _ := json.Marshal(emptyModelMarketplaceDisplayNamesIfNil(m.ModelDisplayNames))
+	callConfigs, _ := json.Marshal(emptyModelMarketplaceCallConfigsIfNil(m.ModelCallConfigs))
 	headers, _ := json.Marshal(emptyModelMarketplaceHeadersIfNil(m.ExtraHeaders))
 	body, _ := json.Marshal(m.BodyOverride)
 	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO model_marketplace_monitors
-			(name, provider, endpoint, api_key_encrypted, primary_model, extra_models, group_name, enabled, interval_seconds,
+			(name, provider, endpoint, api_key_encrypted, primary_model, extra_models, model_display_names, model_call_configs, group_name, enabled, interval_seconds,
 			 created_by, template_id, extra_headers, body_override_mode, body_override)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		RETURNING id, created_at, updated_at`,
-		m.Name, m.Provider, m.Endpoint, m.APIKey, m.PrimaryModel, extras, m.GroupName, m.Enabled, m.IntervalSeconds,
+		m.Name, m.Provider, m.Endpoint, m.APIKey, m.PrimaryModel, extras, displayNames, callConfigs, m.GroupName, m.Enabled, m.IntervalSeconds,
 		m.CreatedBy, m.TemplateID, headers, defaultModelMarketplaceBodyMode(m.BodyOverrideMode), nullableModelMarketplaceJSON(body, m.BodyOverride),
 	).Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	return err
@@ -50,16 +52,18 @@ func (r *modelMarketplaceMonitorRepository) GetByID(ctx context.Context, id int6
 
 func (r *modelMarketplaceMonitorRepository) Update(ctx context.Context, m *service.ModelMarketplaceMonitor) error {
 	extras, _ := json.Marshal(emptyModelMarketplaceSliceIfNil(m.ExtraModels))
+	displayNames, _ := json.Marshal(emptyModelMarketplaceDisplayNamesIfNil(m.ModelDisplayNames))
+	callConfigs, _ := json.Marshal(emptyModelMarketplaceCallConfigsIfNil(m.ModelCallConfigs))
 	headers, _ := json.Marshal(emptyModelMarketplaceHeadersIfNil(m.ExtraHeaders))
 	body, _ := json.Marshal(m.BodyOverride)
 	err := r.db.QueryRowContext(ctx, `
 		UPDATE model_marketplace_monitors
 		SET name=$2, provider=$3, endpoint=$4, api_key_encrypted=$5, primary_model=$6, extra_models=$7,
-		    group_name=$8, enabled=$9, interval_seconds=$10, template_id=$11, extra_headers=$12,
-		    body_override_mode=$13, body_override=$14, updated_at=NOW()
+		    model_display_names=$8, model_call_configs=$9, group_name=$10, enabled=$11, interval_seconds=$12, template_id=$13, extra_headers=$14,
+		    body_override_mode=$15, body_override=$16, updated_at=NOW()
 		WHERE id=$1
 		RETURNING updated_at`,
-		m.ID, m.Name, m.Provider, m.Endpoint, m.APIKey, m.PrimaryModel, extras, m.GroupName, m.Enabled,
+		m.ID, m.Name, m.Provider, m.Endpoint, m.APIKey, m.PrimaryModel, extras, displayNames, callConfigs, m.GroupName, m.Enabled,
 		m.IntervalSeconds, m.TemplateID, headers, defaultModelMarketplaceBodyMode(m.BodyOverrideMode), nullableModelMarketplaceJSON(body, m.BodyOverride),
 	).Scan(&m.UpdatedAt)
 	if err == sql.ErrNoRows {
@@ -297,6 +301,66 @@ func (r *modelMarketplaceMonitorRepository) ListRecentHistoryForMonitors(
 	return out, nil
 }
 
+func (r *modelMarketplaceMonitorRepository) ListRecentHistoryForMonitorModels(
+	ctx context.Context,
+	modelsByID map[int64][]string,
+	perModelLimit int,
+) (map[int64]map[string][]*service.ModelMarketplaceMonitorHistoryEntry, error) {
+	out := make(map[int64]map[string][]*service.ModelMarketplaceMonitorHistoryEntry, len(modelsByID))
+	pairIDs, pairModels := buildModelMarketplaceMonitorModelPairsFromMap(modelsByID)
+	if len(pairIDs) == 0 {
+		return out, nil
+	}
+	perModelLimit = clampModelMarketplaceTimelineLimit(perModelLimit)
+
+	const q = `
+		WITH targets AS (
+		    SELECT unnest($1::bigint[]) AS monitor_id,
+		           unnest($2::text[])   AS model
+		),
+		ranked AS (
+		    SELECT h.monitor_id,
+		           h.model,
+		           h.status,
+		           h.latency_ms,
+		           h.ping_latency_ms,
+		           h.checked_at,
+		           ROW_NUMBER() OVER (PARTITION BY h.monitor_id, h.model ORDER BY h.checked_at DESC) AS rn
+		    FROM model_marketplace_monitor_histories h
+		    JOIN targets t
+		      ON t.monitor_id = h.monitor_id AND t.model = h.model
+		)
+		SELECT monitor_id, model, status, latency_ms, ping_latency_ms, checked_at
+		FROM ranked
+		WHERE rn <= $3
+		ORDER BY monitor_id, model, checked_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, q, pq.Array(pairIDs), pq.Array(pairModels), perModelLimit)
+	if err != nil {
+		return nil, fmt.Errorf("query model marketplace recent history for monitor models: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var monitorID int64
+		entry := &service.ModelMarketplaceMonitorHistoryEntry{}
+		var latency, ping sql.NullInt64
+		if err := rows.Scan(&monitorID, &entry.Model, &entry.Status, &latency, &ping, &entry.CheckedAt); err != nil {
+			return nil, fmt.Errorf("scan model marketplace recent history model row: %w", err)
+		}
+		assignModelMarketplaceNullInt(&entry.LatencyMs, latency)
+		assignModelMarketplaceNullInt(&entry.PingLatencyMs, ping)
+		if out[monitorID] == nil {
+			out[monitorID] = make(map[string][]*service.ModelMarketplaceMonitorHistoryEntry)
+		}
+		out[monitorID][entry.Model] = append(out[monitorID][entry.Model], entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func buildModelMarketplaceMonitorModelPairs(ids []int64, primaryModels map[int64]string) ([]int64, []string) {
 	if len(ids) == 0 || len(primaryModels) == 0 {
 		return nil, nil
@@ -310,6 +374,31 @@ func buildModelMarketplaceMonitorModelPairs(ids []int64, primaryModels map[int64
 		}
 		pairIDs = append(pairIDs, id)
 		pairModels = append(pairModels, model)
+	}
+	return pairIDs, pairModels
+}
+
+func buildModelMarketplaceMonitorModelPairsFromMap(modelsByID map[int64][]string) ([]int64, []string) {
+	if len(modelsByID) == 0 {
+		return nil, nil
+	}
+	pairIDs := make([]int64, 0, len(modelsByID))
+	pairModels := make([]string, 0, len(modelsByID))
+	seen := make(map[string]struct{})
+	for id, models := range modelsByID {
+		for _, model := range models {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			key := fmt.Sprintf("%d\x00%s", id, model)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			pairIDs = append(pairIDs, id)
+			pairModels = append(pairModels, model)
+		}
 	}
 	return pairIDs, pairModels
 }
@@ -350,7 +439,7 @@ func buildMarketplaceMonitorWhere(params service.ModelMarketplaceMonitorListPara
 	}
 	if s := strings.TrimSpace(params.Search); s != "" {
 		args = append(args, "%"+s+"%")
-		parts = append(parts, fmt.Sprintf("(name ILIKE $%d OR group_name ILIKE $%d OR primary_model ILIKE $%d)", len(args), len(args), len(args)))
+		parts = append(parts, fmt.Sprintf("(name ILIKE $%d OR group_name ILIKE $%d OR primary_model ILIKE $%d OR model_display_names::text ILIKE $%d OR model_call_configs::text ILIKE $%d)", len(args), len(args), len(args), len(args), len(args)))
 	}
 	if len(parts) == 0 {
 		return "", args
@@ -360,7 +449,7 @@ func buildMarketplaceMonitorWhere(params service.ModelMarketplaceMonitorListPara
 
 func (r *modelMarketplaceMonitorRepository) queryMonitors(ctx context.Context, suffix string, args ...any) ([]*service.ModelMarketplaceMonitor, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, provider, endpoint, api_key_encrypted, primary_model, extra_models, group_name, enabled,
+		SELECT id, name, provider, endpoint, api_key_encrypted, primary_model, extra_models, model_display_names, model_call_configs, group_name, enabled,
 		       interval_seconds, last_checked_at, created_by, created_at, updated_at, template_id,
 		       extra_headers, body_override_mode, body_override
 		FROM model_marketplace_monitors `+suffix, args...)
@@ -371,20 +460,28 @@ func (r *modelMarketplaceMonitorRepository) queryMonitors(ctx context.Context, s
 	out := []*service.ModelMarketplaceMonitor{}
 	for rows.Next() {
 		m := &service.ModelMarketplaceMonitor{}
-		var extraRaw, headersRaw []byte
+		var extraRaw, displayNamesRaw, callConfigsRaw, headersRaw []byte
 		var bodyRaw []byte
-		if err := rows.Scan(&m.ID, &m.Name, &m.Provider, &m.Endpoint, &m.APIKey, &m.PrimaryModel, &extraRaw, &m.GroupName,
+		if err := rows.Scan(&m.ID, &m.Name, &m.Provider, &m.Endpoint, &m.APIKey, &m.PrimaryModel, &extraRaw, &displayNamesRaw, &callConfigsRaw, &m.GroupName,
 			&m.Enabled, &m.IntervalSeconds, &m.LastCheckedAt, &m.CreatedBy, &m.CreatedAt, &m.UpdatedAt, &m.TemplateID,
 			&headersRaw, &m.BodyOverrideMode, &bodyRaw); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(extraRaw, &m.ExtraModels)
+		_ = json.Unmarshal(displayNamesRaw, &m.ModelDisplayNames)
+		_ = json.Unmarshal(callConfigsRaw, &m.ModelCallConfigs)
 		_ = json.Unmarshal(headersRaw, &m.ExtraHeaders)
 		if len(bodyRaw) > 0 {
 			_ = json.Unmarshal(bodyRaw, &m.BodyOverride)
 		}
 		if m.ExtraModels == nil {
 			m.ExtraModels = []string{}
+		}
+		if m.ModelDisplayNames == nil {
+			m.ModelDisplayNames = map[string]service.ModelMarketplaceModelDisplayName{}
+		}
+		if m.ModelCallConfigs == nil {
+			m.ModelCallConfigs = map[string]service.ModelMarketplaceModelCallConfig{}
 		}
 		if m.ExtraHeaders == nil {
 			m.ExtraHeaders = map[string]string{}
@@ -453,6 +550,20 @@ func defaultModelMarketplaceBodyMode(mode string) string {
 func emptyModelMarketplaceSliceIfNil(in []string) []string {
 	if in == nil {
 		return []string{}
+	}
+	return in
+}
+
+func emptyModelMarketplaceDisplayNamesIfNil(in map[string]service.ModelMarketplaceModelDisplayName) map[string]service.ModelMarketplaceModelDisplayName {
+	if in == nil {
+		return map[string]service.ModelMarketplaceModelDisplayName{}
+	}
+	return in
+}
+
+func emptyModelMarketplaceCallConfigsIfNil(in map[string]service.ModelMarketplaceModelCallConfig) map[string]service.ModelMarketplaceModelCallConfig {
+	if in == nil {
+		return map[string]service.ModelMarketplaceModelCallConfig{}
 	}
 	return in
 }

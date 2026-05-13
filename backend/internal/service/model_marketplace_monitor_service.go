@@ -105,20 +105,22 @@ func (s *ModelMarketplaceMonitorService) Create(ctx context.Context, p ModelMark
 		return nil, fmt.Errorf("encrypt api key: %w", err)
 	}
 	m := &ModelMarketplaceMonitor{
-		Name:             strings.TrimSpace(p.Name),
-		Provider:         p.Provider,
-		Endpoint:         normalizeModelMarketplaceEndpoint(p.Endpoint),
-		APIKey:           encrypted,
-		PrimaryModel:     strings.TrimSpace(p.PrimaryModel),
-		ExtraModels:      normalizeModelMarketplaceModels(p.ExtraModels),
-		GroupName:        strings.TrimSpace(p.GroupName),
-		Enabled:          p.Enabled,
-		IntervalSeconds:  p.IntervalSeconds,
-		CreatedBy:        p.CreatedBy,
-		TemplateID:       p.TemplateID,
-		ExtraHeaders:     emptyModelMarketplaceHeadersIfNil(p.ExtraHeaders),
-		BodyOverrideMode: defaultModelMarketplaceBodyMode(p.BodyOverrideMode),
-		BodyOverride:     p.BodyOverride,
+		Name:              strings.TrimSpace(p.Name),
+		Provider:          p.Provider,
+		Endpoint:          normalizeModelMarketplaceEndpoint(p.Endpoint),
+		APIKey:            encrypted,
+		PrimaryModel:      strings.TrimSpace(p.PrimaryModel),
+		ExtraModels:       normalizeModelMarketplaceModels(p.ExtraModels),
+		ModelDisplayNames: normalizeModelMarketplaceDisplayNames(p.ModelDisplayNames),
+		ModelCallConfigs:  normalizeModelMarketplaceCallConfigs(p.ModelCallConfigs),
+		GroupName:         strings.TrimSpace(p.GroupName),
+		Enabled:           p.Enabled,
+		IntervalSeconds:   p.IntervalSeconds,
+		CreatedBy:         p.CreatedBy,
+		TemplateID:        p.TemplateID,
+		ExtraHeaders:      emptyModelMarketplaceHeadersIfNil(p.ExtraHeaders),
+		BodyOverrideMode:  defaultModelMarketplaceBodyMode(p.BodyOverrideMode),
+		BodyOverride:      p.BodyOverride,
 	}
 	if err := s.repo.Create(ctx, m); err != nil {
 		return nil, fmt.Errorf("create model marketplace monitor: %w", err)
@@ -356,6 +358,12 @@ func applyModelMarketplaceMonitorUpdate(existing *ModelMarketplaceMonitor, p Mod
 	}
 	if p.ExtraModels != nil {
 		existing.ExtraModels = normalizeModelMarketplaceModels(*p.ExtraModels)
+	}
+	if p.ModelDisplayNames != nil {
+		existing.ModelDisplayNames = normalizeModelMarketplaceDisplayNames(*p.ModelDisplayNames)
+	}
+	if p.ModelCallConfigs != nil {
+		existing.ModelCallConfigs = normalizeModelMarketplaceCallConfigs(*p.ModelCallConfigs)
 	}
 	if p.GroupName != nil {
 		existing.GroupName = strings.TrimSpace(*p.GroupName)

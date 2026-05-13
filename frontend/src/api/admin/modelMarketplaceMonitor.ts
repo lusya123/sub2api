@@ -9,6 +9,16 @@ export type Provider = string
 export type MonitorStatus = 'operational' | 'degraded' | 'failed' | 'error'
 export type BodyOverrideMode = 'off' | 'merge' | 'replace'
 
+export interface ModelDisplayName {
+  zh?: string
+  en?: string
+}
+
+export interface ModelCallConfig {
+  model?: string
+  request_url?: string
+}
+
 export interface ModelMarketplaceMonitor {
   id: number
   name: string
@@ -23,6 +33,8 @@ export interface ModelMarketplaceMonitor {
   api_key_decrypt_failed?: boolean
   primary_model: string
   extra_models: string[]
+  model_display_names: Record<string, ModelDisplayName>
+  model_call_configs: Record<string, ModelCallConfig>
   group_name: string
   enabled: boolean
   interval_seconds: number
@@ -74,6 +86,8 @@ export interface CreateParams {
   api_key: string
   primary_model: string
   extra_models?: string[]
+  model_display_names?: Record<string, ModelDisplayName>
+  model_call_configs?: Record<string, ModelCallConfig>
   group_name?: string
   enabled?: boolean
   interval_seconds: number

@@ -3,18 +3,20 @@
     <!-- Background Decoration -->
     <div class="pointer-events-none fixed inset-0 bg-mesh-gradient"></div>
 
-    <!-- Global Header -->
+    <!-- Global Top Bar (full width, above sidebar and content) -->
     <AppHeader :hide-sidebar="hideSidebar" />
 
-    <!-- Sidebar -->
+    <!-- Sidebar (drops in under the top bar) -->
     <AppSidebar v-if="!hideSidebar" />
+
+    <!-- Mobile bottom workspace nav (hidden on md+) -->
+    <AppBottomNav />
 
     <!-- Main Content Area -->
     <div
-      class="relative min-h-[calc(100vh_-_4rem)] transition-all duration-300"
+      class="relative min-h-screen pt-12 transition-all duration-300 app-main-area"
       :class="mainAreaClass"
     >
-      <!-- Main Content -->
       <main :class="contentClass || 'p-4 md:p-6 lg:p-8'">
         <slot />
       </main>
@@ -31,6 +33,7 @@ import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { useOnboardingStore } from '@/stores/onboarding'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+import AppBottomNav from './AppBottomNav.vue'
 
 const props = withDefaults(defineProps<{
   hideSidebar?: boolean
@@ -66,3 +69,14 @@ onMounted(() => {
 
 defineExpose({ replayTour })
 </script>
+
+<style scoped>
+/* Leave room for the fixed bottom nav on mobile (visible below md).
+   Includes safe-area inset so the last row never sits behind the iPhone
+   home indicator. On md+ the bottom nav is hidden so no extra padding. */
+@media (max-width: 767px) {
+  .app-main-area {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom) + 0.5rem);
+  }
+}
+</style>

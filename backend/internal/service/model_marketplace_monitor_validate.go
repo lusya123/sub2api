@@ -79,6 +79,50 @@ func normalizeModelMarketplaceModels(in []string) []string {
 	return out
 }
 
+func normalizeModelMarketplaceDisplayNames(in map[string]ModelMarketplaceModelDisplayName) map[string]ModelMarketplaceModelDisplayName {
+	if len(in) == 0 {
+		return map[string]ModelMarketplaceModelDisplayName{}
+	}
+	out := make(map[string]ModelMarketplaceModelDisplayName, len(in))
+	for model, names := range in {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		item := ModelMarketplaceModelDisplayName{
+			Zh: strings.TrimSpace(names.Zh),
+			En: strings.TrimSpace(names.En),
+		}
+		if item.Zh == "" && item.En == "" {
+			continue
+		}
+		out[model] = item
+	}
+	return out
+}
+
+func normalizeModelMarketplaceCallConfigs(in map[string]ModelMarketplaceModelCallConfig) map[string]ModelMarketplaceModelCallConfig {
+	if len(in) == 0 {
+		return map[string]ModelMarketplaceModelCallConfig{}
+	}
+	out := make(map[string]ModelMarketplaceModelCallConfig, len(in))
+	for model, cfg := range in {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		item := ModelMarketplaceModelCallConfig{
+			Model:      strings.TrimSpace(cfg.Model),
+			RequestURL: strings.TrimSpace(cfg.RequestURL),
+		}
+		if item.Model == "" && item.RequestURL == "" {
+			continue
+		}
+		out[model] = item
+	}
+	return out
+}
+
 func validateModelMarketplaceBodyModeParams(mode string, body map[string]any) error {
 	switch mode {
 	case "", ModelMarketplaceBodyOverrideModeOff:
