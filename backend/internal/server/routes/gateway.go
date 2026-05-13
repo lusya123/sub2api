@@ -114,6 +114,13 @@ func RegisterGatewayRoutes(
 		})
 	}
 
+	// OpenAI-compatible model list aliases for relay panels that only let users
+	// enter a base URL. New API appends "/v1/models" to the base URL, so also
+	// accept duplicated "/v1/v1/models" when a user includes /v1 in the base URL.
+	r.GET("/v1/v1/models", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.Models)
+	r.GET("/openai/v1/models", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.Models)
+	r.GET("/openai/v1/v1/models", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.Models)
+
 	// Gemini 原生 API 兼容层（Gemini SDK/CLI 直连）
 	gemini := r.Group("/v1beta")
 	gemini.Use(bodyLimit)

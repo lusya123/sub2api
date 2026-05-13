@@ -77,3 +77,22 @@ func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI images handler", path)
 	}
 }
+
+func TestGatewayRoutesModelsAliasesAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+
+	for _, path := range []string{
+		"/v1/models",
+		"/v1/v1/models",
+		"/openai/v1/models",
+		"/openai/v1/v1/models",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code, "path=%s should return model list", path)
+		require.Contains(t, w.Body.String(), `"object":"list"`)
+		require.Contains(t, w.Body.String(), `"data"`)
+	}
+}

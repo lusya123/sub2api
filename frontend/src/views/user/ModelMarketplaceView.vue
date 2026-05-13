@@ -174,9 +174,9 @@
             <article
               v-for="card in pagedModelCards"
               :key="card.key"
-              class="group flex min-h-[188px] min-w-0 flex-col overflow-hidden rounded-lg border border-gray-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-dark-700/70 dark:bg-dark-900/80 dark:hover:border-primary-500/30"
+              class="group flex h-[310px] min-w-0 flex-col overflow-hidden rounded-lg border border-gray-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:border-dark-700/70 dark:bg-dark-900/80 dark:hover:border-primary-500/30"
             >
-              <div class="flex items-start justify-between gap-3">
+              <div class="flex min-h-[74px] items-start justify-between gap-3">
                 <div class="flex min-w-0 items-start gap-3">
                   <span
                     class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-lg ring-1 ring-black/5 dark:ring-white/10"
@@ -192,10 +192,22 @@
                     <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                       <span class="font-mono">{{ card.model }}</span>
                       <span class="text-gray-300 dark:text-dark-600">|</span>
-                      <span>{{ originalPriceLine(card) }}</span>
-                      <span v-if="ratedPriceLine(card)" class="font-medium text-emerald-600 dark:text-emerald-300">{{ ratedPriceLine(card) }}</span>
-                      <span class="text-gray-300 dark:text-dark-600">|</span>
-                      <span>{{ t('modelMarketplaceStatus.channels.count', { count: card.channelCount }, `${card.channelCount} channels`) }}</span>
+                      <span>{{ channelSummary(card) }}</span>
+                    </div>
+                    <div v-if="modelPriceItems(card).length" class="mt-2 grid grid-cols-2 gap-1.5">
+                      <div
+                        v-for="item in modelPriceItems(card)"
+                        :key="`${card.key}:price:${item.label}`"
+                        class="min-w-0 rounded-lg bg-gray-50 px-2 py-1.5 ring-1 ring-gray-200/80 dark:bg-dark-950/45 dark:ring-dark-700"
+                        :class="{ 'col-span-2': modelPriceItems(card).length === 1 }"
+                      >
+                        <div class="truncate text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                          {{ item.label }}
+                        </div>
+                        <div class="truncate font-mono text-xs font-bold text-gray-900 dark:text-gray-100">
+                          {{ item.value }}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -204,7 +216,7 @@
                   <button
                     type="button"
                     class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-dark-700 dark:text-gray-300 dark:hover:bg-dark-700"
-                    @click="openDetail(card.channels[0]?.monitor)"
+                    @click="openDetail(card)"
                   >
                     {{ t('modelMarketplaceStatus.detailButton', 'Details') }}
                     <Icon name="chevronRight" size="xs" />
@@ -220,112 +232,38 @@
                 </div>
               </div>
 
-              <p class="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-gray-600 dark:text-gray-300">
-                {{ card.description }}
-              </p>
-
-              <div class="mt-3 space-y-1.5 rounded-lg bg-gray-50/80 p-2.5 text-xs dark:bg-dark-950/45">
-                <div class="flex min-w-0 items-center gap-2">
-                  <span class="shrink-0 text-gray-400">{{ t('modelMarketplaceStatus.callModel', 'Call model') }}</span>
-                  <code class="truncate font-mono text-gray-700 dark:text-gray-200" :title="card.callModel">{{ card.callModel }}</code>
-                </div>
-                <div class="flex min-w-0 items-center gap-2">
-                  <span class="shrink-0 text-gray-400">{{ t('modelMarketplaceStatus.requestUrl', 'Request URL') }}</span>
-                  <code class="truncate font-mono text-gray-700 dark:text-gray-200" :title="card.requestUrl">{{ card.requestUrl }}</code>
-                  <button
-                    type="button"
-                    class="ml-auto grid h-6 w-6 shrink-0 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-white hover:text-gray-900 dark:border-dark-700 dark:text-gray-400 dark:hover:bg-dark-800 dark:hover:text-white"
-                    :title="t('modelMarketplaceStatus.copyRequestUrl', 'Copy request URL')"
-                    @click="copyModel(card.requestUrl)"
-                  >
-                    <Icon name="copy" size="xs" />
-                  </button>
-                </div>
-              </div>
-
-              <div class="mt-3 flex flex-wrap items-center gap-2">
-                <span class="rounded-md px-2 py-1 text-xs font-semibold" :class="statusBadgeClass(card.status)">
-                  {{ statusLabel(card.status) }}
-                </span>
-                <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300">
-                  {{ card.groupName || t('modelMarketplaceStatus.ungrouped', 'Ungrouped') }}
-                </span>
-                <span class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300">
-                  {{ billingLabel(card.billingType) }}
-                </span>
-                <span
-                  v-for="tag in card.tags.slice(0, 3)"
-                  :key="`${card.key}:${tag}`"
-                  class="rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-gray-200 dark:bg-dark-900/40 dark:text-gray-400 dark:ring-dark-700"
-                >
-                  {{ tag }}
-                </span>
-              </div>
-
-              <div class="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-dark-800 dark:text-gray-400">
-                <span>
-                  {{ t('monitorCommon.dialogLatency') }}
-                  <strong class="ml-1 font-mono text-gray-900 dark:text-gray-100">{{ formatMetric(formatLatency(card.latencyMs), card.latencyMs == null ? '' : 'ms') }}</strong>
-                </span>
-                <span>
-                  {{ t('monitorCommon.endpointPing') }}
-                  <strong class="ml-1 font-mono text-gray-900 dark:text-gray-100">{{ formatMetric(formatLatency(card.pingLatencyMs), card.pingLatencyMs == null ? '' : 'ms') }}</strong>
-                </span>
-                <span>
-                  {{ t('modelMarketplaceStatus.availability7d', '7d Availability') }}
-                  <strong class="ml-1 font-mono text-gray-900 dark:text-gray-100">{{ formatPercent(card.availability7d) }}</strong>
-                </span>
-              </div>
-
               <div
-                class="-mx-4 -mb-4 mt-3 border-t border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-dark-800 dark:bg-dark-900/70"
+                class="-mx-4 -mb-4 mt-auto flex h-[168px] flex-col border-t border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-dark-800 dark:bg-dark-900/70"
               >
-                <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="mb-2 flex h-5 shrink-0 items-center justify-between gap-3">
                   <span class="text-xs font-bold text-gray-700 dark:text-gray-200">
                     {{ t('modelMarketplaceStatus.channels.title', 'Channels') }}
                   </span>
-                  <span class="text-[10px] font-medium text-gray-400 dark:text-gray-500">
-                    {{ t('monitorCommon.nextUpdateIn', { n: countdown }) }}
-                  </span>
                 </div>
-                <div class="max-h-44 space-y-2 overflow-y-auto pr-1">
+                <div class="space-y-1.5">
                   <div
-                    v-for="channel in card.channels"
+                    v-for="channel in visibleCardChannels(card)"
                     :key="`${card.key}:${channel.key}:channel`"
                     class="rounded-lg border border-gray-200/70 bg-white/80 p-2 dark:border-dark-700/70 dark:bg-dark-950/40"
                     :title="healthTimelineTitle(channel, 32)"
                   >
-                    <div class="mb-1.5 flex min-w-0 items-start justify-between gap-2">
+                    <div class="mb-1.5 flex min-w-0 items-center justify-between gap-2">
                       <div class="flex min-w-0 items-center gap-2">
                         <span class="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-gray-100 dark:bg-dark-800" :class="providerTintClass(channel.provider)">
                           <ProviderIcon :provider="channel.provider" :size="14" />
                         </span>
-                        <div class="min-w-0">
-                          <div class="truncate text-xs font-semibold text-gray-800 dark:text-gray-100">
-                            {{ channel.channelName }}
-                          </div>
-                          <div class="truncate text-[10px] text-gray-400 dark:text-gray-500">
-                            {{ channel.groupName || t('modelMarketplaceStatus.ungrouped', 'Ungrouped') }} · {{ providerLabel(channel.provider) }}
-                          </div>
+                        <div class="min-w-0 truncate text-xs font-semibold text-gray-800 dark:text-gray-100">
+                          {{ channel.channelName }}
                         </div>
                       </div>
-                      <span class="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold" :class="statusBadgeClass(channel.status)">
-                        {{ statusLabel(channel.status) }}
-                      </span>
-                    </div>
-                    <div class="mb-1.5 grid grid-cols-3 gap-1 text-[10px] text-gray-500 dark:text-gray-400">
-                      <span class="truncate">
-                        {{ t('modelMarketplaceStatus.channels.rate', 'Rate') }}
-                        <strong class="font-mono text-gray-800 dark:text-gray-100">×{{ formatRate(channel.effectiveRate ?? 1) }}</strong>
-                      </span>
-                      <span class="truncate">
-                        {{ t('monitorCommon.dialogLatency') }}
-                        <strong class="font-mono text-gray-800 dark:text-gray-100">{{ formatMetric(formatLatency(channel.latencyMs), channel.latencyMs == null ? '' : 'ms') }}</strong>
-                      </span>
-                      <span class="truncate">
-                        {{ t('modelMarketplaceStatus.availability7d', '7d Availability') }}
-                        <strong class="font-mono text-gray-800 dark:text-gray-100">{{ formatPercent(channel.availability7d) }}</strong>
-                      </span>
+                      <div class="flex shrink-0 items-center gap-1.5">
+                        <span class="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-dark-800 dark:text-gray-300">
+                          ×{{ formatRate(channel.effectiveRate ?? 1) }}
+                        </span>
+                        <span class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold" :class="statusBadgeClass(channel.status)">
+                          {{ statusLabel(channel.status) }}
+                        </span>
+                      </div>
                     </div>
                     <div
                       class="grid h-2 w-full min-w-0 items-end gap-[1px] overflow-hidden"
@@ -340,12 +278,16 @@
                         :title="bar.title"
                       ></span>
                     </div>
-                    <div class="mt-1 truncate text-[10px] text-gray-400 dark:text-gray-500">
-                      <span>{{ ratedPriceLine(channel) || originalPriceLine(channel) }}</span>
-                      <span class="mx-1">·</span>
-                      <code>{{ channel.callModel }}</code>
-                    </div>
                   </div>
+                  <button
+                    v-if="hiddenChannelCount(card) > 0"
+                    type="button"
+                    class="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 bg-white/60 px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-white hover:text-gray-900 dark:border-dark-700 dark:bg-dark-950/30 dark:text-gray-400 dark:hover:bg-dark-900 dark:hover:text-white"
+                    @click="openDetail(card)"
+                  >
+                    {{ t('modelMarketplaceStatus.channels.more', { count: hiddenChannelCount(card) }, `+${hiddenChannelCount(card)} more channels`) }}
+                    <Icon name="chevronRight" size="xs" />
+                  </button>
                 </div>
               </div>
             </article>
@@ -395,8 +337,10 @@
 
     <ModelMarketplaceDetailDialog
       :show="showDetail"
-      :monitor-id="detailTarget?.id ?? null"
+      :monitor-id="detailTarget?.monitorId ?? null"
       :title="detailTitle"
+      :channels="detailChannels"
+      :price-unit="priceUnit"
       @close="closeDetail"
     />
   </AppLayout>
@@ -504,7 +448,7 @@ const availableGroups = ref<Group[]>([])
 const userGroupRates = ref<Record<number, number>>({})
 const loading = ref(false)
 const showDetail = ref(false)
-const detailTarget = ref<UserModelMarketplaceView | null>(null)
+const detailTarget = ref<MarketplaceModelCard | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const searchQuery = ref('')
 const groupFilter = ref('all')
@@ -738,8 +682,33 @@ const sortLabel = computed(() => {
 })
 
 const detailTitle = computed(() => {
-  return detailTarget.value?.name || t('modelMarketplaceStatus.detailTitle')
+  return detailTarget.value?.displayName || detailTarget.value?.model || t('modelMarketplaceStatus.detailTitle')
 })
+
+const detailChannels = computed(() => detailTarget.value?.channels || [])
+
+const CARD_CHANNEL_LIMIT = 2
+
+function visibleCardChannels(card: MarketplaceModelCard): MarketplaceModelChannel[] {
+  return card.channels.slice(0, CARD_CHANNEL_LIMIT)
+}
+
+function hiddenChannelCount(card: MarketplaceModelCard): number {
+  return Math.max(0, card.channels.length - CARD_CHANNEL_LIMIT)
+}
+
+function channelSummary(card: MarketplaceModelCard): string {
+  const available = card.channels.filter((channel) => channel.health === 'available').length
+  const degraded = card.channels.filter((channel) => channel.health === 'degraded').length
+  const unavailable = card.channels.filter((channel) => channel.health === 'unavailable').length
+  const parts = [
+    t('modelMarketplaceStatus.channels.count', { count: card.channelCount }, `${card.channelCount} channels`),
+    available > 0 ? t('modelMarketplaceStatus.channels.availableCount', { count: available }, `${available} available`) : '',
+    degraded > 0 ? t('modelMarketplaceStatus.channels.degradedCount', { count: degraded }, `${degraded} degraded`) : '',
+    unavailable > 0 ? t('modelMarketplaceStatus.channels.unavailableCount', { count: unavailable }, `${unavailable} unavailable`) : '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+}
 
 function buildModelChannel(input: {
   monitor: UserModelMarketplaceView
@@ -1067,35 +1036,24 @@ function buildAggregateDescription(best: MarketplaceModelChannel, channelCount: 
   )
 }
 
-function billingLabel(mode: BillingMode | 'unknown'): string {
-  if (mode === BILLING_MODE_TOKEN) return t('availableChannels.pricing.billingModeToken')
-  if (mode === BILLING_MODE_PER_REQUEST) return t('availableChannels.pricing.billingModePerRequest')
-  if (mode === BILLING_MODE_IMAGE) return t('availableChannels.pricing.billingModeImage')
-  return t('availableChannels.noPricing')
+function formatRate(rate: number): string {
+  return Number(rate.toFixed(4)).toString()
 }
 
-function originalPriceLine(card: MarketplaceModelChannel): string {
-  const pieces = pricePieces(card, 1)
-  if (pieces.length === 0) return t('modelMarketplaceStatus.priceUnavailable')
-  return `${t('modelMarketplaceStatus.originalPrice', 'Original')} ${pieces.join('  ')}`
-}
-
-function ratedPriceLine(card: MarketplaceModelChannel): string {
-  const rate = card.effectiveRate
-  if (rate == null || !Number.isFinite(rate)) return ''
-  const pieces = pricePieces(card, rate)
-  if (pieces.length === 0) return ''
-  return `${t('modelMarketplaceStatus.ratedPrice', { rate: formatRate(rate) }, `x${formatRate(rate)}`)} ${pieces.join('  ')}`
-}
-
-function pricePieces(card: MarketplaceModelChannel, rate = 1): string[] {
+function modelPriceItems(card: MarketplaceModelChannel): Array<{ label: string, value: string }> {
   const pricing = card.pricing
   if (!pricing) return []
   if (pricing.billing_mode === BILLING_MODE_PER_REQUEST && pricing.per_request_price != null) {
-    return [`${t('availableChannels.pricing.perRequestPrice')} ${formatScaled(pricing.per_request_price * rate, 1)}${t('availableChannels.pricing.unitPerRequest')}`]
+    return [{
+      label: t('modelMarketplaceStatus.officialRequestPrice', '官方请求价'),
+      value: `${formatScaled(pricing.per_request_price, 1)}${t('availableChannels.pricing.unitPerRequest')}`,
+    }]
   }
   if (pricing.billing_mode === BILLING_MODE_IMAGE && pricing.image_output_price != null) {
-    return [`${t('availableChannels.pricing.imageOutputPrice')} ${formatScaled(pricing.image_output_price * rate, 1)}${t('availableChannels.pricing.unitPerRequest')}`]
+    return [{
+      label: t('modelMarketplaceStatus.officialImagePrice', '官方图片价'),
+      value: `${formatScaled(pricing.image_output_price, 1)}${t('availableChannels.pricing.unitPerRequest')}`,
+    }]
   }
   if (pricing.billing_mode !== BILLING_MODE_TOKEN) return []
   const scale = priceUnit.value === '1M' ? 1_000_000 : 1_000
@@ -1103,13 +1061,15 @@ function pricePieces(card: MarketplaceModelChannel, rate = 1): string[] {
     ? t('availableChannels.pricing.unitPerMillion')
     : t('modelMarketplaceStatus.unitPerThousandTokens')
   return [
-    pricing.input_price == null ? '' : `${t('availableChannels.pricing.inputPrice')} ${formatScaled(pricing.input_price * rate, scale)}${unit}`,
-    pricing.output_price == null ? '' : `${t('availableChannels.pricing.outputPrice')} ${formatScaled(pricing.output_price * rate, scale)}${unit}`,
-  ].filter(Boolean)
-}
-
-function formatRate(rate: number): string {
-  return Number(rate.toFixed(4)).toString()
+    pricing.input_price == null ? null : {
+      label: t('modelMarketplaceStatus.officialInputPrice', '官方输入价'),
+      value: `${formatScaled(pricing.input_price, scale)}${unit}`,
+    },
+    pricing.output_price == null ? null : {
+      label: t('modelMarketplaceStatus.officialOutputPrice', '官方输出价'),
+      value: `${formatScaled(pricing.output_price, scale)}${unit}`,
+    },
+  ].filter((item): item is { label: string, value: string } => item != null)
 }
 
 function effectiveGroupRate(provider: Provider, groupName: string): number | null {
@@ -1131,10 +1091,6 @@ function resolveRequestUrl(provider: Provider, callModel: string, configuredUrl:
   if (provider === 'anthropic') return `${origin}/v1/messages`
   if (provider === 'gemini') return model ? `${origin}/v1beta/models/${model}:generateContent` : `${origin}/v1beta/models/{model}:generateContent`
   return `${origin}/v1/chat/completions`
-}
-
-function formatMetric(value: string, suffix = ''): string {
-  return value === '-' || !suffix ? value : `${value}${suffix}`
 }
 
 async function reload(silent = false) {
@@ -1169,9 +1125,8 @@ async function manualReload() {
   await reload(false)
 }
 
-function openDetail(row: UserModelMarketplaceView | unknown) {
-  const target = row as UserModelMarketplaceView
-  detailTarget.value = target
+function openDetail(card: MarketplaceModelCard) {
+  detailTarget.value = card
   showDetail.value = true
 }
 

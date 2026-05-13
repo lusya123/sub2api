@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_PUBLIC_API_BASE_URL: string
   readonly VITE_MANUS_BASE_URL?: string
   readonly VITE_MANUS_ALLOWED_REDIRECT_ORIGINS?: string
+  readonly VITE_MODEL_MARKETPLACE_USD_CNY_RATE?: string
   readonly BASE_URL: string
 }
 

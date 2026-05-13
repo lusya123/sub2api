@@ -946,10 +946,35 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		platform = forcedPlatform
 	}
 
-	// Get available models from account configurations (without platform filter)
-	availableModels := h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, "")
+	// Get available models from account configurations. Keep the list scoped to
+	// the current group platform so mixed-platform groups do not leak unrelated
+	// models to OpenAI-compatible clients.
+	var availableModels []string
+	if h.gatewayService != nil {
+		availableModels = h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, platform)
+	}
+	availableModels = expandListableModelIDs(platform, availableModels)
 
 	if len(availableModels) > 0 {
+		if platform == service.PlatformOpenAI {
+			models := make([]openai.Model, 0, len(availableModels))
+			for _, modelID := range availableModels {
+				models = append(models, openai.Model{
+					ID:          modelID,
+					Object:      "model",
+					Created:     1704067200,
+					OwnedBy:     "openai",
+					Type:        "model",
+					DisplayName: modelID,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"object": "list",
+				"data":   models,
+			})
+			return
+		}
+
 		// Build model list from whitelist
 		models := make([]claude.Model, 0, len(availableModels))
 		for _, modelID := range availableModels {
@@ -980,6 +1005,86 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		"object": "list",
 		"data":   claude.DefaultModels,
 	})
+}
+
+func expandListableModelIDs(platform string, models []string) []string {
+	if len(models) == 0 {
+		return models
+	}
+
+	out := make([]string, 0, len(models))
+	seen := make(map[string]struct{}, len(models))
+	add := func(model string) {
+		model = strings.TrimSpace(model)
+		if model == "" || strings.Contains(model, "*") {
+			return
+		}
+		if _, ok := seen[model]; ok {
+			return
+		}
+		seen[model] = struct{}{}
+		out = append(out, model)
+	}
+
+	defaultIDs := defaultModelIDsForPlatform(platform)
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed == "" {
+			continue
+		}
+		if !strings.Contains(trimmed, "*") {
+			add(trimmed)
+			continue
+		}
+		for _, candidate := range defaultIDs {
+			if modelListPatternMatches(trimmed, candidate) {
+				add(candidate)
+			}
+		}
+	}
+	return out
+}
+
+func defaultModelIDsForPlatform(platform string) []string {
+	switch platform {
+	case service.PlatformOpenAI:
+		return openai.DefaultModelIDs()
+	case service.PlatformAntigravity:
+		models := antigravity.DefaultModels()
+		ids := make([]string, 0, len(models))
+		for _, model := range models {
+			ids = append(ids, model.ID)
+		}
+		return ids
+	case service.PlatformAnthropic:
+		return claude.DefaultModelIDs()
+	default:
+		ids := make([]string, 0, len(openai.DefaultModels)+len(claude.DefaultModels))
+		ids = append(ids, openai.DefaultModelIDs()...)
+		ids = append(ids, claude.DefaultModelIDs()...)
+		for _, model := range antigravity.DefaultModels() {
+			ids = append(ids, model.ID)
+		}
+		return ids
+	}
+}
+
+func modelListPatternMatches(pattern, model string) bool {
+	pattern = strings.TrimSpace(pattern)
+	model = strings.TrimSpace(model)
+	if pattern == "" || model == "" {
+		return false
+	}
+	if !strings.Contains(pattern, "*") {
+		return pattern == model
+	}
+	if pattern == "*" {
+		return true
+	}
+	if strings.Count(pattern, "*") != 1 || !strings.HasSuffix(pattern, "*") {
+		return false
+	}
+	return strings.HasPrefix(model, strings.TrimSuffix(pattern, "*"))
 }
 
 // AntigravityModels 返回 Antigravity 支持的全部模型
