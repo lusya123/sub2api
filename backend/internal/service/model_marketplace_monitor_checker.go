@@ -48,6 +48,9 @@ type ModelMarketplaceCheckOptions struct {
 	// BodyOverride 在 merge 模式下做浅合并（key 命中黑名单时静默丢弃），
 	// 在 replace 模式下直接当作完整 body。
 	BodyOverride map[string]any
+	// RequestURL 是某个模型配置的完整请求地址。非空时检测会直接请求它，
+	// provider 仍用于展示品牌，但协议会优先从 URL path 推断。
+	RequestURL string
 }
 
 // runModelMarketplaceCheckForModel 对单个 (provider, model) 做一次完整检测。
@@ -305,16 +308,16 @@ func isModelMarketplaceSupportedProvider(p string) bool {
 //   - status: HTTP 状态码
 //   - err: 网络 / 序列化错误
 func callModelMarketplaceProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *ModelMarketplaceCheckOptions) (extractedText, rawBody string, status int, err error) {
-	adapter, ok := modelMarketplaceAdapterForProvider(provider)
+	protocol, adapter, ok := modelMarketplaceAdapterForRequest(provider, opts)
 	if !ok {
 		return "", "", 0, fmt.Errorf("unsupported provider %q", provider)
 	}
-	body, err := buildModelMarketplaceRequestBody(adapter, provider, model, prompt, opts)
+	body, err := buildModelMarketplaceRequestBody(adapter, protocol, model, prompt, opts)
 	if err != nil {
 		return "", "", 0, err
 	}
 	headers := mergeModelMarketplaceHeaders(adapter.buildHeaders(apiKey), opts)
-	full := joinModelMarketplaceURL(endpoint, adapter.buildPath(model))
+	full := modelMarketplaceCheckRequestURL(endpoint, adapter.buildPath(model), opts)
 	respBytes, status, err := postModelMarketplaceRawJSON(ctx, full, body, headers)
 	if err != nil {
 		return "", "", status, err
@@ -322,22 +325,70 @@ func callModelMarketplaceProvider(ctx context.Context, provider, endpoint, apiKe
 	return gjson.GetBytes(respBytes, adapter.textPath).String(), string(respBytes), status, nil
 }
 
-func modelMarketplaceAdapterForProvider(provider string) (modelMarketplaceProviderAdapter, bool) {
+func modelMarketplaceAdapterForRequest(provider string, opts *ModelMarketplaceCheckOptions) (string, modelMarketplaceProviderAdapter, bool) {
 	protocol, ok := modelMarketplaceProviderProtocols[provider]
 	if !ok {
-		return modelMarketplaceProviderAdapter{}, false
+		return "", modelMarketplaceProviderAdapter{}, false
+	}
+	if inferred := inferModelMarketplaceProtocolFromRequestURL(modelMarketplaceRequestURLOverride(opts)); inferred != "" {
+		protocol = inferred
 	}
 	adapter, ok := modelMarketplaceProtocolAdapters[protocol]
 	if !ok {
-		return modelMarketplaceProviderAdapter{}, false
+		return "", modelMarketplaceProviderAdapter{}, false
 	}
-	switch provider {
-	case ModelMarketplaceProviderMiniMax:
-		adapter.buildPath = func(string) string { return modelMarketplaceProviderMiniMaxPath }
-	case ModelMarketplaceProviderZhipuV4:
-		adapter.buildPath = func(string) string { return modelMarketplaceProviderZhipuV4Path }
+	if modelMarketplaceRequestURLOverride(opts) == "" {
+		switch provider {
+		case ModelMarketplaceProviderMiniMax:
+			adapter.buildPath = func(string) string { return modelMarketplaceProviderMiniMaxPath }
+		case ModelMarketplaceProviderZhipuV4:
+			adapter.buildPath = func(string) string { return modelMarketplaceProviderZhipuV4Path }
+		}
 	}
-	return adapter, true
+	return protocol, adapter, true
+}
+
+func modelMarketplaceAdapterForProvider(provider string) (modelMarketplaceProviderAdapter, bool) {
+	_, adapter, ok := modelMarketplaceAdapterForRequest(provider, nil)
+	return adapter, ok
+}
+
+func modelMarketplaceRequestURLOverride(opts *ModelMarketplaceCheckOptions) string {
+	if opts == nil {
+		return ""
+	}
+	return strings.TrimSpace(opts.RequestURL)
+}
+
+func modelMarketplaceCheckRequestURL(endpoint, path string, opts *ModelMarketplaceCheckOptions) string {
+	if requestURL := modelMarketplaceRequestURLOverride(opts); requestURL != "" {
+		return requestURL
+	}
+	return joinModelMarketplaceURL(endpoint, path)
+}
+
+func inferModelMarketplaceProtocolFromRequestURL(requestURL string) string {
+	requestURL = strings.TrimSpace(requestURL)
+	if requestURL == "" {
+		return ""
+	}
+	u, err := url.Parse(requestURL)
+	if err != nil {
+		return ""
+	}
+	path := strings.ToLower(u.Path)
+	switch {
+	case strings.Contains(path, "/v1/messages"):
+		return modelMarketplaceProtocolAnthropic
+	case strings.Contains(path, "/v1beta/models") || strings.Contains(path, ":generatecontent"):
+		return modelMarketplaceProtocolGemini
+	case strings.Contains(path, "/api/paas/v3/model-api/"):
+		return modelMarketplaceProtocolZhipu
+	case strings.Contains(path, "/api/paas/v4/chat/completions"), strings.Contains(path, "/chat/completions"):
+		return modelMarketplaceProtocolOpenAICompatible
+	default:
+		return ""
+	}
 }
 
 // mergeModelMarketplaceHeaders 把用户自定义 headers 合并到 adapter 默认 headers 上。
@@ -367,7 +418,7 @@ func mergeModelMarketplaceHeaders(base map[string]string, opts *ModelMarketplace
 //   - replace: 直接 marshal BodyOverride 作为完整 body
 //
 // 任何 mode 返回的 []byte 都已经是合法 JSON，可直接送入 postModelMarketplaceRawJSON。
-func buildModelMarketplaceRequestBody(adapter modelMarketplaceProviderAdapter, provider, model, prompt string, opts *ModelMarketplaceCheckOptions) ([]byte, error) {
+func buildModelMarketplaceRequestBody(adapter modelMarketplaceProviderAdapter, protocol, model, prompt string, opts *ModelMarketplaceCheckOptions) ([]byte, error) {
 	mode := modelMarketplaceBodyOverrideMode(opts)
 
 	if mode == ModelMarketplaceBodyOverrideModeReplace {
@@ -393,7 +444,7 @@ func buildModelMarketplaceRequestBody(adapter modelMarketplaceProviderAdapter, p
 	if err := json.Unmarshal(defaultBody, &defaultMap); err != nil {
 		return nil, fmt.Errorf("unmarshal default body for merge: %w", err)
 	}
-	deny := modelMarketplaceBodyMergeKeyDenyList[modelMarketplaceProviderProtocols[provider]]
+	deny := modelMarketplaceBodyMergeKeyDenyList[protocol]
 	for k, v := range opts.BodyOverride {
 		if deny[k] {
 			continue

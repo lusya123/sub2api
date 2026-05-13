@@ -53,6 +53,15 @@ export interface UserModelMarketplaceListResponse {
   items: UserModelMarketplaceView[]
 }
 
+export interface ModelMarketplaceExchangeRate {
+  base: string
+  quote: string
+  rate: number
+  source: string
+  updated_at: string
+  fallback: boolean
+}
+
 export interface UserModelMarketplaceModelDetail {
   model: string
   display_name_zh: string
@@ -88,9 +97,15 @@ export async function status(id: number): Promise<UserModelMarketplaceDetail> {
   return data
 }
 
+export async function exchangeRate(): Promise<ModelMarketplaceExchangeRate> {
+  const { data } = await apiClient.get<ModelMarketplaceExchangeRate>('/model-marketplace/exchange-rate')
+  return data
+}
+
 export const modelMarketplaceUserAPI = {
   list,
   status,
+  exchangeRate,
 }
 
 export default modelMarketplaceUserAPI

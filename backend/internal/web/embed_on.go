@@ -97,8 +97,18 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 			cleanPath = "index.html"
 		}
 
-		// For index.html or SPA routes, serve with injected settings
-		if cleanPath == "index.html" || !s.fileExists(cleanPath) {
+		// For index.html or SPA routes, serve with injected settings.
+		// Missing Vite chunks must remain 404; returning index.html makes browsers
+		// try to parse HTML as a JavaScript module and masks deployment/cache issues.
+		if cleanPath == "index.html" {
+			s.serveIndexHTML(c)
+			return
+		}
+		if !s.fileExists(cleanPath) {
+			if isAssetRequest(cleanPath) {
+				serveMissingAsset(c)
+				return
+			}
 			s.serveIndexHTML(c)
 			return
 		}
@@ -295,6 +305,10 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if isAssetRequest(cleanPath) {
+			serveMissingAsset(c)
+			return
+		}
 
 		serveIndexHTML(c, distFS)
 	}
@@ -328,6 +342,16 @@ func shouldBypassEmbeddedFrontend(path string) bool {
 		trimmed == "/responses" ||
 		strings.HasPrefix(trimmed, "/responses/") ||
 		strings.HasPrefix(trimmed, "/images/")
+}
+
+func isAssetRequest(cleanPath string) bool {
+	return strings.HasPrefix(cleanPath, "assets/")
+}
+
+func serveMissingAsset(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.String(http.StatusNotFound, "Asset not found")
+	c.Abort()
 }
 
 func serveIndexHTML(c *gin.Context, fsys fs.FS) {

@@ -1,6 +1,12 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
@@ -17,6 +23,34 @@ type ModelMarketplaceUserHandler struct {
 
 func NewModelMarketplaceUserHandler(monitorService *service.ModelMarketplaceMonitorService) *ModelMarketplaceUserHandler {
 	return &ModelMarketplaceUserHandler{monitorService: monitorService}
+}
+
+const (
+	modelMarketplaceExchangeRateFallback = 7.2
+	modelMarketplaceExchangeRateTTL      = time.Hour
+	modelMarketplaceExchangeRateTimeout  = 3 * time.Second
+	modelMarketplaceExchangeRateSource   = "frankfurter"
+	modelMarketplaceExchangeRateURL      = "https://api.frankfurter.app/latest?from=USD&to=CNY"
+)
+
+type modelMarketplaceExchangeRateCache struct {
+	mu        sync.Mutex
+	rate      float64
+	updatedAt time.Time
+	fetchedAt time.Time
+	source    string
+}
+
+//nolint:gochecknoglobals // Process-local cache avoids calling the public FX API for every user page view.
+var modelMarketplaceFXCache modelMarketplaceExchangeRateCache
+
+type modelMarketplaceExchangeRateResponse struct {
+	Base      string  `json:"base"`
+	Quote     string  `json:"quote"`
+	Rate      float64 `json:"rate"`
+	Source    string  `json:"source"`
+	UpdatedAt string  `json:"updated_at"`
+	Fallback  bool    `json:"fallback"`
 }
 
 type modelMarketplaceUserListItem struct {
@@ -173,6 +207,19 @@ func (h *ModelMarketplaceUserHandler) List(c *gin.Context) {
 	response.Success(c, gin.H{"items": items})
 }
 
+// ExchangeRate GET /api/v1/model-marketplace/exchange-rate
+func (h *ModelMarketplaceUserHandler) ExchangeRate(c *gin.Context) {
+	rate, source, updatedAt, fallback := currentModelMarketplaceExchangeRate(c.Request.Context())
+	response.Success(c, modelMarketplaceExchangeRateResponse{
+		Base:      "USD",
+		Quote:     "CNY",
+		Rate:      rate,
+		Source:    source,
+		UpdatedAt: updatedAt.UTC().Format(time.RFC3339),
+		Fallback:  fallback,
+	})
+}
+
 // GetStatus GET /api/v1/model-marketplace/:id/status
 func (h *ModelMarketplaceUserHandler) GetStatus(c *gin.Context) {
 	id, ok := admin.ParseModelMarketplaceMonitorID(c)
@@ -185,4 +232,75 @@ func (h *ModelMarketplaceUserHandler) GetStatus(c *gin.Context) {
 		return
 	}
 	response.Success(c, modelMarketplaceUserDetailToResponse(detail))
+}
+
+func currentModelMarketplaceExchangeRate(ctx context.Context) (float64, string, time.Time, bool) {
+	modelMarketplaceFXCache.mu.Lock()
+	if modelMarketplaceFXCache.rate > 0 && time.Since(modelMarketplaceFXCache.fetchedAt) < modelMarketplaceExchangeRateTTL {
+		rate := modelMarketplaceFXCache.rate
+		source := modelMarketplaceFXCache.source
+		updatedAt := modelMarketplaceFXCache.updatedAt
+		modelMarketplaceFXCache.mu.Unlock()
+		return rate, source, updatedAt, false
+	}
+	modelMarketplaceFXCache.mu.Unlock()
+
+	rate, updatedAt, err := fetchModelMarketplaceExchangeRate(ctx)
+	if err == nil && rate > 0 {
+		modelMarketplaceFXCache.mu.Lock()
+		modelMarketplaceFXCache.rate = rate
+		modelMarketplaceFXCache.updatedAt = updatedAt
+		modelMarketplaceFXCache.fetchedAt = time.Now()
+		modelMarketplaceFXCache.source = modelMarketplaceExchangeRateSource
+		modelMarketplaceFXCache.mu.Unlock()
+		return rate, modelMarketplaceExchangeRateSource, updatedAt, false
+	}
+
+	return fallbackModelMarketplaceExchangeRate(), "fallback", time.Now(), true
+}
+
+func fetchModelMarketplaceExchangeRate(ctx context.Context) (float64, time.Time, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, modelMarketplaceExchangeRateTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, modelMarketplaceExchangeRateURL, nil)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0, time.Time{}, strconv.ErrSyntax
+	}
+	var payload struct {
+		Date  string             `json:"date"`
+		Rates map[string]float64 `json:"rates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return 0, time.Time{}, err
+	}
+	rate := payload.Rates["CNY"]
+	if rate <= 0 {
+		return 0, time.Time{}, strconv.ErrSyntax
+	}
+	updatedAt := time.Now()
+	if payload.Date != "" {
+		if parsed, err := time.Parse("2006-01-02", payload.Date); err == nil {
+			updatedAt = parsed
+		}
+	}
+	return rate, updatedAt, nil
+}
+
+func fallbackModelMarketplaceExchangeRate() float64 {
+	raw := os.Getenv("MODEL_MARKETPLACE_USD_CNY_RATE")
+	if raw == "" {
+		raw = os.Getenv("VITE_MODEL_MARKETPLACE_USD_CNY_RATE")
+	}
+	if v, err := strconv.ParseFloat(raw, 64); err == nil && v > 0 {
+		return v
+	}
+	return modelMarketplaceExchangeRateFallback
 }

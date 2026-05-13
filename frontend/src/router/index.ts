@@ -985,10 +985,12 @@ router.onError((error) => {
   console.error('Router error:', error)
 
   // Check if this is a dynamic import failure (chunk loading error)
+  const errorMessage = error.message?.toLowerCase() ?? ''
   const isChunkLoadError =
-    error.message?.includes('Failed to fetch dynamically imported module') ||
-    error.message?.includes('Loading chunk') ||
-    error.message?.includes('Loading CSS chunk') ||
+    errorMessage.includes('failed to fetch dynamically imported module') ||
+    errorMessage.includes('error loading dynamically imported module') ||
+    errorMessage.includes('loading chunk') ||
+    errorMessage.includes('loading css chunk') ||
     error.name === 'ChunkLoadError'
 
   if (isChunkLoadError) {

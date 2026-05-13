@@ -123,6 +123,45 @@ func normalizeModelMarketplaceCallConfigs(in map[string]ModelMarketplaceModelCal
 	return out
 }
 
+func validateModelMarketplaceCallConfigs(in map[string]ModelMarketplaceModelCallConfig) error {
+	for _, cfg := range in {
+		if err := validateModelMarketplaceRequestURL(cfg.RequestURL); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateModelMarketplaceRequestURL(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ErrModelMarketplaceMonitorInvalidEndpoint
+	}
+	if u.Scheme != "https" {
+		return ErrModelMarketplaceMonitorEndpointScheme
+	}
+	if u.Host == "" {
+		return ErrModelMarketplaceMonitorInvalidEndpoint
+	}
+	if u.Path == "" || u.Path == "/" || u.Fragment != "" {
+		return ErrModelMarketplaceMonitorEndpointPath
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), modelMarketplaceEndpointResolveTimeout)
+	defer cancel()
+	blocked, err := isModelMarketplacePrivateOrLoopbackHost(ctx, u.Hostname())
+	if err != nil {
+		return ErrModelMarketplaceMonitorEndpointUnreachable
+	}
+	if blocked {
+		return ErrModelMarketplaceMonitorEndpointPrivate
+	}
+	return nil
+}
+
 func validateModelMarketplaceBodyModeParams(mode string, body map[string]any) error {
 	switch mode {
 	case "", ModelMarketplaceBodyOverrideModeOff:

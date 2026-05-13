@@ -264,6 +264,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import {
+  exchangeRate as fetchExchangeRate,
   status as fetchModelMarketplaceDetail,
   type ModelMarketplaceTimelinePoint,
   type UserModelMarketplaceDetail,
@@ -316,8 +317,8 @@ const loading = ref(false)
 const channels = computed(() => props.channels || [])
 const primaryChannel = computed(() => channels.value[0] || null)
 const titleFallback = computed(() => props.title || t('modelMarketplaceStatus.detailTitle', 'Model detail'))
-const usdCnyRate = Math.max(1, Number(import.meta.env.VITE_MODEL_MARKETPLACE_USD_CNY_RATE || 7.2) || 7.2)
-const exchangeDiscountRate = computed(() => 1 / usdCnyRate)
+const usdCnyRate = ref(Math.max(1, Number(import.meta.env.VITE_MODEL_MARKETPLACE_USD_CNY_RATE || 7.2) || 7.2))
+const exchangeDiscountRate = computed(() => 1 / usdCnyRate.value)
 const exchangeDiscountLabel = computed(() => {
   return t(
     'modelMarketplaceStatus.exchangeDiscountValue',
@@ -345,6 +346,17 @@ async function load(id: number) {
     appStore.showError(extractApiErrorMessage(err, t('modelMarketplaceStatus.detailLoadError')))
   } finally {
     loading.value = false
+  }
+}
+
+async function loadExchangeRate() {
+  try {
+    const res = await fetchExchangeRate()
+    if (Number.isFinite(res.rate) && res.rate > 0) {
+      usdCnyRate.value = res.rate
+    }
+  } catch {
+    // Keep the local fallback rate when the public FX service or backend cache is unavailable.
   }
 }
 
@@ -452,6 +464,7 @@ watch(
       return
     }
     document.body.classList.add('modal-open')
+    void loadExchangeRate()
     await nextTick()
     drawerRef.value?.focus()
     if (props.channels?.length) {

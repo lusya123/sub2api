@@ -148,6 +148,9 @@ func validateModelMarketplaceCreateParams(p ModelMarketplaceMonitorCreateParams)
 	if strings.TrimSpace(p.PrimaryModel) == "" {
 		return ErrModelMarketplaceMonitorMissingPrimaryModel
 	}
+	if err := validateModelMarketplaceCallConfigs(p.ModelCallConfigs); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -240,7 +243,10 @@ func (s *ModelMarketplaceMonitorService) runChecksConcurrent(ctx context.Context
 	for i, model := range models {
 		i, model := i, model
 		eg.Go(func() error {
-			r := runModelMarketplaceCheckForModel(ctx, m.Provider, m.Endpoint, m.APIKey, model, opts)
+			modelOpts := *opts
+			modelOpts.RequestURL = modelMarketplaceRequestURLFor(m.ModelCallConfigs, model)
+			r := runModelMarketplaceCheckForModel(ctx, m.Provider, m.Endpoint, m.APIKey, modelMarketplaceCallModelFor(m.ModelCallConfigs, model), &modelOpts)
+			r.Model = model
 			r.PingLatencyMs = pingMs
 			mu.Lock()
 			results[i] = r
@@ -363,6 +369,9 @@ func applyModelMarketplaceMonitorUpdate(existing *ModelMarketplaceMonitor, p Mod
 		existing.ModelDisplayNames = normalizeModelMarketplaceDisplayNames(*p.ModelDisplayNames)
 	}
 	if p.ModelCallConfigs != nil {
+		if err := validateModelMarketplaceCallConfigs(*p.ModelCallConfigs); err != nil {
+			return err
+		}
 		existing.ModelCallConfigs = normalizeModelMarketplaceCallConfigs(*p.ModelCallConfigs)
 	}
 	if p.GroupName != nil {

@@ -131,6 +131,7 @@ func RegisterUserRoutes(
 		marketplace := authenticated.Group("/model-marketplace")
 		{
 			marketplace.GET("", h.ModelMarketplace.List)
+			marketplace.GET("/exchange-rate", h.ModelMarketplace.ExchangeRate)
 			marketplace.GET("/:id/status", h.ModelMarketplace.GetStatus)
 		}
 	}
