@@ -122,6 +122,41 @@
         {{ t('admin.modelMarketplaceMonitor.form.callConfigHint') }}
       </p>
 
+      <details class="-mt-2 rounded-lg border border-gray-200 bg-gray-50/60 p-3 dark:border-dark-700 dark:bg-dark-900/30">
+        <summary class="cursor-pointer text-sm font-semibold text-gray-700 dark:text-gray-200">
+          {{ t('admin.modelMarketplaceMonitor.form.customPricing') }}
+        </summary>
+        <p class="mt-1 text-xs text-gray-400">
+          {{ t('admin.modelMarketplaceMonitor.form.customPricingHint') }}
+        </p>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.inputPricePerMillion') }}</label>
+            <input
+              :value="pricingOverrideFor(form.primary_model).input_price_per_million ?? ''"
+              type="number"
+              min="0"
+              step="0.000001"
+              class="input font-mono"
+              :placeholder="t('admin.modelMarketplaceMonitor.form.defaultPricingPlaceholder')"
+              @input="updateModelPricingOverride(form.primary_model, 'input_price_per_million', ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.outputPricePerMillion') }}</label>
+            <input
+              :value="pricingOverrideFor(form.primary_model).output_price_per_million ?? ''"
+              type="number"
+              min="0"
+              step="0.000001"
+              class="input font-mono"
+              :placeholder="t('admin.modelMarketplaceMonitor.form.defaultPricingPlaceholder')"
+              @input="updateModelPricingOverride(form.primary_model, 'output_price_per_million', ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+        </div>
+      </details>
+
       <div>
         <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.extraModels') }}</label>
         <ModelTagInput
@@ -174,12 +209,51 @@
               @input="updateModelCallConfig(model, 'request_url', ($event.target as HTMLInputElement).value)"
             />
           </div>
+          <details class="mt-2 rounded-lg border border-gray-200 bg-gray-50/80 p-3 dark:border-dark-700 dark:bg-dark-900/50">
+            <summary class="cursor-pointer text-xs font-semibold text-gray-600 dark:text-gray-300">
+              {{ t('admin.modelMarketplaceMonitor.form.customPricing') }}
+            </summary>
+            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+              <input
+                :value="pricingOverrideFor(model).input_price_per_million ?? ''"
+                type="number"
+                min="0"
+                step="0.000001"
+                class="input font-mono"
+                :placeholder="t('admin.modelMarketplaceMonitor.form.inputPricePerMillion')"
+                @input="updateModelPricingOverride(model, 'input_price_per_million', ($event.target as HTMLInputElement).value)"
+              />
+              <input
+                :value="pricingOverrideFor(model).output_price_per_million ?? ''"
+                type="number"
+                min="0"
+                step="0.000001"
+                class="input font-mono"
+                :placeholder="t('admin.modelMarketplaceMonitor.form.outputPricePerMillion')"
+                @input="updateModelPricingOverride(model, 'output_price_per_million', ($event.target as HTMLInputElement).value)"
+              />
+            </div>
+          </details>
         </div>
       </div>
 
       <div>
         <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.groupName') }}</label>
         <input v-model="form.group_name" type="text" class="input" :placeholder="t('admin.modelMarketplaceMonitor.form.groupNamePlaceholder')" />
+      </div>
+
+      <div>
+        <label class="input-label">{{ t('admin.modelMarketplaceMonitor.form.effectiveRate') }} <span class="text-red-500">*</span></label>
+        <input
+          v-model.number="form.effective_rate"
+          type="number"
+          min="0.0001"
+          step="0.0001"
+          required
+          class="input"
+          :placeholder="t('admin.modelMarketplaceMonitor.form.effectiveRatePlaceholder')"
+        />
+        <p class="mt-1 text-xs text-gray-400">{{ t('admin.modelMarketplaceMonitor.form.effectiveRateHint') }}</p>
       </div>
 
       <div>
@@ -267,6 +341,7 @@ import type {
   CreateParams,
   ModelCallConfig,
   ModelDisplayName,
+  ModelPricingOverride,
   Provider,
   UpdateParams,
 } from '@/api/admin/modelMarketplaceMonitor'
@@ -324,6 +399,7 @@ interface MonitorForm {
   model_display_names: Record<string, ModelDisplayName>
   model_call_configs: Record<string, ModelCallConfig>
   group_name: string
+  effective_rate: number
   interval_seconds: number
   enabled: boolean
   // 高级设置快照
@@ -343,6 +419,7 @@ const form = reactive<MonitorForm>({
   model_display_names: {},
   model_call_configs: {},
   group_name: '',
+  effective_rate: 1,
   interval_seconds: systemDefaultInterval.value,
   enabled: true,
   template_id: null,
@@ -427,6 +504,7 @@ function resetForm() {
   form.model_display_names = {}
   form.model_call_configs = {}
   form.group_name = ''
+  form.effective_rate = 1
   form.interval_seconds = systemDefaultInterval.value
   form.enabled = true
   form.template_id = null
@@ -445,6 +523,7 @@ function loadFromMonitor(m: ModelMarketplaceMonitor) {
   form.model_display_names = { ...(m.model_display_names || {}) }
   form.model_call_configs = { ...(m.model_call_configs || {}) }
   form.group_name = m.group_name || ''
+  form.effective_rate = normalizeEffectiveRateForForm(m.effective_rate)
   form.interval_seconds = m.interval_seconds || systemDefaultInterval.value
   form.enabled = m.enabled
   form.template_id = m.template_id ?? null
@@ -510,6 +589,7 @@ function buildPayload(): CreateParams {
     model_display_names: normalizedModelDisplayNames(),
     model_call_configs: normalizedModelCallConfigs(),
     group_name: form.group_name.trim(),
+    effective_rate: normalizeEffectiveRateForForm(form.effective_rate),
     enabled: form.enabled,
     interval_seconds: form.interval_seconds,
     template_id: form.template_id,
@@ -559,11 +639,45 @@ function updateModelCallConfig(model: string, field: keyof ModelCallConfig, valu
   const key = model.trim()
   if (!key) return
   const next = { ...(form.model_call_configs[key] || {}), [field]: value }
-  if (!String(next.model || '').trim() && !String(next.request_url || '').trim()) {
+  if (!String(next.model || '').trim() && !String(next.request_url || '').trim() && !hasPricingOverride(next.pricing)) {
     delete form.model_call_configs[key]
     return
   }
   form.model_call_configs[key] = next
+}
+
+function pricingOverrideFor(model: string): ModelPricingOverride {
+  const key = model.trim()
+  if (!key) return {}
+  return form.model_call_configs[key]?.pricing || {}
+}
+
+function updateModelPricingOverride(model: string, field: keyof ModelPricingOverride, value: string) {
+  const key = model.trim()
+  if (!key) return
+  const existing = form.model_call_configs[key] || {}
+  const pricing = { ...(existing.pricing || {}) }
+  const parsed = parseOptionalModelPrice(value)
+  if (parsed == null) delete pricing[field]
+  else pricing[field] = parsed
+  const next: ModelCallConfig = { ...existing, pricing: hasPricingOverride(pricing) ? pricing : undefined }
+  if (!String(next.model || '').trim() && !String(next.request_url || '').trim() && !hasPricingOverride(next.pricing)) {
+    delete form.model_call_configs[key]
+    return
+  }
+  form.model_call_configs[key] = next
+}
+
+function parseOptionalModelPrice(value: string): number | undefined {
+  const raw = String(value ?? '').trim()
+  if (raw === '') return undefined
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : undefined
+}
+
+function hasPricingOverride(pricing: ModelPricingOverride | undefined): boolean {
+  if (!pricing) return false
+  return pricing.input_price_per_million != null || pricing.output_price_per_million != null
 }
 
 function normalizedModelCallConfigs(): Record<string, ModelCallConfig> {
@@ -574,9 +688,34 @@ function normalizedModelCallConfigs(): Record<string, ModelCallConfig> {
     if (!cfg) continue
     const callModel = String(cfg.model || '').trim()
     const requestUrl = String(cfg.request_url || '').trim()
-    if (callModel || requestUrl) out[model] = { ...(callModel ? { model: callModel } : {}), ...(requestUrl ? { request_url: requestUrl } : {}) }
+    const pricing = normalizePricingOverride(cfg.pricing)
+    if (callModel || requestUrl || pricing) {
+      out[model] = {
+        ...(callModel ? { model: callModel } : {}),
+        ...(requestUrl ? { request_url: requestUrl } : {}),
+        ...(pricing ? { pricing } : {}),
+      }
+    }
   }
   return out
+}
+
+function normalizePricingOverride(pricing: ModelPricingOverride | undefined): ModelPricingOverride | undefined {
+  if (!pricing) return undefined
+  const input = pricing.input_price_per_million
+  const output = pricing.output_price_per_million
+  const out: ModelPricingOverride = {}
+  if (Number.isFinite(input) && Number(input) >= 0) out.input_price_per_million = Number(input)
+  if (Number.isFinite(output) && Number(output) >= 0) out.output_price_per_million = Number(output)
+  return hasPricingOverride(out) ? out : undefined
+}
+
+function hasInvalidPricingOverride(): boolean {
+  return Object.values(form.model_call_configs).some((cfg) => {
+    const p = cfg.pricing
+    if (!p) return false
+    return [p.input_price_per_million, p.output_price_per_million].some((value) => value != null && (!Number.isFinite(value) || Number(value) < 0))
+  })
 }
 
 function defaultRequestUrlFor(provider: Provider, model: string): string {
@@ -587,6 +726,11 @@ function defaultRequestUrlFor(provider: Provider, model: string): string {
   return `${origin}/v1/chat/completions`
 }
 
+function normalizeEffectiveRateForForm(rate: number | null | undefined): number {
+  const n = Number(rate)
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
 async function handleSubmit() {
   if (submitting.value) return
   if (!form.name.trim()) {
@@ -595,6 +739,14 @@ async function handleSubmit() {
   }
   if (!form.primary_model.trim()) {
     appStore.showError(t('admin.modelMarketplaceMonitor.primaryModelRequired'))
+    return
+  }
+  if (!Number.isFinite(Number(form.effective_rate)) || Number(form.effective_rate) <= 0) {
+    appStore.showError(t('admin.modelMarketplaceMonitor.effectiveRateRequired'))
+    return
+  }
+  if (hasInvalidPricingOverride()) {
+    appStore.showError(t('admin.modelMarketplaceMonitor.invalidPricing'))
     return
   }
 

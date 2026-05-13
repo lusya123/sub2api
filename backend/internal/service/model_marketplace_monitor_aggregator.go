@@ -25,7 +25,7 @@ func (s *ModelMarketplaceMonitorService) ListUserView(ctx context.Context) ([]*M
 	for _, m := range monitors {
 		primaryLatest := pickModelMarketplaceLatest(latestMap[m.ID], m.PrimaryModel)
 		view := buildModelMarketplaceUserView(m, summaries[m.ID], primaryLatest, timelineMap[m.ID])
-		s.enrichModelMarketplaceUserViewPricing(view)
+		s.enrichModelMarketplaceUserViewPricing(view, m.ModelCallConfigs)
 		views = append(views, view)
 	}
 	return views, nil
@@ -50,13 +50,14 @@ func (s *ModelMarketplaceMonitorService) GetUserDetail(ctx context.Context, id i
 	}
 
 	detail := &ModelMarketplaceUserMonitorDetail{
-		ID:        m.ID,
-		Name:      m.Name,
-		Provider:  m.Provider,
-		GroupName: m.GroupName,
-		Models:    mergeModelMarketplaceDetails(m, latest, availMap),
+		ID:            m.ID,
+		Name:          m.Name,
+		Provider:      m.Provider,
+		GroupName:     m.GroupName,
+		EffectiveRate: normalizeModelMarketplaceMonitorEffectiveRateValue(m.EffectiveRate),
+		Models:        mergeModelMarketplaceDetails(m, latest, availMap),
 	}
-	s.enrichModelMarketplaceDetailPricing(detail)
+	s.enrichModelMarketplaceDetailPricing(detail, m.ModelCallConfigs)
 	return detail, nil
 }
 
@@ -149,6 +150,7 @@ func buildModelMarketplaceUserView(
 		Name:                 m.Name,
 		Provider:             m.Provider,
 		GroupName:            m.GroupName,
+		EffectiveRate:        normalizeModelMarketplaceMonitorEffectiveRateValue(m.EffectiveRate),
 		PrimaryModel:         m.PrimaryModel,
 		PrimaryDisplayNameZh: modelMarketplaceDisplayNameFor(m.ModelDisplayNames, m.PrimaryModel).Zh,
 		PrimaryDisplayNameEn: modelMarketplaceDisplayNameFor(m.ModelDisplayNames, m.PrimaryModel).En,
@@ -164,6 +166,13 @@ func buildModelMarketplaceUserView(
 		view.PrimaryPingLatencyMs = primaryLatest.PingLatencyMs
 	}
 	return view
+}
+
+func normalizeModelMarketplaceMonitorEffectiveRateValue(rate float64) float64 {
+	if rate <= 0 {
+		return 1
+	}
+	return rate
 }
 
 func buildModelMarketplaceTimelinePoints(entries []*ModelMarketplaceMonitorHistoryEntry) []ModelMarketplaceUserTimelinePoint {
@@ -275,22 +284,74 @@ func (s *ModelMarketplaceMonitorService) modelMarketplaceDisplayPricing(model st
 	return synthesizePricingFromLiteLLM(s.pricingService.GetModelPricing(model))
 }
 
-func (s *ModelMarketplaceMonitorService) enrichModelMarketplaceUserViewPricing(view *ModelMarketplaceUserMonitorView) {
+func (s *ModelMarketplaceMonitorService) modelMarketplaceDisplayPricingForConfig(
+	callModel string,
+	configModel string,
+	callConfigs map[string]ModelMarketplaceModelCallConfig,
+) *ChannelModelPricing {
+	if override := modelMarketplacePricingOverrideFor(callConfigs, configModel); override != nil {
+		return override
+	}
+	return s.modelMarketplaceDisplayPricing(firstNonEmptyMarketplaceString(callModel, configModel))
+}
+
+func modelMarketplacePricingOverrideFor(
+	callConfigs map[string]ModelMarketplaceModelCallConfig,
+	model string,
+) *ChannelModelPricing {
+	if callConfigs == nil {
+		return nil
+	}
+	override := callConfigs[model].Pricing
+	if override == nil {
+		return nil
+	}
+	const perMillion = 1_000_000
+	p := &ChannelModelPricing{BillingMode: BillingModeToken}
+	if override.InputPricePerMillion != nil {
+		v := *override.InputPricePerMillion / perMillion
+		p.InputPrice = &v
+	}
+	if override.OutputPricePerMillion != nil {
+		v := *override.OutputPricePerMillion / perMillion
+		p.OutputPrice = &v
+	}
+	if p.InputPrice == nil && p.OutputPrice == nil {
+		return nil
+	}
+	return p
+}
+
+func (s *ModelMarketplaceMonitorService) enrichModelMarketplaceUserViewPricing(
+	view *ModelMarketplaceUserMonitorView,
+	callConfigs map[string]ModelMarketplaceModelCallConfig,
+) {
 	if view == nil {
 		return
 	}
-	view.PrimaryPricing = s.modelMarketplaceDisplayPricing(firstNonEmptyMarketplaceString(view.PrimaryCallModel, view.PrimaryModel))
+	view.PrimaryPricing = s.modelMarketplaceDisplayPricingForConfig(view.PrimaryCallModel, view.PrimaryModel, callConfigs)
 	for i := range view.ExtraModels {
-		view.ExtraModels[i].Pricing = s.modelMarketplaceDisplayPricing(firstNonEmptyMarketplaceString(view.ExtraModels[i].CallModel, view.ExtraModels[i].Model))
+		view.ExtraModels[i].Pricing = s.modelMarketplaceDisplayPricingForConfig(
+			view.ExtraModels[i].CallModel,
+			view.ExtraModels[i].Model,
+			callConfigs,
+		)
 	}
 }
 
-func (s *ModelMarketplaceMonitorService) enrichModelMarketplaceDetailPricing(detail *ModelMarketplaceUserMonitorDetail) {
+func (s *ModelMarketplaceMonitorService) enrichModelMarketplaceDetailPricing(
+	detail *ModelMarketplaceUserMonitorDetail,
+	callConfigs map[string]ModelMarketplaceModelCallConfig,
+) {
 	if detail == nil {
 		return
 	}
 	for i := range detail.Models {
-		detail.Models[i].Pricing = s.modelMarketplaceDisplayPricing(firstNonEmptyMarketplaceString(detail.Models[i].CallModel, detail.Models[i].Model))
+		detail.Models[i].Pricing = s.modelMarketplaceDisplayPricingForConfig(
+			detail.Models[i].CallModel,
+			detail.Models[i].Model,
+			callConfigs,
+		)
 	}
 }
 

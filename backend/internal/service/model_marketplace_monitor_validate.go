@@ -21,6 +21,23 @@ func validateModelMarketplaceInterval(sec int) error {
 	return nil
 }
 
+func validateModelMarketplaceEffectiveRate(rate *float64) error {
+	if rate == nil {
+		return nil
+	}
+	if *rate <= 0 {
+		return ErrModelMarketplaceMonitorInvalidEffectiveRate
+	}
+	return nil
+}
+
+func normalizeModelMarketplaceEffectiveRate(rate *float64) float64 {
+	if rate == nil || *rate <= 0 {
+		return 1
+	}
+	return *rate
+}
+
 func validateModelMarketplaceEndpoint(ep string) error {
 	ep = strings.TrimSpace(ep)
 	if ep == "" {
@@ -114,8 +131,9 @@ func normalizeModelMarketplaceCallConfigs(in map[string]ModelMarketplaceModelCal
 		item := ModelMarketplaceModelCallConfig{
 			Model:      strings.TrimSpace(cfg.Model),
 			RequestURL: strings.TrimSpace(cfg.RequestURL),
+			Pricing:    normalizeModelMarketplacePricingOverride(cfg.Pricing),
 		}
-		if item.Model == "" && item.RequestURL == "" {
+		if item.Model == "" && item.RequestURL == "" && item.Pricing == nil {
 			continue
 		}
 		out[model] = item
@@ -128,6 +146,41 @@ func validateModelMarketplaceCallConfigs(in map[string]ModelMarketplaceModelCall
 		if err := validateModelMarketplaceRequestURL(cfg.RequestURL); err != nil {
 			return err
 		}
+		if err := validateModelMarketplacePricingOverride(cfg.Pricing); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeModelMarketplacePricingOverride(in *ModelMarketplaceModelPricingOverride) *ModelMarketplaceModelPricingOverride {
+	if in == nil {
+		return nil
+	}
+	out := &ModelMarketplaceModelPricingOverride{}
+	if in.InputPricePerMillion != nil {
+		v := *in.InputPricePerMillion
+		out.InputPricePerMillion = &v
+	}
+	if in.OutputPricePerMillion != nil {
+		v := *in.OutputPricePerMillion
+		out.OutputPricePerMillion = &v
+	}
+	if out.InputPricePerMillion == nil && out.OutputPricePerMillion == nil {
+		return nil
+	}
+	return out
+}
+
+func validateModelMarketplacePricingOverride(in *ModelMarketplaceModelPricingOverride) error {
+	if in == nil {
+		return nil
+	}
+	if in.InputPricePerMillion != nil && *in.InputPricePerMillion < 0 {
+		return ErrModelMarketplaceMonitorInvalidPricing
+	}
+	if in.OutputPricePerMillion != nil && *in.OutputPricePerMillion < 0 {
+		return ErrModelMarketplaceMonitorInvalidPricing
 	}
 	return nil
 }

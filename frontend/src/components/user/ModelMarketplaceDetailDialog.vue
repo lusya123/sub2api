@@ -168,9 +168,9 @@
                         {{ finalSavingLabel(channel.effectiveRate ?? 1) }}
                       </span>
                     </div>
-                    <div v-if="priceSummary(channel.pricing, channel.effectiveRate ?? 1).length > 0" class="space-y-0.5">
+                    <div v-if="priceSummary(channel.pricing, channelFinalRate(channel.effectiveRate)).length > 0" class="space-y-0.5">
                       <div
-                        v-for="line in priceSummary(channel.pricing, channel.effectiveRate ?? 1)"
+                        v-for="line in priceSummary(channel.pricing, channelFinalRate(channel.effectiveRate))"
                         :key="`rated:${channel.key}:${line}`"
                         class="truncate font-mono text-xs font-bold text-emerald-700 dark:text-emerald-300"
                         :title="line"
@@ -274,8 +274,10 @@ import type { UserSupportedModelPricing } from '@/api/channels'
 import type { MonitorStatus, Provider } from '@/api/admin/modelMarketplaceMonitor'
 import Icon from '@/components/icons/Icon.vue'
 import { useModelMarketplaceMonitorFormat } from '@/composables/useModelMarketplaceMonitorFormat'
-import { BILLING_MODE_IMAGE, BILLING_MODE_PER_REQUEST, BILLING_MODE_TOKEN } from '@/constants/channel'
-import { formatScaled } from '@/utils/pricing'
+import {
+  buildModelMarketplacePriceSummary,
+  modelMarketplaceChannelFinalRate,
+} from '@/utils/modelMarketplacePricing'
 
 type PriceUnit = '1M' | '1K'
 
@@ -361,31 +363,14 @@ async function loadExchangeRate() {
 }
 
 function priceSummary(pricing: UserSupportedModelPricing | null, rate: number): string[] {
-  if (!pricing) return []
-  const perRequestUnit = t('availableChannels.pricing.unitPerRequest')
-  if (pricing.billing_mode === BILLING_MODE_PER_REQUEST && pricing.per_request_price != null) {
-    return [`${formatScaled(pricing.per_request_price * rate, 1)} ${perRequestUnit}`]
-  }
-  if (pricing.billing_mode === BILLING_MODE_IMAGE && pricing.image_output_price != null) {
-    return [`${formatScaled(pricing.image_output_price * rate, 1)} ${perRequestUnit}`]
-  }
-  if (pricing.billing_mode !== BILLING_MODE_TOKEN) return []
-  const scale = props.priceUnit === '1K' ? 1_000 : 1_000_000
-  const unit = props.priceUnit === '1K'
-    ? t('modelMarketplaceStatus.unitPerThousandTokens')
-    : t('availableChannels.pricing.unitPerMillion')
-  const lines = [
-    pricing.input_price == null
-      ? ''
-      : `${t('availableChannels.pricing.inputPrice')} ${formatScaled(pricing.input_price * rate, scale)} ${unit}`,
-    pricing.output_price == null
-      ? ''
-      : `${t('availableChannels.pricing.outputPrice')} ${formatScaled(pricing.output_price * rate, scale)} ${unit}`,
-    pricing.cache_read_price == null
-      ? ''
-      : `${t('availableChannels.pricing.cacheReadPrice')} ${formatScaled(pricing.cache_read_price * rate, scale)} ${unit}`,
-  ]
-  return lines.filter(Boolean)
+  return buildModelMarketplacePriceSummary(pricing, rate, props.priceUnit || '1M', {
+    perRequestUnit: t('availableChannels.pricing.unitPerRequest'),
+    unitPerThousandTokens: t('modelMarketplaceStatus.unitPerThousandTokens'),
+    unitPerMillionTokens: t('availableChannels.pricing.unitPerMillion'),
+    inputPrice: t('availableChannels.pricing.inputPrice'),
+    outputPrice: t('availableChannels.pricing.outputPrice'),
+    cacheReadPrice: t('availableChannels.pricing.cacheReadPrice'),
+  })
 }
 
 const HEALTH_TIMELINE_COLOR: Record<string, string> = {
@@ -426,14 +411,18 @@ function discountFold(rate: number): string {
 }
 
 function finalDiscountFold(rate: number): string {
-  return discountFold((Number.isFinite(rate) && rate > 0 ? rate : 1) * exchangeDiscountRate.value)
+  return discountFold(channelFinalRate(rate))
 }
 
 function finalSavingLabel(rate: number): string {
-  const finalRate = (Number.isFinite(rate) && rate > 0 ? rate : 1) * exchangeDiscountRate.value
+  const finalRate = channelFinalRate(rate)
   if (!Number.isFinite(finalRate) || finalRate >= 1) return ''
   const saving = Number(((1 - finalRate) * 100).toFixed(1)).toString()
   return t('modelMarketplaceStatus.officialSavingValue', { saving }, `Save ${saving}%`)
+}
+
+function channelFinalRate(rate: number | null | undefined): number {
+  return modelMarketplaceChannelFinalRate(rate, exchangeDiscountRate.value)
 }
 
 function localizedConfiguredModelName(zh: string | undefined, en: string | undefined): string {

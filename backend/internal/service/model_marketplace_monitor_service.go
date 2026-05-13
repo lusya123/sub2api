@@ -43,6 +43,12 @@ var (
 	ErrModelMarketplaceMonitorMissingPrimaryModel = infraerrors.BadRequest(
 		"MODEL_MARKETPLACE_MONITOR_MISSING_PRIMARY_MODEL", "primary_model is required",
 	)
+	ErrModelMarketplaceMonitorInvalidEffectiveRate = infraerrors.BadRequest(
+		"MODEL_MARKETPLACE_MONITOR_INVALID_EFFECTIVE_RATE", "effective_rate must be greater than 0",
+	)
+	ErrModelMarketplaceMonitorInvalidPricing = infraerrors.BadRequest(
+		"MODEL_MARKETPLACE_MONITOR_INVALID_PRICING", "custom model pricing must be greater than or equal to 0",
+	)
 	ErrModelMarketplaceMonitorAPIKeyDecryptFailed = infraerrors.InternalServer(
 		"MODEL_MARKETPLACE_MONITOR_KEY_DECRYPT_FAILED", "api key decryption failed; please re-edit the model marketplace monitor with a fresh key",
 	)
@@ -114,6 +120,7 @@ func (s *ModelMarketplaceMonitorService) Create(ctx context.Context, p ModelMark
 		ModelDisplayNames: normalizeModelMarketplaceDisplayNames(p.ModelDisplayNames),
 		ModelCallConfigs:  normalizeModelMarketplaceCallConfigs(p.ModelCallConfigs),
 		GroupName:         strings.TrimSpace(p.GroupName),
+		EffectiveRate:     normalizeModelMarketplaceEffectiveRate(p.EffectiveRate),
 		Enabled:           p.Enabled,
 		IntervalSeconds:   p.IntervalSeconds,
 		CreatedBy:         p.CreatedBy,
@@ -149,6 +156,9 @@ func validateModelMarketplaceCreateParams(p ModelMarketplaceMonitorCreateParams)
 		return ErrModelMarketplaceMonitorMissingPrimaryModel
 	}
 	if err := validateModelMarketplaceCallConfigs(p.ModelCallConfigs); err != nil {
+		return err
+	}
+	if err := validateModelMarketplaceEffectiveRate(p.EffectiveRate); err != nil {
 		return err
 	}
 	return nil
@@ -376,6 +386,12 @@ func applyModelMarketplaceMonitorUpdate(existing *ModelMarketplaceMonitor, p Mod
 	}
 	if p.GroupName != nil {
 		existing.GroupName = strings.TrimSpace(*p.GroupName)
+	}
+	if p.EffectiveRate != nil {
+		if err := validateModelMarketplaceEffectiveRate(p.EffectiveRate); err != nil {
+			return err
+		}
+		existing.EffectiveRate = normalizeModelMarketplaceEffectiveRate(p.EffectiveRate)
 	}
 	if p.Enabled != nil {
 		existing.Enabled = *p.Enabled

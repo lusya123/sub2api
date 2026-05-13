@@ -30,11 +30,11 @@ func (r *modelMarketplaceMonitorRepository) Create(ctx context.Context, m *servi
 	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO model_marketplace_monitors
 			(name, provider, endpoint, api_key_encrypted, primary_model, extra_models, model_display_names, model_call_configs, group_name, enabled, interval_seconds,
-			 created_by, template_id, extra_headers, body_override_mode, body_override)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			 effective_rate, created_by, template_id, extra_headers, body_override_mode, body_override)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		RETURNING id, created_at, updated_at`,
 		m.Name, m.Provider, m.Endpoint, m.APIKey, m.PrimaryModel, extras, displayNames, callConfigs, m.GroupName, m.Enabled, m.IntervalSeconds,
-		m.CreatedBy, m.TemplateID, headers, defaultModelMarketplaceBodyMode(m.BodyOverrideMode), nullableModelMarketplaceJSON(body, m.BodyOverride),
+		normalizeRepositoryModelMarketplaceEffectiveRate(m.EffectiveRate), m.CreatedBy, m.TemplateID, headers, defaultModelMarketplaceBodyMode(m.BodyOverrideMode), nullableModelMarketplaceJSON(body, m.BodyOverride),
 	).Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	return err
 }
@@ -60,11 +60,12 @@ func (r *modelMarketplaceMonitorRepository) Update(ctx context.Context, m *servi
 		UPDATE model_marketplace_monitors
 		SET name=$2, provider=$3, endpoint=$4, api_key_encrypted=$5, primary_model=$6, extra_models=$7,
 		    model_display_names=$8, model_call_configs=$9, group_name=$10, enabled=$11, interval_seconds=$12, template_id=$13, extra_headers=$14,
-		    body_override_mode=$15, body_override=$16, updated_at=NOW()
+		    body_override_mode=$15, body_override=$16, effective_rate=$17, updated_at=NOW()
 		WHERE id=$1
 		RETURNING updated_at`,
 		m.ID, m.Name, m.Provider, m.Endpoint, m.APIKey, m.PrimaryModel, extras, displayNames, callConfigs, m.GroupName, m.Enabled,
 		m.IntervalSeconds, m.TemplateID, headers, defaultModelMarketplaceBodyMode(m.BodyOverrideMode), nullableModelMarketplaceJSON(body, m.BodyOverride),
+		normalizeRepositoryModelMarketplaceEffectiveRate(m.EffectiveRate),
 	).Scan(&m.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return service.ErrModelMarketplaceMonitorNotFound
@@ -426,6 +427,13 @@ func assignModelMarketplaceNullInt(dst **int, n sql.NullInt64) {
 	*dst = &v
 }
 
+func normalizeRepositoryModelMarketplaceEffectiveRate(rate float64) float64 {
+	if rate <= 0 {
+		return 1
+	}
+	return rate
+}
+
 func buildMarketplaceMonitorWhere(params service.ModelMarketplaceMonitorListParams) (string, []any) {
 	parts := []string{}
 	args := []any{}
@@ -451,7 +459,7 @@ func (r *modelMarketplaceMonitorRepository) queryMonitors(ctx context.Context, s
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, name, provider, endpoint, api_key_encrypted, primary_model, extra_models, model_display_names, model_call_configs, group_name, enabled,
 		       interval_seconds, last_checked_at, created_by, created_at, updated_at, template_id,
-		       extra_headers, body_override_mode, body_override
+		       extra_headers, body_override_mode, body_override, effective_rate
 		FROM model_marketplace_monitors `+suffix, args...)
 	if err != nil {
 		return nil, err
@@ -464,7 +472,7 @@ func (r *modelMarketplaceMonitorRepository) queryMonitors(ctx context.Context, s
 		var bodyRaw []byte
 		if err := rows.Scan(&m.ID, &m.Name, &m.Provider, &m.Endpoint, &m.APIKey, &m.PrimaryModel, &extraRaw, &displayNamesRaw, &callConfigsRaw, &m.GroupName,
 			&m.Enabled, &m.IntervalSeconds, &m.LastCheckedAt, &m.CreatedBy, &m.CreatedAt, &m.UpdatedAt, &m.TemplateID,
-			&headersRaw, &m.BodyOverrideMode, &bodyRaw); err != nil {
+			&headersRaw, &m.BodyOverrideMode, &bodyRaw, &m.EffectiveRate); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(extraRaw, &m.ExtraModels)
@@ -486,6 +494,7 @@ func (r *modelMarketplaceMonitorRepository) queryMonitors(ctx context.Context, s
 		if m.ExtraHeaders == nil {
 			m.ExtraHeaders = map[string]string{}
 		}
+		m.EffectiveRate = normalizeRepositoryModelMarketplaceEffectiveRate(m.EffectiveRate)
 		out = append(out, m)
 	}
 	return out, rows.Err()

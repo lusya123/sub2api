@@ -16,6 +16,7 @@ type ModelMarketplaceMonitor struct {
 	ModelDisplayNames   map[string]ModelMarketplaceModelDisplayName
 	ModelCallConfigs    map[string]ModelMarketplaceModelCallConfig
 	GroupName           string
+	EffectiveRate       float64
 	Enabled             bool
 	IntervalSeconds     int
 	LastCheckedAt       *time.Time
@@ -35,8 +36,14 @@ type ModelMarketplaceModelDisplayName struct {
 }
 
 type ModelMarketplaceModelCallConfig struct {
-	Model      string `json:"model,omitempty"`
-	RequestURL string `json:"request_url,omitempty"`
+	Model      string                                `json:"model,omitempty"`
+	RequestURL string                                `json:"request_url,omitempty"`
+	Pricing    *ModelMarketplaceModelPricingOverride `json:"pricing,omitempty"`
+}
+
+type ModelMarketplaceModelPricingOverride struct {
+	InputPricePerMillion  *float64 `json:"input_price_per_million,omitempty"`
+	OutputPricePerMillion *float64 `json:"output_price_per_million,omitempty"`
 }
 
 type ModelMarketplaceMonitorListParams struct {
@@ -57,6 +64,7 @@ type ModelMarketplaceMonitorCreateParams struct {
 	ModelDisplayNames map[string]ModelMarketplaceModelDisplayName
 	ModelCallConfigs  map[string]ModelMarketplaceModelCallConfig
 	GroupName         string
+	EffectiveRate     *float64
 	Enabled           bool
 	IntervalSeconds   int
 	CreatedBy         int64
@@ -76,6 +84,7 @@ type ModelMarketplaceMonitorUpdateParams struct {
 	ModelDisplayNames *map[string]ModelMarketplaceModelDisplayName
 	ModelCallConfigs  *map[string]ModelMarketplaceModelCallConfig
 	GroupName         *string
+	EffectiveRate     *float64
 	Enabled           *bool
 	IntervalSeconds   *int
 	TemplateID        *int64
@@ -155,6 +164,7 @@ type ModelMarketplaceUserMonitorView struct {
 	Name                 string
 	Provider             string
 	GroupName            string
+	EffectiveRate        float64
 	PrimaryModel         string
 	PrimaryDisplayNameZh string
 	PrimaryDisplayNameEn string
@@ -177,11 +187,12 @@ type ModelMarketplaceUserTimelinePoint struct {
 }
 
 type ModelMarketplaceUserMonitorDetail struct {
-	ID        int64
-	Name      string
-	Provider  string
-	GroupName string
-	Models    []ModelMarketplaceModelDetail
+	ID            int64
+	Name          string
+	Provider      string
+	GroupName     string
+	EffectiveRate float64
+	Models        []ModelMarketplaceModelDetail
 }
 
 type ModelMarketplaceModelDetail struct {

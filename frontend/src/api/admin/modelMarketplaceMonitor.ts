@@ -17,6 +17,12 @@ export interface ModelDisplayName {
 export interface ModelCallConfig {
   model?: string
   request_url?: string
+  pricing?: ModelPricingOverride
+}
+
+export interface ModelPricingOverride {
+  input_price_per_million?: number
+  output_price_per_million?: number
 }
 
 export interface ModelMarketplaceMonitor {
@@ -36,6 +42,7 @@ export interface ModelMarketplaceMonitor {
   model_display_names: Record<string, ModelDisplayName>
   model_call_configs: Record<string, ModelCallConfig>
   group_name: string
+  effective_rate: number
   enabled: boolean
   interval_seconds: number
   last_checked_at: string | null
@@ -89,6 +96,7 @@ export interface CreateParams {
   model_display_names?: Record<string, ModelDisplayName>
   model_call_configs?: Record<string, ModelCallConfig>
   group_name?: string
+  effective_rate?: number
   enabled?: boolean
   interval_seconds: number
   template_id?: number | null

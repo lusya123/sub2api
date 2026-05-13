@@ -37,6 +37,7 @@ type modelMarketplaceMonitorCreateRequest struct {
 	ModelDisplayNames map[string]service.ModelMarketplaceModelDisplayName `json:"model_display_names"`
 	ModelCallConfigs  map[string]service.ModelMarketplaceModelCallConfig  `json:"model_call_configs"`
 	GroupName         string                                              `json:"group_name" binding:"max=100"`
+	EffectiveRate     *float64                                            `json:"effective_rate"`
 	Enabled           *bool                                               `json:"enabled"`
 	IntervalSeconds   int                                                 `json:"interval_seconds" binding:"required,min=15,max=3600"`
 	TemplateID        *int64                                              `json:"template_id"`
@@ -55,6 +56,7 @@ type modelMarketplaceMonitorUpdateRequest struct {
 	ModelDisplayNames *map[string]service.ModelMarketplaceModelDisplayName `json:"model_display_names"`
 	ModelCallConfigs  *map[string]service.ModelMarketplaceModelCallConfig  `json:"model_call_configs"`
 	GroupName         *string                                              `json:"group_name" binding:"omitempty,max=100"`
+	EffectiveRate     *float64                                             `json:"effective_rate"`
 	Enabled           *bool                                                `json:"enabled"`
 	IntervalSeconds   *int                                                 `json:"interval_seconds" binding:"omitempty,min=15,max=3600"`
 	TemplateID        *int64                                               `json:"template_id"`
@@ -82,6 +84,7 @@ type modelMarketplaceMonitorResponse struct {
 	ModelDisplayNames   map[string]service.ModelMarketplaceModelDisplayName `json:"model_display_names"`
 	ModelCallConfigs    map[string]service.ModelMarketplaceModelCallConfig  `json:"model_call_configs"`
 	GroupName           string                                              `json:"group_name"`
+	EffectiveRate       float64                                             `json:"effective_rate"`
 	Enabled             bool                                                `json:"enabled"`
 	IntervalSeconds     int                                                 `json:"interval_seconds"`
 	LastCheckedAt       *string                                             `json:"last_checked_at"`
@@ -141,6 +144,7 @@ func modelMarketplaceMonitorToResponse(m *service.ModelMarketplaceMonitor) *mode
 		ModelDisplayNames:   emptyModelMarketplaceDisplayNamesResponse(m.ModelDisplayNames),
 		ModelCallConfigs:    emptyModelMarketplaceCallConfigsResponse(m.ModelCallConfigs),
 		GroupName:           m.GroupName,
+		EffectiveRate:       m.EffectiveRate,
 		Enabled:             m.Enabled,
 		IntervalSeconds:     m.IntervalSeconds,
 		CreatedBy:           m.CreatedBy,
@@ -325,6 +329,7 @@ func (h *ModelMarketplaceMonitorHandler) Create(c *gin.Context) {
 		ModelDisplayNames: req.ModelDisplayNames,
 		ModelCallConfigs:  req.ModelCallConfigs,
 		GroupName:         req.GroupName,
+		EffectiveRate:     req.EffectiveRate,
 		Enabled:           enabled,
 		IntervalSeconds:   req.IntervalSeconds,
 		CreatedBy:         subject.UserID,
@@ -360,6 +365,7 @@ func (h *ModelMarketplaceMonitorHandler) Update(c *gin.Context) {
 		ModelDisplayNames: req.ModelDisplayNames,
 		ModelCallConfigs:  req.ModelCallConfigs,
 		GroupName:         req.GroupName,
+		EffectiveRate:     req.EffectiveRate,
 		Enabled:           req.Enabled,
 		IntervalSeconds:   req.IntervalSeconds,
 		TemplateID:        req.TemplateID,

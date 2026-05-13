@@ -358,11 +358,9 @@ import {
   type UserModelMarketplaceView,
   type UserModelMarketplaceExtraModel,
 } from '@/api/modelMarketplace'
-import { userGroupsAPI } from '@/api/groups'
 import type { Provider, MonitorStatus } from '@/api/admin/modelMarketplaceMonitor'
 import type { BillingMode } from '@/constants/channel'
 import type { UserSupportedModelPricing } from '@/api/channels'
-import type { Group } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import ModelMarketplaceDetailDialog from '@/components/user/ModelMarketplaceDetailDialog.vue'
 import ProviderIcon from '@/components/user/monitor/ProviderIcon.vue'
@@ -444,8 +442,6 @@ const {
 } = useModelMarketplaceMonitorFormat()
 
 const items = ref<UserModelMarketplaceView[]>([])
-const availableGroups = ref<Group[]>([])
-const userGroupRates = ref<Record<number, number>>({})
 const loading = ref(false)
 const showDetail = ref(false)
 const detailTarget = ref<MarketplaceModelCard | null>(null)
@@ -752,7 +748,7 @@ function buildModelChannel(input: {
     pingLatencyMs: input.pingLatencyMs,
     availability7d: input.availability7d,
     pricing: input.pricing,
-    effectiveRate: effectiveGroupRate(input.monitor.provider, input.monitor.group_name),
+    effectiveRate: normalizedMonitorEffectiveRate(input.monitor.effective_rate),
     billingType,
     endpointTypes,
     tags,
@@ -1072,16 +1068,9 @@ function modelPriceItems(card: MarketplaceModelChannel): Array<{ label: string, 
   ].filter((item): item is { label: string, value: string } => item != null)
 }
 
-function effectiveGroupRate(provider: Provider, groupName: string): number | null {
-  const normalizedGroup = String(groupName || '').trim().toLowerCase()
-  if (!normalizedGroup) return 1
-  const normalizedProvider = String(provider || '').trim().toLowerCase()
-  const matched = availableGroups.value.find((g) =>
-    String(g.name || '').trim().toLowerCase() === normalizedGroup &&
-    (!g.platform || String(g.platform).toLowerCase() === normalizedProvider)
-  ) || availableGroups.value.find((g) => String(g.name || '').trim().toLowerCase() === normalizedGroup)
-  if (!matched) return 1
-  return userGroupRates.value[matched.id] ?? matched.rate_multiplier ?? null
+function normalizedMonitorEffectiveRate(rate: number | null | undefined): number {
+  const n = Number(rate)
+  return Number.isFinite(n) && n > 0 ? n : 1
 }
 
 function resolveRequestUrl(provider: Provider, callModel: string, configuredUrl: string): string {
@@ -1099,15 +1088,9 @@ async function reload(silent = false) {
   abortController = ctrl
   if (!silent) loading.value = true
   try {
-    const [res, groups, rates] = await Promise.all([
-      listModelMarketplaceViews({ signal: ctrl.signal }),
-      userGroupsAPI.getAvailable().catch(() => [] as Group[]),
-      userGroupsAPI.getUserGroupRates().catch(() => ({} as Record<number, number>)),
-    ])
+    const res = await listModelMarketplaceViews({ signal: ctrl.signal })
     if (ctrl.signal.aborted || abortController !== ctrl) return
     items.value = res.items || []
-    availableGroups.value = groups || []
-    userGroupRates.value = rates || {}
   } catch (err: unknown) {
     const e = err as { name?: string; code?: string }
     if (e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') return

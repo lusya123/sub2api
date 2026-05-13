@@ -35,6 +35,12 @@
             <MonitorPrimaryModelCell :row="row" />
           </template>
 
+          <template #cell-effective_rate="{ row }">
+            <span class="font-mono text-sm text-gray-900 dark:text-gray-100">
+              ×{{ formatMonitorRate(row.effective_rate) }}
+            </span>
+          </template>
+
           <template #cell-availability_7d="{ row }">
             <span class="text-sm text-gray-900 dark:text-gray-100">{{ formatAvailability(row) }}</span>
           </template>
@@ -175,6 +181,7 @@ const columns = computed<Column[]>(() => [
   { key: 'name', label: t('admin.modelMarketplaceMonitor.columns.name'), sortable: false },
   { key: 'provider', label: t('admin.modelMarketplaceMonitor.columns.provider'), sortable: false },
   { key: 'primary_model', label: t('admin.modelMarketplaceMonitor.columns.primaryModel'), sortable: false },
+  { key: 'effective_rate', label: t('admin.modelMarketplaceMonitor.columns.effectiveRate'), sortable: false },
   { key: 'availability_7d', label: t('admin.modelMarketplaceMonitor.columns.availability7d'), sortable: false },
   { key: 'latency', label: t('admin.modelMarketplaceMonitor.columns.latency'), sortable: false },
   { key: 'enabled', label: t('admin.modelMarketplaceMonitor.columns.enabled'), sortable: false },
@@ -249,6 +256,12 @@ function openEditDialog(row: ModelMarketplaceMonitor) {
 function closeDialog() {
   showDialog.value = false
   editing.value = null
+}
+
+function formatMonitorRate(rate: number | null | undefined): string {
+  const n = Number(rate)
+  if (!Number.isFinite(n) || n <= 0) return '1'
+  return Number(n.toFixed(4)).toString()
 }
 
 async function toggleEnabled(row: ModelMarketplaceMonitor) {

@@ -58,6 +58,7 @@ type modelMarketplaceUserListItem struct {
 	Name                 string                                 `json:"name"`
 	Provider             string                                 `json:"provider"`
 	GroupName            string                                 `json:"group_name"`
+	EffectiveRate        float64                                `json:"effective_rate"`
 	PrimaryModel         string                                 `json:"primary_model"`
 	PrimaryDisplayNameZh string                                 `json:"primary_display_name_zh"`
 	PrimaryDisplayNameEn string                                 `json:"primary_display_name_en"`
@@ -94,11 +95,12 @@ type modelMarketplaceUserTimelinePoint struct {
 }
 
 type modelMarketplaceUserDetailResponse struct {
-	ID        int64                           `json:"id"`
-	Name      string                          `json:"name"`
-	Provider  string                          `json:"provider"`
-	GroupName string                          `json:"group_name"`
-	Models    []modelMarketplaceUserModelStat `json:"models"`
+	ID            int64                           `json:"id"`
+	Name          string                          `json:"name"`
+	Provider      string                          `json:"provider"`
+	GroupName     string                          `json:"group_name"`
+	EffectiveRate float64                         `json:"effective_rate"`
+	Models        []modelMarketplaceUserModelStat `json:"models"`
 }
 
 type modelMarketplaceUserModelStat struct {
@@ -138,6 +140,7 @@ func modelMarketplaceUserViewToItem(v *service.ModelMarketplaceUserMonitorView) 
 		Name:                 v.Name,
 		Provider:             v.Provider,
 		GroupName:            v.GroupName,
+		EffectiveRate:        v.EffectiveRate,
 		PrimaryModel:         v.PrimaryModel,
 		PrimaryDisplayNameZh: v.PrimaryDisplayNameZh,
 		PrimaryDisplayNameEn: v.PrimaryDisplayNameEn,
@@ -185,11 +188,12 @@ func modelMarketplaceUserDetailToResponse(d *service.ModelMarketplaceUserMonitor
 		})
 	}
 	return &modelMarketplaceUserDetailResponse{
-		ID:        d.ID,
-		Name:      d.Name,
-		Provider:  d.Provider,
-		GroupName: d.GroupName,
-		Models:    models,
+		ID:            d.ID,
+		Name:          d.Name,
+		Provider:      d.Provider,
+		GroupName:     d.GroupName,
+		EffectiveRate: d.EffectiveRate,
+		Models:        models,
 	}
 }
 

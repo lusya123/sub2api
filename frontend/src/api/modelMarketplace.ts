@@ -35,6 +35,7 @@ export interface UserModelMarketplaceView {
   name: string
   provider: Provider
   group_name: string
+  effective_rate: number
   primary_model: string
   primary_display_name_zh: string
   primary_display_name_en: string
@@ -82,6 +83,7 @@ export interface UserModelMarketplaceDetail {
   name: string
   provider: Provider
   group_name: string
+  effective_rate: number
   models: UserModelMarketplaceModelDetail[]
 }
 
