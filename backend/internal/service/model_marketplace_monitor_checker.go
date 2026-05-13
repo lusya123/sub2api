@@ -348,11 +348,6 @@ func modelMarketplaceAdapterForRequest(provider string, opts *ModelMarketplaceCh
 	return protocol, adapter, true
 }
 
-func modelMarketplaceAdapterForProvider(provider string) (modelMarketplaceProviderAdapter, bool) {
-	_, adapter, ok := modelMarketplaceAdapterForRequest(provider, nil)
-	return adapter, ok
-}
-
 func modelMarketplaceRequestURLOverride(opts *ModelMarketplaceCheckOptions) string {
 	if opts == nil {
 		return ""
