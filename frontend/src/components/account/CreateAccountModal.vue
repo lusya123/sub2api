@@ -1010,19 +1010,20 @@
 
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
       <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
+        <CustomOpenAIProviderSelector
+          v-if="form.platform === 'openai'"
+          v-model:enabled="customProviderEnabled"
+          v-model:provider="customProvider"
+          @apply-suggested-base-url="applySuggestedCustomProviderBaseUrl"
+        />
+
         <div>
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="apiKeyBaseUrl"
             type="text"
             class="input"
-            :placeholder="
-              form.platform === 'openai'
-                ? 'https://api.openai.com'
-                : form.platform === 'gemini'
-                  ? 'https://generativelanguage.googleapis.com'
-                  : 'https://api.anthropic.com'
-            "
+            :placeholder="baseUrlPlaceholder"
           />
           <p class="input-hint">{{ baseUrlHint }}</p>
         </div>
@@ -1124,7 +1125,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="form.platform" />
+              <ModelWhitelistSelector v-model="allowedModels" :platform="selectedModelProviderKey" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0">{{
@@ -3132,10 +3133,19 @@ import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
+import CustomOpenAIProviderSelector from '@/components/account/CustomOpenAIProviderSelector.vue'
 import { applyInterceptWarmup } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
+import {
+  DEFAULT_CUSTOM_OPENAI_PROVIDER,
+  OPENAI_DEFAULT_BASE_URL,
+  buildCustomOpenAIProviderExtra,
+  getCustomOpenAIProviderModelKey,
+  isKnownCustomOpenAIProviderBaseUrl,
+  useCustomOpenAIProvider
+} from '@/composables/useCustomOpenAIProvider'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -3172,9 +3182,21 @@ const oauthStepTitle = computed(() => {
 
 // Platform-specific hints for API Key type
 const baseUrlHint = computed(() => {
+  if (form.platform === 'openai' && customProviderEnabled.value) {
+    return `${selectedCustomProviderLabel.value} 的 OpenAI 兼容接口地址，通常不需要包含 /v1/chat/completions。`
+  }
   if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
   return t('admin.accounts.baseUrlHint')
+})
+
+const baseUrlPlaceholder = computed(() => {
+  if (form.platform === 'openai' && customProviderEnabled.value) {
+    return suggestedCustomProviderBaseUrl.value || OPENAI_DEFAULT_BASE_URL
+  }
+  if (form.platform === 'openai') return OPENAI_DEFAULT_BASE_URL
+  if (form.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
+  return 'https://api.anthropic.com'
 })
 
 const apiKeyHint = computed(() => {
@@ -3268,6 +3290,9 @@ const modelMappings = ref<ModelMapping[]>([])
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
+const customProviderEnabled = ref(false)
+const customProvider = ref(DEFAULT_CUSTOM_OPENAI_PROVIDER)
+const { selectedCustomProviderLabel, suggestedCustomProviderBaseUrl } = useCustomOpenAIProvider(customProvider)
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const poolModeEnabled = ref(false)
@@ -3453,8 +3478,6 @@ const geminiHelpLinks = {
   countryChange: 'https://policies.google.com/country-association-form'
 }
 
-// Computed: current preset mappings based on platform
-const presetMappings = computed(() => getPresetMappingsByPlatform(form.platform))
 const tempUnschedPresets = computed(() => [
   {
     label: t('admin.accounts.tempUnschedulable.presets.overloadLabel'),
@@ -3499,6 +3522,27 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
+
+const selectedModelProviderKey = computed(() => {
+  if (form.platform !== 'openai' || accountCategory.value !== 'apikey' || !customProviderEnabled.value) {
+    return form.platform
+  }
+  return getCustomOpenAIProviderModelKey(customProvider.value)
+})
+
+// Computed: current preset mappings based on platform/provider
+const presetMappings = computed(() => getPresetMappingsByPlatform(selectedModelProviderKey.value))
+
+const shouldReplaceCustomProviderBaseUrl = (currentValue: string) => {
+  return isKnownCustomOpenAIProviderBaseUrl(currentValue)
+}
+
+const applySuggestedCustomProviderBaseUrl = () => {
+  const suggested = suggestedCustomProviderBaseUrl.value
+  if (suggested) {
+    apiKeyBaseUrl.value = suggested
+  }
+}
 
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
@@ -3548,7 +3592,7 @@ watch(
         .then(profiles => { tlsFingerprintProfiles.value = profiles.map(p => ({ id: p.id, name: p.name })) })
         .catch(() => { tlsFingerprintProfiles.value = [] })
       // Modal opened - fill related models
-      allowedModels.value = [...getModelsByPlatform(form.platform)]
+      allowedModels.value = [...getModelsByPlatform(selectedModelProviderKey.value)]
       // Antigravity: 默认使用映射模式并填充默认映射
       if (form.platform === 'antigravity') {
         antigravityModelRestrictionMode.value = 'mapping'
@@ -3648,6 +3692,7 @@ watch(
       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       codexCLIOnlyEnabled.value = false
+      customProviderEnabled.value = false
     }
     if (newPlatform !== 'anthropic') {
       anthropicPassthroughEnabled.value = false
@@ -3659,6 +3704,33 @@ watch(
 
     geminiOAuth.resetState()
     antigravityOAuth.resetState()
+  }
+)
+
+watch(
+  [customProviderEnabled, customProvider, accountCategory, () => form.platform],
+  ([enabled, , category, platform]) => {
+    if (platform !== 'openai' || category !== 'apikey') {
+      return
+    }
+    if (!enabled) {
+      if (shouldReplaceCustomProviderBaseUrl(apiKeyBaseUrl.value)) {
+        apiKeyBaseUrl.value = OPENAI_DEFAULT_BASE_URL
+      }
+      if (modelRestrictionMode.value === 'whitelist') {
+        allowedModels.value = [...getModelsByPlatform(selectedModelProviderKey.value)]
+      }
+      return
+    }
+    if (
+      suggestedCustomProviderBaseUrl.value &&
+      shouldReplaceCustomProviderBaseUrl(apiKeyBaseUrl.value)
+    ) {
+      apiKeyBaseUrl.value = suggestedCustomProviderBaseUrl.value
+    }
+    if (modelRestrictionMode.value === 'whitelist') {
+      allowedModels.value = [...getModelsByPlatform(selectedModelProviderKey.value)]
+    }
   }
 )
 
@@ -3702,10 +3774,10 @@ const handleSelectGeminiOAuthType = (oauthType: 'code_assist' | 'google_one' | '
 
 // Auto-fill related models when switching to whitelist mode or changing platform
 watch(
-  [modelRestrictionMode, () => form.platform],
+  [modelRestrictionMode, selectedModelProviderKey],
   ([newMode]) => {
     if (newMode === 'whitelist') {
-      allowedModels.value = [...getModelsByPlatform(form.platform)]
+      allowedModels.value = [...getModelsByPlatform(selectedModelProviderKey.value)]
     }
   }
 )
@@ -4014,6 +4086,8 @@ const resetForm = () => {
   addMethod.value = 'oauth'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
+  customProviderEnabled.value = false
+  customProvider.value = DEFAULT_CUSTOM_OPENAI_PROVIDER
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
   editQuotaWeeklyLimit.value = null
@@ -4127,6 +4201,14 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     extra.openai_compact_mode = openAICompactMode.value
   } else {
     delete extra.openai_compact_mode
+  }
+  if (accountCategory.value === 'apikey' && customProviderEnabled.value) {
+    Object.assign(extra, buildCustomOpenAIProviderExtra(customProvider.value, selectedModelProviderKey.value))
+  } else {
+    delete extra.custom_provider
+    delete extra.custom_provider_label
+    delete extra.custom_provider_model_key
+    delete extra.openai_compatible_provider
   }
 
   return Object.keys(extra).length > 0 ? extra : undefined
@@ -4388,7 +4470,7 @@ const handleSubmit = async () => {
   // Determine default base URL based on platform
   const defaultBaseUrl =
     form.platform === 'openai'
-      ? 'https://api.openai.com'
+      ? (customProviderEnabled.value ? suggestedCustomProviderBaseUrl.value || OPENAI_DEFAULT_BASE_URL : OPENAI_DEFAULT_BASE_URL)
       : form.platform === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
         : 'https://api.anthropic.com'
