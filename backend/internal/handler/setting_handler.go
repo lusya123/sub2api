@@ -1,7 +1,12 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"strconv"
+	"sync/atomic"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -9,6 +14,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+type logoCacheEntry struct {
+	data        []byte
+	contentType string
+	etag        string
+	expiresAt   time.Time
+}
+
+var logoCache atomic.Pointer[logoCacheEntry]
+
+const (
+	defaultLogoMemoryCacheTTL = 5 * time.Minute
+	logoHTTPCacheMaxAge       = 3600
+)
+
+// InvalidateLogoCache clears the in-process public logo cache after settings change.
+func InvalidateLogoCache() {
+	logoCache.Store(nil)
+}
 
 // SettingHandler 公开设置处理器（无需认证）
 type SettingHandler struct {
@@ -101,6 +125,17 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 // GetPublicLogo serves the configured inline logo as a versioned public asset.
 // GET /api/v1/settings/logo?v=<hash>
 func (h *SettingHandler) GetPublicLogo(c *gin.Context) {
+	if cached := logoCache.Load(); cached != nil && time.Now().Before(cached.expiresAt) {
+		setPublicLogoCacheHeaders(c, cached.etag)
+		if c.GetHeader("If-None-Match") == cached.etag {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		c.Header("X-Cache", "HIT-MEM")
+		c.Data(http.StatusOK, cached.contentType, cached.data)
+		return
+	}
+
 	settings, err := h.settingService.GetPublicSettings(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -114,14 +149,38 @@ func (h *SettingHandler) GetPublicLogo(c *gin.Context) {
 	}
 
 	etag := `"` + service.PublicSiteLogoVersion(settings.SiteLogo) + `"`
-	c.Header("Cache-Control", "public, max-age=31536000, immutable")
-	c.Header("ETag", etag)
+	logoCache.Store(&logoCacheEntry{
+		data:        data,
+		contentType: contentType,
+		etag:        etag,
+		expiresAt:   time.Now().Add(logoMemoryCacheTTL()),
+	})
+
+	setPublicLogoCacheHeaders(c, etag)
 	if c.GetHeader("If-None-Match") == etag {
 		c.Status(http.StatusNotModified)
 		return
 	}
 
+	c.Header("X-Cache", "MISS")
 	c.Data(http.StatusOK, contentType, data)
+}
+
+func setPublicLogoCacheHeaders(c *gin.Context, etag string) {
+	c.Header("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", logoHTTPCacheMaxAge))
+	c.Header("ETag", etag)
+}
+
+func logoMemoryCacheTTL() time.Duration {
+	raw := os.Getenv("LOGO_CACHE_TTL_SECONDS")
+	if raw == "" {
+		return defaultLogoMemoryCacheTTL
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return defaultLogoMemoryCacheTTL
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func publicLoginAgreementDocumentsToDTO(items []service.LoginAgreementDocument) []dto.LoginAgreementDocument {

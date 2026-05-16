@@ -28,6 +28,10 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		if isPublicCacheableAssetRequest(c) {
+			c.Next()
+			return
+		}
 		if isFrontendDocumentRequest(c) {
 			if !g.allowFrontendDocumentGlobal(c) {
 				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (frontend global)")
@@ -158,6 +162,16 @@ func globalRateLimitStaticAsset(path string) bool {
 		}
 	}
 	return false
+}
+
+func isPublicCacheableAssetRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+		return false
+	}
+	return c.Request.URL.Path == "/api/v1/settings/logo"
 }
 
 func ClientFingerprint(c *gin.Context) string {

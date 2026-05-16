@@ -76,17 +76,24 @@ func SetupRouter(
 		if err != nil {
 			log.Printf("Warning: Failed to create frontend server with settings injection: %v, using legacy mode", err)
 			r.Use(web.ServeEmbeddedFrontend())
-			settingService.SetOnUpdateCallback(refreshFrameOrigins)
+			settingService.SetOnUpdateCallback(func() {
+				handler.InvalidateLogoCache()
+				refreshFrameOrigins()
+			})
 		} else {
 			// Register combined callback: invalidate HTML cache + refresh frame origins
 			settingService.SetOnUpdateCallback(func() {
+				handler.InvalidateLogoCache()
 				frontendServer.InvalidateCache()
 				refreshFrameOrigins()
 			})
 			r.Use(frontendServer.Middleware())
 		}
 	} else {
-		settingService.SetOnUpdateCallback(refreshFrameOrigins)
+		settingService.SetOnUpdateCallback(func() {
+			handler.InvalidateLogoCache()
+			refreshFrameOrigins()
+		})
 	}
 
 	if handlers != nil && handlers.Auth != nil {

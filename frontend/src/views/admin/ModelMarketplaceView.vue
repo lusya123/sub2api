@@ -261,6 +261,7 @@ function closeDialog() {
 function formatMonitorRate(rate: number | null | undefined): string {
   const n = Number(rate)
   if (!Number.isFinite(n) || n <= 0) return '1'
+  if (n < 0.0001) return '<0.0001'
   return Number(n.toFixed(4)).toString()
 }
 

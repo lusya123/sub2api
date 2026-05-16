@@ -19,10 +19,12 @@ import (
 
 type settingHandlerPublicRepoStub struct {
 	values map[string]string
+	calls  int
 }
 
 func TestSettingHandler_PublicLogoUsesVersionedAssetURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	InvalidateLogoCache()
 	rawLogo := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("custom-logo"))
 	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
 		values: map[string]string{
@@ -52,6 +54,7 @@ func TestSettingHandler_PublicLogoUsesVersionedAssetURL(t *testing.T) {
 
 func TestSettingHandler_GetPublicLogoServesInlineLogoWithImmutableCache(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	InvalidateLogoCache()
 	rawLogo := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("custom-logo"))
 	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
 		values: map[string]string{
@@ -67,8 +70,50 @@ func TestSettingHandler_GetPublicLogoServesInlineLogoWithImmutableCache(t *testi
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
-	require.Equal(t, "public, max-age=31536000, immutable", recorder.Header().Get("Cache-Control"))
+	require.Equal(t, "public, max-age=3600, immutable", recorder.Header().Get("Cache-Control"))
+	require.Equal(t, "MISS", recorder.Header().Get("X-Cache"))
 	require.Equal(t, "custom-logo", recorder.Body.String())
+}
+
+func TestSettingHandler_GetPublicLogoUsesMemoryCacheAndETag(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	InvalidateLogoCache()
+	t.Cleanup(InvalidateLogoCache)
+
+	rawLogo := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("custom-logo"))
+	repo := &settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeySiteLogo: rawLogo,
+		},
+	}
+	h := NewSettingHandler(service.NewSettingService(repo, &config.Config{}), "test-version")
+
+	first := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(first)
+	c1.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/logo?v=test", nil)
+	h.GetPublicLogo(c1)
+	require.Equal(t, http.StatusOK, first.Code)
+	require.Equal(t, "MISS", first.Header().Get("X-Cache"))
+	etag := first.Header().Get("ETag")
+	require.NotEmpty(t, etag)
+
+	second := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(second)
+	c2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/logo?v=test", nil)
+	h.GetPublicLogo(c2)
+	require.Equal(t, http.StatusOK, second.Code)
+	require.Equal(t, "HIT-MEM", second.Header().Get("X-Cache"))
+	require.Equal(t, "custom-logo", second.Body.String())
+
+	third := httptest.NewRecorder()
+	c3, _ := gin.CreateTestContext(third)
+	c3.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/logo?v=test", nil)
+	c3.Request.Header.Set("If-None-Match", etag)
+	h.GetPublicLogo(c3)
+	require.Equal(t, http.StatusNotModified, c3.Writer.Status())
+	require.Empty(t, third.Body.String())
+
+	require.Equal(t, 1, repo.calls)
 }
 
 func (s *settingHandlerPublicRepoStub) Get(ctx context.Context, key string) (*service.Setting, error) {
@@ -84,6 +129,7 @@ func (s *settingHandlerPublicRepoStub) Set(ctx context.Context, key, value strin
 }
 
 func (s *settingHandlerPublicRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	s.calls++
 	out := make(map[string]string, len(keys))
 	for _, key := range keys {
 		if value, ok := s.values[key]; ok {

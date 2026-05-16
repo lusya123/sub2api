@@ -22,6 +22,7 @@ func RegisterAuthRoutes(
 ) {
 	// 创建速率限制器
 	rateLimiter := middleware.NewRateLimiter(redisClient)
+	verifyCodeProtect := middleware.VerifyCodeProtect(redisClient)
 
 	// 公开接口
 	auth := v1.Group("/auth")
@@ -39,7 +40,7 @@ func RegisterAuthRoutes(
 		}), h.Auth.Login2FA)
 		auth.POST("/send-verify-code", rateLimiter.LimitWithOptions("auth-send-verify-code", 5, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
-		}), h.Auth.SendVerifyCode)
+		}), verifyCodeProtect, h.Auth.SendVerifyCode)
 		// Token刷新接口添加速率限制：每分钟最多 30 次（Redis 故障时 fail-close）
 		auth.POST("/refresh", rateLimiter.LimitWithOptions("refresh-token", 30, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
@@ -57,7 +58,7 @@ func RegisterAuthRoutes(
 		// 忘记密码接口添加速率限制：每分钟最多 5 次（Redis 故障时 fail-close）
 		auth.POST("/forgot-password", rateLimiter.LimitWithOptions("forgot-password", 5, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
-		}), h.Auth.ForgotPassword)
+		}), verifyCodeProtect, h.Auth.ForgotPassword)
 		// 重置密码接口添加速率限制：每分钟最多 10 次（Redis 故障时 fail-close）
 		auth.POST("/reset-password", rateLimiter.LimitWithOptions("reset-password", 10, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
@@ -106,6 +107,7 @@ func RegisterAuthRoutes(
 			rateLimiter.LimitWithOptions("oauth-pending-send-verify-code", 5, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,
 			}),
+			verifyCodeProtect,
 			h.Auth.SendPendingOAuthVerifyCode,
 		)
 		auth.POST("/oauth/pending/create-account",

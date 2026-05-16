@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,11 +17,18 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
 )
 
 // ModelMarketplaceUserHandler exposes model marketplace status to regular users.
 type ModelMarketplaceUserHandler struct {
 	monitorService *service.ModelMarketplaceMonitorService
+
+	listCacheMu        sync.RWMutex
+	listCachePayload   []byte
+	listCacheGzip      []byte
+	listCacheExpiresAt time.Time
+	listCacheSF        singleflight.Group
 }
 
 func NewModelMarketplaceUserHandler(monitorService *service.ModelMarketplaceMonitorService) *ModelMarketplaceUserHandler {
@@ -31,6 +41,8 @@ const (
 	modelMarketplaceExchangeRateTimeout  = 3 * time.Second
 	modelMarketplaceExchangeRateSource   = "frankfurter"
 	modelMarketplaceExchangeRateURL      = "https://api.frankfurter.app/latest?from=USD&to=CNY"
+	modelMarketplaceUserListCacheKey     = "model_marketplace_user_list"
+	modelMarketplaceUserListCacheTTL     = 5 * time.Second
 )
 
 type modelMarketplaceExchangeRateCache struct {
@@ -39,6 +51,11 @@ type modelMarketplaceExchangeRateCache struct {
 	updatedAt time.Time
 	fetchedAt time.Time
 	source    string
+}
+
+type modelMarketplaceUserListPayload struct {
+	raw  []byte
+	gzip []byte
 }
 
 //nolint:gochecknoglobals // Process-local cache avoids calling the public FX API for every user page view.
@@ -199,16 +216,116 @@ func modelMarketplaceUserDetailToResponse(d *service.ModelMarketplaceUserMonitor
 
 // List GET /api/v1/model-marketplace
 func (h *ModelMarketplaceUserHandler) List(c *gin.Context) {
-	views, err := h.monitorService.ListUserView(c.Request.Context())
+	if payload, ok := h.cachedListPayload(); ok {
+		h.writeListPayload(c, payload)
+		return
+	}
+
+	payload, err, _ := h.listCacheSF.Do(modelMarketplaceUserListCacheKey, func() (any, error) {
+		if payload, ok := h.cachedListPayload(); ok {
+			return payload, nil
+		}
+		raw, err := h.buildListPayload(c.Request.Context())
+		if err != nil {
+			return nil, err
+		}
+		return h.storeListPayload(raw), nil
+	})
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
+	}
+	if data, ok := payload.(modelMarketplaceUserListPayload); ok && len(data.raw) > 0 {
+		h.writeListPayload(c, data)
+		return
+	}
+	response.Success(c, gin.H{"items": []modelMarketplaceUserListItem{}})
+}
+
+func (h *ModelMarketplaceUserHandler) buildListPayload(ctx context.Context) ([]byte, error) {
+	views, err := h.monitorService.ListUserView(ctx)
+	if err != nil {
+		return nil, err
 	}
 	items := make([]modelMarketplaceUserListItem, 0, len(views))
 	for _, v := range views {
 		items = append(items, modelMarketplaceUserViewToItem(v))
 	}
-	response.Success(c, gin.H{"items": items})
+	return json.Marshal(response.Response{
+		Code:    0,
+		Message: "success",
+		Data:    gin.H{"items": items},
+	})
+}
+
+func (h *ModelMarketplaceUserHandler) cachedListPayload() (modelMarketplaceUserListPayload, bool) {
+	h.listCacheMu.RLock()
+	defer h.listCacheMu.RUnlock()
+	if len(h.listCachePayload) == 0 || time.Now().After(h.listCacheExpiresAt) {
+		return modelMarketplaceUserListPayload{}, false
+	}
+	return modelMarketplaceUserListPayload{raw: h.listCachePayload, gzip: h.listCacheGzip}, true
+}
+
+func (h *ModelMarketplaceUserHandler) storeListPayload(payload []byte) modelMarketplaceUserListPayload {
+	gz := gzipBytes(payload)
+	h.listCacheMu.Lock()
+	h.listCachePayload = payload
+	h.listCacheGzip = gz
+	h.listCacheExpiresAt = time.Now().Add(modelMarketplaceUserListCacheTTL)
+	h.listCacheMu.Unlock()
+	return modelMarketplaceUserListPayload{raw: payload, gzip: gz}
+}
+
+func (h *ModelMarketplaceUserHandler) writeListPayload(c *gin.Context, payload modelMarketplaceUserListPayload) {
+	c.Header("Vary", "Accept-Encoding")
+	c.Header("Cache-Control", "private, max-age=5")
+	if clientAcceptsGzip(c.Request.Header.Get("Accept-Encoding")) && len(payload.gzip) > 0 {
+		c.Header("Content-Encoding", "gzip")
+		c.Data(http.StatusOK, gin.MIMEJSON, payload.gzip)
+		return
+	}
+	c.Data(http.StatusOK, gin.MIMEJSON, payload.raw)
+}
+
+func gzipBytes(payload []byte) []byte {
+	if len(payload) == 0 {
+		return nil
+	}
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(payload); err != nil {
+		_ = zw.Close()
+		return nil
+	}
+	if err := zw.Close(); err != nil {
+		return nil
+	}
+	return buf.Bytes()
+}
+
+func clientAcceptsGzip(header string) bool {
+	for _, part := range strings.Split(header, ",") {
+		part = strings.TrimSpace(strings.ToLower(part))
+		if part == "gzip" {
+			return true
+		}
+		if strings.HasPrefix(part, "gzip;") {
+			accepted := true
+			for _, param := range strings.Split(part, ";")[1:] {
+				param = strings.TrimSpace(param)
+				if strings.HasPrefix(param, "q=") {
+					q, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(param, "q=")), 64)
+					accepted = err != nil || q > 0
+					break
+				}
+			}
+			if accepted {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ExchangeRate GET /api/v1/model-marketplace/exchange-rate

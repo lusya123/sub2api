@@ -1033,6 +1033,8 @@ function buildAggregateDescription(best: MarketplaceModelChannel, channelCount: 
 }
 
 function formatRate(rate: number): string {
+  if (!Number.isFinite(rate) || rate <= 0) return '1'
+  if (rate < 0.0001) return '<0.0001'
   return Number(rate.toFixed(4)).toString()
 }
 

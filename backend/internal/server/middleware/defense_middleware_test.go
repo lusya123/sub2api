@@ -140,6 +140,44 @@ func TestGlobalRateLimiterTiers(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, rec.Code, "fake API key on public path must not bypass anonymous limit")
 }
 
+func TestGlobalRateLimiterBypassesPublicLogoAsset(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/api/v1/settings/logo", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	router.HEAD("/api/v1/settings/logo", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	router.POST("/api/v1/settings/logo", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for i := 0; i < 100; i++ {
+		rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/logo", nil, nil)
+		require.Equal(t, http.StatusOK, rec.Code, "public logo GET %d should bypass anonymous limiter", i+1)
+	}
+	for i := 0; i < 100; i++ {
+		rec := performDefenseRequest(router, http.MethodHead, "/api/v1/settings/logo", nil, nil)
+		require.Equal(t, http.StatusOK, rec.Code, "public logo HEAD %d should bypass anonymous limiter", i+1)
+	}
+
+	for i := 0; i < 30; i++ {
+		rec := performDefenseRequest(router, http.MethodPost, "/api/v1/settings/logo", nil, nil)
+		require.Equal(t, http.StatusOK, rec.Code, "public logo POST %d should still use anonymous limiter", i+1)
+	}
+	rec := performDefenseRequest(router, http.MethodPost, "/api/v1/settings/logo", nil, nil)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+}
+
 func TestGlobalRateLimiterUsesGlobalOnlyLimitForFrontendDocuments(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")

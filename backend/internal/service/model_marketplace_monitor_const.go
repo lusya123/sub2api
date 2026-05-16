@@ -95,7 +95,7 @@ const (
 	ModelMarketplaceMonitorHistoryDefaultLimit = 100
 	ModelMarketplaceMonitorHistoryMaxLimit     = 1000
 
-	modelMarketplaceTimelineMaxPoints = 60
+	modelMarketplaceTimelineMaxPoints = 32
 
 	modelMarketplaceEndpointResolveTimeout = 5 * time.Second
 	modelMarketplaceAnthropicAPIVersion    = "2023-06-01"
