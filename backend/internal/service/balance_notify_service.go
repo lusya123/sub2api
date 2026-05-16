@@ -74,9 +74,7 @@ func resolveBalanceThresholdCandidates(threshold float64, thresholdType string, 
 		raw = append(raw, resolveBalanceThreshold(threshold, thresholdType, totalRecharged))
 	}
 	if includeDefaultTiers {
-		for _, fixed := range defaultBalanceFixedNotifyThresholds {
-			raw = append(raw, fixed)
-		}
+		raw = append(raw, defaultBalanceFixedNotifyThresholds...)
 		if totalRecharged > 0 {
 			for _, pct := range defaultBalancePercentageNotifyThresholds {
 				raw = append(raw, resolveBalanceThreshold(pct, thresholdTypePercentage, totalRecharged))
