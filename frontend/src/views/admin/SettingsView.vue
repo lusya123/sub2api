@@ -4417,6 +4417,37 @@
                   {{ t("admin.settings.features.chatPage.urlHint") }}
                 </p>
               </div>
+
+              <div class="border-t border-gray-100 pt-6 dark:border-dark-700">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.features.chatPage.agentEnabled") }}
+                    </label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.features.chatPage.agentEnabledHint") }}
+                    </p>
+                  </div>
+                  <Toggle v-model="form.agent_page_enabled" />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.features.chatPage.agentUrl") }}
+                </label>
+                <input
+                  v-model="form.agent_page_url"
+                  type="url"
+                  class="input font-mono text-sm"
+                  :placeholder="t('admin.settings.features.chatPage.agentUrlPlaceholder')"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.features.chatPage.agentUrlHint") }}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -6765,6 +6796,8 @@ const form = reactive<SettingsForm>({
   // Chat page feature switch
   chat_page_enabled: true,
   chat_page_url: "",
+  agent_page_enabled: true,
+  agent_page_url: "",
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
 });
@@ -7700,6 +7733,10 @@ async function saveSettings() {
       appStore.showError(t("admin.settings.features.chatPage.urlInvalid"));
       return;
     }
+    if (!isValidHttpUrl(form.agent_page_url)) {
+      appStore.showError(t("admin.settings.features.chatPage.agentUrlInvalid"));
+      return;
+    }
     if (form.purchase_subscription_enabled) {
       if (
         form.purchase_subscription_mode === "embedded" &&
@@ -7920,6 +7957,8 @@ async function saveSettings() {
       // Chat page feature switch
       chat_page_enabled: form.chat_page_enabled,
       chat_page_url: form.chat_page_url.trim(),
+      agent_page_enabled: form.agent_page_enabled,
+      agent_page_url: form.agent_page_url.trim(),
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
     };

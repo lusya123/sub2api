@@ -213,6 +213,8 @@ export interface PublicSettings {
   payment_enabled: boolean
   chat_page_enabled: boolean
   chat_page_url?: string
+  agent_page_enabled?: boolean
+  agent_page_url?: string
   purchase_subscription_enabled?: boolean
   purchase_subscription_mode?: PurchaseSubscriptionMode
   purchase_subscription_embedded_url?: string

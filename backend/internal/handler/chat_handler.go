@@ -192,16 +192,24 @@ func (h *ChatHandler) chatSignInURLWithPreference(ctx context.Context, preferenc
 		return "", fmt.Errorf("invalid lobe chat url")
 	}
 	q := u.Query()
-	callbackURL := "/agent/inbox"
+	// Build the callback URL the user lands on after OIDC completes.
+	// We always tag it with embed=sub2api so lobehub's iframe embed mode
+	// kicks in immediately after the OIDC handshake — sessionStorage carries
+	// the flag across in-app navigations, but querystring is the durable
+	// fallback if storage is unavailable.
+	cb := url.URL{Path: "/agent/inbox"}
+	cbq := cb.Query()
 	if preference != nil && preference.Provider != "" && preference.Model != "" {
-		cb := url.URL{Path: "/agent/inbox"}
-		cbq := cb.Query()
 		cbq.Set("provider", preference.Provider)
 		cbq.Set("modelId", preference.Model)
-		cb.RawQuery = cbq.Encode()
-		callbackURL = cb.String()
 	}
-	q.Set("callbackUrl", callbackURL)
+	cbq.Set("embed", "sub2api")
+	cb.RawQuery = cbq.Encode()
+	q.Set("callbackUrl", cb.String())
+	// Tag the signin entry URL too so embed CSS applies before the SPA even
+	// hits the auto-OIDC redirect; otherwise users would see a flash of the
+	// unbranded lobehub signin shell.
+	q.Set("embed", "sub2api")
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

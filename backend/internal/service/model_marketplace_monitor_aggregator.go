@@ -4,9 +4,41 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
+)
+
+const (
+	modelMarketplaceUserViewCacheKey = "model_marketplace_user_view"
+	modelMarketplaceUserViewCacheTTL = 5 * time.Second
 )
 
 func (s *ModelMarketplaceMonitorService) ListUserView(ctx context.Context) ([]*ModelMarketplaceUserMonitorView, error) {
+	if views, ok := s.cachedUserView(); ok {
+		return views, nil
+	}
+
+	loaded, err, _ := s.userViewSF.Do(modelMarketplaceUserViewCacheKey, func() (any, error) {
+		if views, ok := s.cachedUserView(); ok {
+			return views, nil
+		}
+		views, err := s.loadUserView(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.storeUserViewCache(views)
+		return views, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	views, _ := loaded.([]*ModelMarketplaceUserMonitorView)
+	if views == nil {
+		return []*ModelMarketplaceUserMonitorView{}, nil
+	}
+	return views, nil
+}
+
+func (s *ModelMarketplaceMonitorService) loadUserView(ctx context.Context) ([]*ModelMarketplaceUserMonitorView, error) {
 	monitors, err := s.repo.ListEnabled(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled model marketplace monitors: %w", err)
@@ -29,6 +61,30 @@ func (s *ModelMarketplaceMonitorService) ListUserView(ctx context.Context) ([]*M
 		views = append(views, view)
 	}
 	return views, nil
+}
+
+func (s *ModelMarketplaceMonitorService) cachedUserView() ([]*ModelMarketplaceUserMonitorView, bool) {
+	s.userViewMu.RLock()
+	defer s.userViewMu.RUnlock()
+	if s.userViewCache == nil || time.Now().After(s.userViewExpiresAt) {
+		return nil, false
+	}
+	return s.userViewCache, true
+}
+
+func (s *ModelMarketplaceMonitorService) storeUserViewCache(views []*ModelMarketplaceUserMonitorView) {
+	s.userViewMu.Lock()
+	s.userViewCache = views
+	s.userViewExpiresAt = time.Now().Add(modelMarketplaceUserViewCacheTTL)
+	s.userViewMu.Unlock()
+}
+
+func (s *ModelMarketplaceMonitorService) invalidateUserViewCache() {
+	s.userViewSF.Forget(modelMarketplaceUserViewCacheKey)
+	s.userViewMu.Lock()
+	s.userViewCache = nil
+	s.userViewExpiresAt = time.Time{}
+	s.userViewMu.Unlock()
 }
 
 func (s *ModelMarketplaceMonitorService) GetUserDetail(ctx context.Context, id int64) (*ModelMarketplaceUserMonitorDetail, error) {

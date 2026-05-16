@@ -138,7 +138,7 @@ func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
 			response.InternalError(c, "Failed to generate token")
 			return
 		}
-		h.setSPAProtectTokenCookie(c, 0)
+		h.setSPAProtectTokenCookie(c, 0, token)
 		response.Success(c, AuthResponse{
 			AccessToken: token,
 			TokenType:   "Bearer",
@@ -146,7 +146,7 @@ func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
 		})
 		return
 	}
-	h.setSPAProtectTokenCookie(c, tokenPair.ExpiresIn)
+	h.setSPAProtectTokenCookie(c, tokenPair.ExpiresIn, tokenPair.AccessToken)
 	response.Success(c, AuthResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,
@@ -213,6 +213,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	security.AddLoginEmail(user.Email)
+	h.authService.ScheduleShopPasswordLoginSync(c.Request.Context(), user, req.Password, "sub2api_register")
 
 	h.respondWithTokenPair(c, user)
 }
@@ -325,6 +326,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
+	h.authService.ScheduleShopPasswordLoginSync(c.Request.Context(), user, req.Password, "sub2api_login")
 
 	h.loginDefense.Audit(attempt, security.LoginResultSuccess)
 	h.respondWithTokenPair(c, user)
@@ -746,7 +748,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	h.setSPAProtectTokenCookie(c, result.ExpiresIn)
+	h.setSPAProtectTokenCookie(c, result.ExpiresIn, result.AccessToken)
 	response.Success(c, RefreshTokenResponse{
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
@@ -814,20 +816,24 @@ func (h *AuthHandler) RevokeAllSessions(c *gin.Context) {
 	})
 }
 
-func (h *AuthHandler) setSPAProtectTokenCookie(c *gin.Context, maxAgeSec int) {
+func (h *AuthHandler) setSPAProtectTokenCookie(c *gin.Context, maxAgeSec int, accessToken ...string) {
 	if maxAgeSec <= 0 {
 		maxAgeSec = h.defaultSPAProtectTokenCookieMaxAge()
 	}
-	setSPAProtectTokenCookie(c, maxAgeSec)
+	setSPAProtectTokenCookie(c, maxAgeSec, accessToken...)
 }
 
-func setSPAProtectTokenCookie(c *gin.Context, maxAgeSec int) {
+func setSPAProtectTokenCookie(c *gin.Context, maxAgeSec int, accessToken ...string) {
 	if maxAgeSec <= 0 {
 		maxAgeSec = 24 * 3600
 	}
+	value := "1"
+	if len(accessToken) > 0 && strings.TrimSpace(accessToken[0]) != "" {
+		value = strings.TrimSpace(accessToken[0])
+	}
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     spaProtectTokenCookieName,
-		Value:    "1",
+		Value:    value,
 		Path:     "/",
 		MaxAge:   maxAgeSec,
 		HttpOnly: true,

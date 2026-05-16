@@ -188,6 +188,7 @@ const scriptBaseUrl = computed(() => {
   }
   return window.location.origin.replace(/\/+$/, '')
 })
+const codexWindowsInstallerBaseUrl = 'https://xuedingtoken.com'
 
 const normalizedBaseRoot = computed(() => {
   const fallback = scriptBaseUrl.value
@@ -335,8 +336,8 @@ const note = computed(() => {
   if (selectedClient.value === 'codex') {
     return selectedOs.value === 'windows'
       ? safeT('keys.clientInstallModal.codexWindowsNote', {
-        zh: '命令里的 CODEX_TOKEN/CODEX_API_URL 只用于本次安装脚本传参。脚本会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
-        en: 'CODEX_TOKEN/CODEX_API_URL are temporary inputs for this installer run. The script installs official Codex CLI, imports and switches the CC Switch provider, then starts codex.',
+        zh: '命令里的 CODEX_TOKEN 只用于本次安装器传参。Windows 安装器锁定到 XueDingToken 官方地址，会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
+        en: 'CODEX_TOKEN is only a temporary input for this installer run. The Windows installer is locked to the official XueDingToken endpoint, installs official Codex CLI, imports and switches the CC Switch provider, then starts codex.',
       })
       : safeT('keys.clientInstallModal.codexNote', {
         zh: '命令里的 CODEX_TOKEN/CODEX_API_URL 只用于本次安装脚本传参。脚本会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
@@ -409,7 +410,7 @@ const currentCommand = computed(() => {
       const scriptUrl = `${scriptBaseUrl.value}/install-codex.sh`
       return `CODEX_TOKEN="${escapeShellDoubleQuoted(props.apiKey)}" CODEX_API_URL="${escapeShellDoubleQuoted(codexApiUrl.value)}" bash -c "$(curl -fsSL ${scriptUrl} || wget -qO- ${scriptUrl})"`
     }
-    return `$env:CODEX_TOKEN='${escapePowerShell(props.apiKey)}'; $env:CODEX_API_URL='${escapePowerShell(codexApiUrl.value)}'; try { irm ${scriptBaseUrl.value}/install-codex-win.ps1 | iex } finally { Remove-Item Env:CODEX_TOKEN,Env:CODEX_API_URL -ErrorAction SilentlyContinue }`
+    return `$env:CODEX_TOKEN='${escapePowerShell(props.apiKey)}'; Remove-Item Env:CODEX_API_URL,Env:XDT_API_URL -ErrorAction SilentlyContinue; try { irm '${codexWindowsInstallerBaseUrl}/install-codex-win-bootstrap.ps1' -UseBasicParsing -TimeoutSec 60 | iex } finally { Remove-Item Env:CODEX_TOKEN,Env:XDT_TOKEN,Env:CODEX_API_URL,Env:XDT_API_URL -ErrorAction SilentlyContinue }`
   }
 
   if (selectedOs.value === 'unix') {

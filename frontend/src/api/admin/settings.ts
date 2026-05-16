@@ -538,6 +538,8 @@ export interface SystemSettings {
   // Chat page feature switch
   chat_page_enabled: boolean;
   chat_page_url: string;
+  agent_page_enabled: boolean;
+  agent_page_url: string;
 
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: boolean;
@@ -742,6 +744,8 @@ export interface UpdateSettingsRequest {
   // Chat page feature switch
   chat_page_enabled?: boolean;
   chat_page_url?: string;
+  agent_page_enabled?: boolean;
+  agent_page_url?: string;
 
   // Affiliate (邀请返利) feature switch
   affiliate_enabled?: boolean;

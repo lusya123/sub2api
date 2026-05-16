@@ -62,13 +62,15 @@ func SetupRouter(
 		}
 		return nil
 	}))
+	visitorCookieMgr := middleware2.NewVisitorCookieManagerWithSecret(redisClient, cfg.JWT.Secret)
 	r.Use(middleware2.TrustTierDetector())
 	r.Use(middleware2.NewBanCheck(redisClient))
-	r.Use(middleware2.NewGlobalRateLimiter(redisClient).Middleware())
+	r.Use(middleware2.NewGlobalRateLimiter(redisClient, visitorCookieMgr).Middleware())
+	r.Use(middleware2.APIPathGuard())
+	r.Use(middleware2.VisitorCookieIssuerMiddleware(visitorCookieMgr))
 	r.Use(middleware2.NewBodyFingerprint(redisClient).Middleware())
-	if redisClient != nil {
-		r.Use(web.SPAProtect(redisClient))
-	}
+	r.Use(web.SPAProtect(redisClient, cfg.JWT.Secret))
+	handler.PreloadLogoCache(settingService)
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {

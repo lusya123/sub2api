@@ -1286,7 +1286,8 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, token, newPasswo
 		return ErrServiceUnavailable
 	}
 
-	// Verify and consume the reset token (one-time use)
+	// Consume the reset token before touching either account system, preserving one-time use
+	// even when the Shop sync endpoint is temporarily unavailable.
 	if err := s.emailService.ConsumePasswordResetToken(ctx, email, token); err != nil {
 		return err
 	}
@@ -1304,6 +1305,11 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, token, newPasswo
 	// Check if user is active
 	if !user.IsActive() {
 		return ErrUserNotActive
+	}
+
+	if err := s.syncShopPasswordReset(ctx, user.ID, email, newPassword); err != nil {
+		logger.LegacyPrintf("service.auth", "[Auth] Shop password sync failed for user %d: %v", user.ID, err)
+		return ErrServiceUnavailable
 	}
 
 	// Hash new password

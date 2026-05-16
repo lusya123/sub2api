@@ -169,7 +169,7 @@ describe('ClientInstallPanel', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain("$env:CODEX_TOKEN='sk-test'")
-    expect(wrapper.text()).toContain("$env:CODEX_API_URL='https://example.com/api/v1'")
-    expect(wrapper.text()).toContain('/install-codex-win.ps1')
+    expect(wrapper.text()).toContain('https://xuedingtoken.com/install-codex-win-bootstrap.ps1')
+    expect(wrapper.text()).not.toContain("$env:CODEX_API_URL='https://example.com/api/v1'")
   })
 })

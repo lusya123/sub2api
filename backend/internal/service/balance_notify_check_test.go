@@ -82,6 +82,44 @@ func TestCheckBalanceAfterDeduction_NoCrossingNotFired(t *testing.T) {
 	s.CheckBalanceAfterDeduction(context.Background(), u, 5, 2)
 }
 
+func TestResolveBalanceThresholdCandidates_DefaultTiers(t *testing.T) {
+	got := resolveBalanceThresholdCandidates(10, thresholdTypeFixed, 100, true)
+	require.Equal(t, []float64{1, 5, 10, 30, 50}, got)
+}
+
+func TestResolveBalanceThresholdCandidates_CustomUserThresholdNoDefaultTiers(t *testing.T) {
+	got := resolveBalanceThresholdCandidates(20, thresholdTypeFixed, 100, false)
+	require.Equal(t, []float64{20}, got)
+}
+
+func TestResolveBalanceThresholdCandidates_PercentageThreshold(t *testing.T) {
+	got := resolveBalanceThresholdCandidates(25, thresholdTypePercentage, 80, false)
+	require.Equal(t, []float64{20}, got)
+}
+
+func TestSelectCrossedBalanceThreshold_ChoosesMostUrgentSingleEmail(t *testing.T) {
+	threshold, ok := selectCrossedBalanceThreshold(100, 0.5, []float64{1, 5, 10, 30, 50})
+	require.True(t, ok)
+	require.Equal(t, 1.0, threshold)
+}
+
+func TestSelectCrossedBalanceThreshold_ChoosesNextTierOnly(t *testing.T) {
+	threshold, ok := selectCrossedBalanceThreshold(40, 29, []float64{1, 5, 10, 30, 50})
+	require.True(t, ok)
+	require.Equal(t, 30.0, threshold)
+}
+
+func TestSelectCrossedBalanceThreshold_AlreadyBelowHigherTierCanCrossLowerTier(t *testing.T) {
+	threshold, ok := selectCrossedBalanceThreshold(7, 4, []float64{1, 5, 10})
+	require.True(t, ok)
+	require.Equal(t, 5.0, threshold)
+}
+
+func TestSelectCrossedBalanceThreshold_NoRepeatWhileAlreadyBelow(t *testing.T) {
+	_, ok := selectCrossedBalanceThreshold(4, 3, []float64{5, 10})
+	require.False(t, ok)
+}
+
 // ---------- nil-service guards on CheckAccountQuotaAfterIncrement ----------
 
 func TestCheckAccountQuotaAfterIncrement_NilAccount(t *testing.T) {

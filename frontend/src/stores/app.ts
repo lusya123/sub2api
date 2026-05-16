@@ -359,6 +359,8 @@ export const useAppStore = defineStore('app', () => {
         available_channels_enabled: false,
         chat_page_enabled: true,
         chat_page_url: '',
+        agent_page_enabled: true,
+        agent_page_url: '',
         risk_control_enabled: false,
         affiliate_enabled: false,
       }

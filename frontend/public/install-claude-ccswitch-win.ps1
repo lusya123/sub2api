@@ -585,10 +585,27 @@ function Test-KnownBadCcSwitchBuild([string]$CcSwitch) {
     return $false
   }
 
+  try {
+    $stream = [IO.File]::OpenRead($CcSwitch)
+    try {
+      $reader = New-Object IO.BinaryReader($stream)
+      $stream.Seek(0x3c, [IO.SeekOrigin]::Begin) | Out-Null
+      $peOffset = $reader.ReadInt32()
+      $stream.Seek($peOffset + 24 + 68, [IO.SeekOrigin]::Begin) | Out-Null
+      $subsystem = $reader.ReadUInt16()
+      if ($subsystem -eq 3) {
+        return $true
+      }
+    } finally {
+      $stream.Close()
+    }
+  } catch {}
+
   $knownBadHashes = @(
     # Built without Tauri production resource embedding; GUI loads http://localhost:3000.
     '26CD1B76957BBFC68773CD1CD86FF67D9A45C6B0DF5A139FF79BE716BB8A7A25',
-    '75944F638DD118AA15DC26ECA6E537CA8E07A049EFC4018E751554B732EB6A2D'
+    '75944F638DD118AA15DC26ECA6E537CA8E07A049EFC4018E751554B732EB6A2D',
+    'EE59B4AABDAD80E4E06008DAB9C8C7D00F5A83F9CE79F2249D460A1FE10F9D6B'
   )
 
   try {

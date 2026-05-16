@@ -645,6 +645,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeyChatPageEnabled,
 		SettingKeyChatPageURL,
+		SettingKeyAgentPageEnabled,
+		SettingKeyAgentPageURL,
 		SettingKeyAffiliateEnabled,
 		SettingKeyRiskControlEnabled,
 	}
@@ -759,8 +761,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 
-		ChatPageEnabled: !isFalseSettingValue(settings[SettingKeyChatPageEnabled]),
-		ChatPageURL:     strings.TrimSpace(settings[SettingKeyChatPageURL]),
+		ChatPageEnabled:  !isFalseSettingValue(settings[SettingKeyChatPageEnabled]),
+		ChatPageURL:      strings.TrimSpace(settings[SettingKeyChatPageURL]),
+		AgentPageEnabled: !isFalseSettingValue(settings[SettingKeyAgentPageEnabled]),
+		AgentPageURL:     strings.TrimSpace(settings[SettingKeyAgentPageURL]),
 
 		AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
 
@@ -973,6 +977,8 @@ type PublicSettingsInjectionPayload struct {
 	AvailableChannelsEnabled             bool   `json:"available_channels_enabled"`
 	ChatPageEnabled                      bool   `json:"chat_page_enabled"`
 	ChatPageURL                          string `json:"chat_page_url"`
+	AgentPageEnabled                     bool   `json:"agent_page_enabled"`
+	AgentPageURL                         string `json:"agent_page_url"`
 	AffiliateEnabled                     bool   `json:"affiliate_enabled"`
 	RiskControlEnabled                   bool   `json:"risk_control_enabled"`
 }
@@ -1040,6 +1046,8 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		ChatPageEnabled:                      settings.ChatPageEnabled,
 		ChatPageURL:                          settings.ChatPageURL,
+		AgentPageEnabled:                     settings.AgentPageEnabled,
+		AgentPageURL:                         settings.AgentPageURL,
 		AffiliateEnabled:                     settings.AffiliateEnabled,
 		RiskControlEnabled:                   settings.RiskControlEnabled,
 	}, nil
@@ -1665,6 +1673,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// Chat page feature switch
 	updates[SettingKeyChatPageEnabled] = strconv.FormatBool(settings.ChatPageEnabled)
 	updates[SettingKeyChatPageURL] = strings.TrimSpace(settings.ChatPageURL)
+	updates[SettingKeyAgentPageEnabled] = strconv.FormatBool(settings.AgentPageEnabled)
+	updates[SettingKeyAgentPageURL] = strings.TrimSpace(settings.AgentPageURL)
 
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)
@@ -2489,8 +2499,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAvailableChannelsEnabled: "false",
 
 		// Chat page feature (default enabled; opt-out)
-		SettingKeyChatPageEnabled: "true",
-		SettingKeyChatPageURL:     "",
+		SettingKeyChatPageEnabled:  "true",
+		SettingKeyChatPageURL:      "",
+		SettingKeyAgentPageEnabled: "true",
+		SettingKeyAgentPageURL:     "",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled: "false",
@@ -2874,6 +2886,8 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// Chat page feature (default: enabled; opt-out)
 	result.ChatPageEnabled = !isFalseSettingValue(settings[SettingKeyChatPageEnabled])
 	result.ChatPageURL = strings.TrimSpace(settings[SettingKeyChatPageURL])
+	result.AgentPageEnabled = !isFalseSettingValue(settings[SettingKeyAgentPageEnabled])
+	result.AgentPageURL = strings.TrimSpace(settings[SettingKeyAgentPageURL])
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"

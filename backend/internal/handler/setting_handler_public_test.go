@@ -116,6 +116,33 @@ func TestSettingHandler_GetPublicLogoUsesMemoryCacheAndETag(t *testing.T) {
 	require.Equal(t, 1, repo.calls)
 }
 
+func TestSettingHandler_PreloadLogoCacheWarmsPublicLogo(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	InvalidateLogoCache()
+	t.Cleanup(InvalidateLogoCache)
+
+	rawLogo := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("preloaded-logo"))
+	repo := &settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeySiteLogo: rawLogo,
+		},
+	}
+	svc := service.NewSettingService(repo, &config.Config{})
+	require.True(t, preloadLogoCacheOnce(context.Background(), svc))
+
+	h := NewSettingHandler(svc, "test-version")
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/logo?v=test", nil)
+
+	h.GetPublicLogo(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "HIT-MEM", recorder.Header().Get("X-Cache"))
+	require.Equal(t, "preloaded-logo", recorder.Body.String())
+	require.Equal(t, 1, repo.calls)
+}
+
 func (s *settingHandlerPublicRepoStub) Get(ctx context.Context, key string) (*service.Setting, error) {
 	panic("unexpected Get call")
 }

@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -27,11 +30,37 @@ var logoCache atomic.Pointer[logoCacheEntry]
 const (
 	defaultLogoMemoryCacheTTL = 5 * time.Minute
 	logoHTTPCacheMaxAge       = 3600
+	logoPreloadDelay          = 2 * time.Second
+	logoPreloadInterval       = 2 * time.Second
+	logoPreloadAttempts       = 5
+	logoPreloadTimeout        = 5 * time.Second
 )
 
 // InvalidateLogoCache clears the in-process public logo cache after settings change.
 func InvalidateLogoCache() {
 	logoCache.Store(nil)
+}
+
+func PreloadLogoCache(settingService *service.SettingService) {
+	if settingService == nil || os.Getenv("LOGO_CACHE_PRELOAD_ENABLED") == "false" {
+		return
+	}
+	go func() {
+		time.Sleep(logoPreloadDelay)
+		for attempt := 1; attempt <= logoPreloadAttempts; attempt++ {
+			ctx, cancel := context.WithTimeout(context.Background(), logoPreloadTimeout)
+			ok := preloadLogoCacheOnce(ctx, settingService)
+			cancel()
+			if ok {
+				log.Printf("[logo] cache preloaded successfully attempt=%d", attempt)
+				return
+			}
+			if attempt < logoPreloadAttempts {
+				time.Sleep(logoPreloadInterval)
+			}
+		}
+		log.Printf("[logo] cache preload failed after %d retries", logoPreloadAttempts)
+	}()
 }
 
 // SettingHandler 公开设置处理器（无需认证）
@@ -113,8 +142,10 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 
-		ChatPageEnabled: settings.ChatPageEnabled,
-		ChatPageURL:     settings.ChatPageURL,
+		ChatPageEnabled:  settings.ChatPageEnabled,
+		ChatPageURL:      settings.ChatPageURL,
+		AgentPageEnabled: settings.AgentPageEnabled,
+		AgentPageURL:     settings.AgentPageURL,
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 
@@ -138,32 +169,73 @@ func (h *SettingHandler) GetPublicLogo(c *gin.Context) {
 
 	settings, err := h.settingService.GetPublicSettings(c.Request.Context())
 	if err != nil {
+		log.Printf("[logo] GetPublicSettings failed: %v", err)
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	data, contentType, ok := service.DecodeInlineImageDataURL(settings.SiteLogo)
+	cached, ok := buildLogoCacheEntry(settings.SiteLogo)
 	if !ok {
+		if strings.TrimSpace(settings.SiteLogo) == "" {
+			log.Printf("[logo] settings.SiteLogo is empty")
+		} else {
+			log.Printf("[logo] decode failed, SiteLogo prefix: %q", logoValuePrefix(settings.SiteLogo))
+		}
 		c.Status(http.StatusNotFound)
 		return
 	}
 
-	etag := `"` + service.PublicSiteLogoVersion(settings.SiteLogo) + `"`
-	logoCache.Store(&logoCacheEntry{
-		data:        data,
-		contentType: contentType,
-		etag:        etag,
-		expiresAt:   time.Now().Add(logoMemoryCacheTTL()),
-	})
+	logoCache.Store(cached)
 
-	setPublicLogoCacheHeaders(c, etag)
-	if c.GetHeader("If-None-Match") == etag {
+	setPublicLogoCacheHeaders(c, cached.etag)
+	if c.GetHeader("If-None-Match") == cached.etag {
 		c.Status(http.StatusNotModified)
 		return
 	}
 
 	c.Header("X-Cache", "MISS")
-	c.Data(http.StatusOK, contentType, data)
+	c.Data(http.StatusOK, cached.contentType, cached.data)
+}
+
+func preloadLogoCacheOnce(ctx context.Context, settingService *service.SettingService) bool {
+	settings, err := settingService.GetPublicSettings(ctx)
+	if err != nil {
+		log.Printf("[logo] preload GetPublicSettings failed: %v", err)
+		return false
+	}
+	cached, ok := buildLogoCacheEntry(settings.SiteLogo)
+	if !ok {
+		if strings.TrimSpace(settings.SiteLogo) == "" {
+			log.Printf("[logo] preload settings.SiteLogo is empty")
+		} else {
+			log.Printf("[logo] preload decode failed, SiteLogo prefix: %q", logoValuePrefix(settings.SiteLogo))
+		}
+		return false
+	}
+	logoCache.Store(cached)
+	return true
+}
+
+func buildLogoCacheEntry(siteLogo string) (*logoCacheEntry, bool) {
+	data, contentType, ok := service.DecodeInlineImageDataURL(siteLogo)
+	if !ok {
+		return nil, false
+	}
+	etag := `"` + service.PublicSiteLogoVersion(siteLogo) + `"`
+	return &logoCacheEntry{
+		data:        data,
+		contentType: contentType,
+		etag:        etag,
+		expiresAt:   time.Now().Add(logoMemoryCacheTTL()),
+	}, true
+}
+
+func logoValuePrefix(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 80 {
+		return value
+	}
+	return value[:80]
 }
 
 func setPublicLogoCacheHeaders(c *gin.Context, etag string) {

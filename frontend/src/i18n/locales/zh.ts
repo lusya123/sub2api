@@ -347,6 +347,7 @@ export default {
     apiKeys: 'API 密钥',
     clientInstall: '一键部署',
     chat: '聊天',
+    useToken: '用 Token',
     usage: '使用记录',
     redeem: '兑换',
     affiliate: '邀请返利',
@@ -646,6 +647,10 @@ export default {
   chatLaunch: {
     title: '选择模型开始聊天',
     description: '选一个模型；如果它有多个分组，再选一个分组，然后直接进入 Lobe Chat。',
+    tabs: {
+      chat: '对话',
+      agent: 'Agent'
+    },
     loadingModels: '正在读取你可用的模型和分组...',
     opening: '正在准备聊天会话...',
     openButton: '打开聊天',
@@ -654,7 +659,53 @@ export default {
     searchPlaceholder: '搜索模型或分组',
     groupCount: '{count} 个可用分组',
     selectModel: '请选择模型',
-    noModels: '当前账户还没有可导入 Lobe Chat 的可用模型。'
+    noModels: '当前账户还没有可用模型。',
+    agent: {
+      title: '选择配置打开 Agent',
+      description: '选择一个 API Key 和模型，进入 AI Manus 后会自动完成登录和模型配置。',
+      loading: '正在读取你的 API Key、模型和分组...',
+      apiKey: 'API Key',
+      selectApiKey: '请选择 API Key',
+      noApiKeys: '当前模型分组还没有可用的 API Key，点击下方按钮会自动创建一个 Agent 专用 Key 并继续打开。',
+      autoCreateHint: '无需先去密钥页面创建；系统会按当前模型分组自动生成一个 Agent 专用 Key。',
+      openButton: '打开 Agent',
+      createAndOpenButton: '创建 API Key 并打开 Agent',
+      openingButton: '打开中...',
+      opening: '正在同步登录和模型配置...',
+      createdKey: '已创建 Agent 专用 API Key',
+      failed: '无法打开 Agent，请稍后重试。'
+    }
+  },
+
+  useToken: {
+    title: '用 Token',
+    description: '选择一个外部应用并用你的 Token 直接进入。Lobe Chat、AI Manus 和未来接入的工具可以部署在不同服务器和域名上。',
+    chatDescription: '进入 Lobe Chat，直接用你当前账户的 Token 和默认模型开始对话。',
+    agentDescription: '进入 AI Manus，自动同步登录、API Key、模型和 Base URL。',
+    active: '当前',
+    enterApp: '进入应用',
+    launching: '正在进入...',
+    embeddedHint: '应用已内嵌在当前页面；如果外部域名禁止嵌入，可以用右侧按钮打开完整页面。',
+    reload: '重新加载',
+    openExternal: '新窗口打开',
+    configTitle: '默认配置',
+    modelLabel: '模型',
+    providerLabel: '分组',
+    modes: {
+      chat: '聊天',
+      agent: 'Agent'
+    },
+    explanations: {
+      chat: '跟 AI 一问一答 —— 写文案、查资料、解释概念、聊点想法。',
+      agent: '让 AI 替你跑一整套任务 —— 自动上网搜资料、操作浏览器、写完整报告。'
+    },
+    firstHint: '点这里切换模式',
+    backToConsole: '返回控制台',
+    preparing: '正在准备…',
+    advanced: '高级配置',
+    advancedHint: '默认配置已自动选好，一般不需要改。',
+    openInNewTab: '新窗口打开',
+    refresh: '刷新'
   },
 
   // Groups (shared)
@@ -800,7 +851,7 @@ export default {
       openclawDescription: '为当前 API Key 生成 OpenClaw 一键部署命令。脚本会安装官方 openclaw npm 包，并写入 ~/.openclaw 配置。',
       claudeNote: '命令里的 XDT_TOKEN/XDT_API_URL 只用于本次安装脚本传参。脚本会安装官方 Claude Code，导入并切换 CC Switch 供应商，然后启动 claude。',
       codexNote: '命令里的 CODEX_TOKEN/CODEX_API_URL 只用于本次安装脚本传参。脚本会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
-      codexWindowsNote: '命令里的 CODEX_TOKEN/CODEX_API_URL 只用于本次安装脚本传参。脚本会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
+      codexWindowsNote: '命令里的 CODEX_TOKEN 只用于本次安装器传参。Windows 安装器锁定到 XueDingToken 官方地址，会安装官方 Codex CLI，导入并切换 CC Switch 供应商，然后启动 codex。',
       openclawWindowsNote: 'OpenClaw 官方仍更推荐在 Windows 上通过 WSL2 使用。这里提供的是原生 PowerShell 部署命令，并要求 Node.js 22.16+；如果系统策略或 Node 环境受限，优先考虑 WSL。',
       openclawNote: 'OpenClaw 脚本安装的是官方 openclaw npm 包，并把默认模型和认证信息写入 ~/.openclaw。脚本会优先准备 Node.js 22.16+，包下载优先使用 npmmirror。',
       summary: {
@@ -6191,14 +6242,20 @@ export default {
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
         chatPage: {
-          title: '聊天页面',
-          description: '控制用户端侧边栏中的聊天入口，并决定已登录用户是否可以打开聊天启动页。',
-          enabled: '启用聊天页面',
-          enabledHint: '关闭后用户端侧边栏入口隐藏，直接访问 /chat 会被重定向。',
-          url: '聊天 URL',
+          title: '用 Token 应用',
+          description: '分别配置“用 Token”里的 Lobe Chat、AI Manus 等外部应用入口。',
+          enabled: '启用 Lobe Chat',
+          enabledHint: '关闭后“用 Token”里的对话入口隐藏；如果 Agent 仍开启，顶部入口会继续显示。',
+          url: 'Lobe Chat URL',
           urlPlaceholder: 'https://chat.example.com',
           urlHint: '托管聊天应用的完整 http(s) 地址。留空时使用后端 lobe.chat_url 配置。',
-          urlInvalid: '聊天 URL 必须是完整的 http(s) URL。',
+          urlInvalid: 'Lobe Chat URL 必须是完整的 http(s) URL。',
+          agentEnabled: '启用 Agent 页面',
+          agentEnabledHint: '控制“用 Token”里的 Agent 入口。Lobe Chat 和 AI Manus 是彼此独立的应用，可分别开关。',
+          agentUrl: 'Agent URL',
+          agentUrlPlaceholder: 'https://manus.example.com',
+          agentUrlHint: 'AI Manus 或其他 Agent 应用的完整 http(s) 地址。留空时使用前端 VITE_MANUS_BASE_URL 配置。',
+          agentUrlInvalid: 'Agent URL 必须是完整的 http(s) URL。',
         },
         riskControl: {
           title: '风控中心',

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -25,12 +27,11 @@ import (
 //   - Anonymous SPA routes are rate-limited per client IP and temporarily banned
 //     after exceeding the configured threshold.
 //
+// Sensitive authenticated SPA routes, such as /chat, require a signed user
+// JWT before the frontend document is served.
+//
 // Emergency rollback: set SPA_PROTECT_ENABLED=false.
-func SPAProtect(rdb *redis.Client) gin.HandlerFunc {
-	if rdb == nil {
-		return func(c *gin.Context) { c.Next() }
-	}
-
+func SPAProtect(rdb *redis.Client, jwtSecret string) gin.HandlerFunc {
 	maxPerMinute := spaProtectEnvInt("SPA_PROTECT_MAX_PER_MINUTE", 100)
 	banSeconds := spaProtectEnvInt("SPA_PROTECT_BAN_SECONDS", 300)
 	banTTL := time.Duration(banSeconds) * time.Second
@@ -43,52 +44,83 @@ func SPAProtect(rdb *redis.Client) gin.HandlerFunc {
 			return
 		}
 
-		if hasSPAUserCredential(c) || hasSPAAPIKey(c) {
-			c.Next()
-			return
-		}
-
 		path := c.Request.URL.Path
 		if spaProtectBypassPath(path) || spaProtectStaticAsset(path) {
 			c.Next()
 			return
 		}
 
-		ip := spaProtectClientIP(c)
-		if ip == "" {
+		if spaProtectRequiresVerifiedUser(path) {
+			if hasSPAVerifiedUserCredential(c, jwtSecret) {
+				c.Next()
+				return
+			}
+			if blocked := spaProtectRateLimit(c, rdb, path, maxPerMinute, banSeconds, banTTL, redisTimeout); blocked {
+				return
+			}
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error":   "authentication required",
+				"message": "please log in before opening this page",
+			})
+			return
+		}
+
+		if hasSPAUserCredential(c) || hasSPAAPIKey(c) {
 			c.Next()
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), redisTimeout)
-		defer cancel()
-
-		banKey := "spa:ban:" + ip
-		rateKey := "spa:rate:" + ip
-		result, err := spaProtectRateScript.Run(ctx, rdb, []string{banKey, rateKey}, maxPerMinute, banSeconds).Int64()
-		if err != nil {
-			c.Next()
-			return
-		}
-
-		switch result {
-		case spaProtectAlreadyBanned:
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error":   "too many requests",
-				"message": "blocked, please try again later",
-			})
-			return
-		case spaProtectNewlyBanned:
-			log.Printf("spa:ban ip=%s path=%s limit=%d ban_seconds=%d", ip, path, maxPerMinute, int(banTTL/time.Second))
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error":   "too many requests",
-				"message": "rate limit exceeded",
-			})
+		if blocked := spaProtectRateLimit(c, rdb, path, maxPerMinute, banSeconds, banTTL, redisTimeout); blocked {
 			return
 		}
 
 		c.Next()
 	}
+}
+
+func spaProtectRateLimit(
+	c *gin.Context,
+	rdb *redis.Client,
+	path string,
+	maxPerMinute int,
+	banSeconds int,
+	banTTL time.Duration,
+	redisTimeout time.Duration,
+) bool {
+	if rdb == nil {
+		return false
+	}
+	ip := spaProtectClientIP(c)
+	if ip == "" {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), redisTimeout)
+	defer cancel()
+
+	banKey := "spa:ban:" + ip
+	rateKey := "spa:rate:" + ip
+	result, err := spaProtectRateScript.Run(ctx, rdb, []string{banKey, rateKey}, maxPerMinute, banSeconds).Int64()
+	if err != nil {
+		return false
+	}
+
+	switch result {
+	case spaProtectAlreadyBanned:
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+			"error":   "too many requests",
+			"message": "blocked, please try again later",
+		})
+		return true
+	case spaProtectNewlyBanned:
+		log.Printf("spa:ban ip=%s path=%s limit=%d ban_seconds=%d", ip, path, maxPerMinute, int(banTTL/time.Second))
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+			"error":   "too many requests",
+			"message": "rate limit exceeded",
+		})
+		return true
+	}
+	return false
 }
 
 const (
@@ -135,6 +167,43 @@ func hasSPAUserCredential(c *gin.Context) bool {
 	}
 	token := strings.TrimSpace(parts[1])
 	return token != "" && !strings.HasPrefix(token, "sk-")
+}
+
+func hasSPAVerifiedUserCredential(c *gin.Context, jwtSecret string) bool {
+	cookie, cookieErr := c.Cookie("token")
+	if cookieErr == nil && validateSPAJWT(strings.TrimSpace(cookie), jwtSecret) {
+		return true
+	}
+
+	auth := strings.TrimSpace(c.GetHeader("Authorization"))
+	parts := strings.SplitN(auth, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return false
+	}
+	token := strings.TrimSpace(parts[1])
+	if token == "" || strings.HasPrefix(token, "sk-") {
+		return false
+	}
+	return validateSPAJWT(token, jwtSecret)
+}
+
+func validateSPAJWT(tokenString string, jwtSecret string) bool {
+	if tokenString == "" || jwtSecret == "" || len(tokenString) > 8192 {
+		return false
+	}
+
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{
+		jwt.SigningMethodHS256.Name,
+		jwt.SigningMethodHS384.Name,
+		jwt.SigningMethodHS512.Name,
+	}))
+	token, err := parser.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(jwtSecret), nil
+	})
+	return err == nil && token.Valid
 }
 
 func hasSPAAPIKey(c *gin.Context) bool {
@@ -192,6 +261,14 @@ func spaProtectStaticAsset(path string) bool {
 		}
 	}
 	return false
+}
+
+func spaProtectRequiresVerifiedUser(path string) bool {
+	trimmed := strings.TrimSpace(path)
+	return trimmed == "/chat" ||
+		strings.HasPrefix(trimmed, "/chat/") ||
+		trimmed == "/use-token" ||
+		strings.HasPrefix(trimmed, "/use-token/")
 }
 
 func spaProtectClientIP(c *gin.Context) string {

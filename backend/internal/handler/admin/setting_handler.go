@@ -268,8 +268,10 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 
-		ChatPageEnabled: settings.ChatPageEnabled,
-		ChatPageURL:     settings.ChatPageURL,
+		ChatPageEnabled:  settings.ChatPageEnabled,
+		ChatPageURL:      settings.ChatPageURL,
+		AgentPageEnabled: settings.AgentPageEnabled,
+		AgentPageURL:     settings.AgentPageURL,
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 	}
@@ -579,8 +581,10 @@ type UpdateSettingsRequest struct {
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
 
 	// Chat page feature switch (user-facing)
-	ChatPageEnabled *bool   `json:"chat_page_enabled"`
-	ChatPageURL     *string `json:"chat_page_url"`
+	ChatPageEnabled  *bool   `json:"chat_page_enabled"`
+	ChatPageURL      *string `json:"chat_page_url"`
+	AgentPageEnabled *bool   `json:"agent_page_enabled"`
+	AgentPageURL     *string `json:"agent_page_url"`
 
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
@@ -1114,6 +1118,13 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if !validateOptionalURL(chatPageURL, "Chat Page URL") {
 		return
 	}
+	agentPageURL := previousSettings.AgentPageURL
+	if req.AgentPageURL != nil {
+		agentPageURL = strings.TrimSpace(*req.AgentPageURL)
+	}
+	if !validateOptionalURL(agentPageURL, "Agent Page URL") {
+		return
+	}
 
 	if purchaseEnabled {
 		switch purchaseMode {
@@ -1589,6 +1600,13 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return previousSettings.ChatPageEnabled
 		}(),
 		ChatPageURL: chatPageURL,
+		AgentPageEnabled: func() bool {
+			if req.AgentPageEnabled != nil {
+				return *req.AgentPageEnabled
+			}
+			return previousSettings.AgentPageEnabled
+		}(),
+		AgentPageURL: agentPageURL,
 		AffiliateEnabled: func() bool {
 			if req.AffiliateEnabled != nil {
 				return *req.AffiliateEnabled
@@ -1885,8 +1903,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
 
-		ChatPageEnabled: updatedSettings.ChatPageEnabled,
-		ChatPageURL:     updatedSettings.ChatPageURL,
+		ChatPageEnabled:  updatedSettings.ChatPageEnabled,
+		ChatPageURL:      updatedSettings.ChatPageURL,
+		AgentPageEnabled: updatedSettings.AgentPageEnabled,
+		AgentPageURL:     updatedSettings.AgentPageURL,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
@@ -2311,6 +2331,12 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.ChatPageURL != after.ChatPageURL {
 		changed = append(changed, "chat_page_url")
+	}
+	if before.AgentPageEnabled != after.AgentPageEnabled {
+		changed = append(changed, "agent_page_enabled")
+	}
+	if before.AgentPageURL != after.AgentPageURL {
+		changed = append(changed, "agent_page_url")
 	}
 	if before.AffiliateEnabled != after.AffiliateEnabled {
 		changed = append(changed, "affiliate_enabled")

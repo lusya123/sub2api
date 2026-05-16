@@ -76,6 +76,7 @@ type Config struct {
 	WeChat     WeChatConnectConfig  `mapstructure:"wechat_connect"`
 	// OIDCConnect 是 Sub2API 作为 OIDC Client/Relying Party 接入第三方登录的配置。
 	OIDCConnect             OIDCConnectConfig             `mapstructure:"oidc_connect"`
+	ShopAccountSync         ShopAccountSyncConfig         `mapstructure:"shop_account_sync"`
 	GitHubOAuth             EmailOAuthProviderConfig      `mapstructure:"github_oauth"`
 	GoogleOAuth             EmailOAuthProviderConfig      `mapstructure:"google_oauth"`
 	Default                 DefaultConfig                 `mapstructure:"default"`
@@ -202,6 +203,12 @@ type LobeConfig struct {
 	InternalSharedSecret string `mapstructure:"internal_shared_secret"`
 	GatewayBaseURL       string `mapstructure:"gateway_base_url"`
 	ChatURL              string `mapstructure:"chat_url"`
+}
+
+type ShopAccountSyncConfig struct {
+	BaseURL        string `mapstructure:"base_url"`
+	SharedSecret   string `mapstructure:"shared_secret"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
 }
 
 type WeChatConnectConfig struct {
@@ -1582,6 +1589,9 @@ func setDefaults() {
 	viper.SetDefault("oidc_connect.userinfo_email_path", "")
 	viper.SetDefault("oidc_connect.userinfo_id_path", "")
 	viper.SetDefault("oidc_connect.userinfo_username_path", "")
+	viper.SetDefault("shop_account_sync.base_url", "")
+	viper.SetDefault("shop_account_sync.shared_secret", "")
+	viper.SetDefault("shop_account_sync.timeout_seconds", 10)
 
 	// Database
 	viper.SetDefault("database.host", "localhost")
@@ -1590,8 +1600,8 @@ func setDefaults() {
 	viper.SetDefault("database.password", "postgres")
 	viper.SetDefault("database.dbname", "sub2api")
 	viper.SetDefault("database.sslmode", "prefer")
-	viper.SetDefault("database.max_open_conns", 256)
-	viper.SetDefault("database.max_idle_conns", 128)
+	viper.SetDefault("database.max_open_conns", 64)
+	viper.SetDefault("database.max_idle_conns", 16)
 	viper.SetDefault("database.conn_max_lifetime_minutes", 30)
 	viper.SetDefault("database.conn_max_idle_time_minutes", 5)
 

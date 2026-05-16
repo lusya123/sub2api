@@ -693,7 +693,6 @@ const flagPurchase = () => {
   if (payment === false && externalPurchase !== true) return false
   return true
 }
-const flagChatPage = makeSidebarFlag(FeatureFlags.chatPage)
 const flagAvailableChannels = makeSidebarFlag(FeatureFlags.availableChannels)
 const flagAffiliate = makeSidebarFlag(FeatureFlags.affiliate)
 const flagRiskControl = makeSidebarFlag(FeatureFlags.riskControl)
@@ -713,7 +712,6 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   items.push(
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/client-install', label: t('nav.clientInstall'), icon: ChevronDoubleRightIcon },
-    { path: '/chat', label: t('nav.chat'), icon: GlobeIcon, featureFlag: flagChatPage },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/status', label: t('nav.modelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },

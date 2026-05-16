@@ -32,6 +32,18 @@ func TestSPAProtectTokenCookieLifecycle(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	ctx, _ = gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+
+	setSPAProtectTokenCookie(ctx, 123, "signed-access-token")
+
+	cookies = rec.Result().Cookies()
+	require.Len(t, cookies, 1)
+	cookie = cookies[0]
+	require.Equal(t, spaProtectTokenCookieName, cookie.Name)
+	require.Equal(t, "signed-access-token", cookie.Value)
+
+	rec = httptest.NewRecorder()
+	ctx, _ = gin.CreateTestContext(rec)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 
 	clearSPAProtectTokenCookie(ctx, false)

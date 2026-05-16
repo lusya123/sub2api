@@ -25,6 +25,18 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+.tmp/
+.gopath/
+.worktrees/
+
+# Local runtime/scratch data
+/data/
+.codex-skill-staging/
+kiro-config-downloads/
+kiro-config-downloads-*/
+packyapi-docs/
+tmp_*
+kiro-cards-*.txt
 
 # Node modules (will be installed in container)
 frontend/node_modules/

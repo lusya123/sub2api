@@ -10,6 +10,7 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -64,6 +65,11 @@ type ModelMarketplaceMonitorService struct {
 	encryptor      SecretEncryptor
 	pricingService *PricingService
 	scheduler      ModelMarketplaceMonitorScheduler
+
+	userViewMu        sync.RWMutex
+	userViewCache     []*ModelMarketplaceUserMonitorView
+	userViewExpiresAt time.Time
+	userViewSF        singleflight.Group
 }
 
 func NewModelMarketplaceMonitorService(repo ModelMarketplaceMonitorRepository, encryptor SecretEncryptor, pricingService *PricingService) *ModelMarketplaceMonitorService {
@@ -132,6 +138,7 @@ func (s *ModelMarketplaceMonitorService) Create(ctx context.Context, p ModelMark
 	if err := s.repo.Create(ctx, m); err != nil {
 		return nil, fmt.Errorf("create model marketplace monitor: %w", err)
 	}
+	s.invalidateUserViewCache()
 	m.APIKey = strings.TrimSpace(p.APIKey)
 	if s.scheduler != nil {
 		s.scheduler.Schedule(m)
@@ -179,6 +186,7 @@ func (s *ModelMarketplaceMonitorService) Update(ctx context.Context, id int64, p
 	if err := s.repo.Update(ctx, existing); err != nil {
 		return nil, fmt.Errorf("update model marketplace monitor: %w", err)
 	}
+	s.invalidateUserViewCache()
 	if apiKeyUpdated {
 		existing.APIKey = newPlainAPIKey
 	} else {
@@ -207,6 +215,7 @@ func (s *ModelMarketplaceMonitorService) Delete(ctx context.Context, id int64) e
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete model marketplace monitor: %w", err)
 	}
+	s.invalidateUserViewCache()
 	if s.scheduler != nil {
 		s.scheduler.Unschedule(id)
 	}
@@ -287,6 +296,7 @@ func (s *ModelMarketplaceMonitorService) persistCheckResults(ctx context.Context
 	if err := s.repo.MarkChecked(ctx, m.ID, time.Now()); err != nil {
 		slog.Error("model_marketplace_monitor: mark checked failed", "monitor_id", m.ID, "error", err)
 	}
+	s.invalidateUserViewCache()
 }
 
 func (s *ModelMarketplaceMonitorService) SetScheduler(sched ModelMarketplaceMonitorScheduler) {

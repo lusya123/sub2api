@@ -23,10 +23,12 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getAuthToken, getRefreshToken, getTokenExpiresAt } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const appStore = useAppStore()
 
 const message = ref('正在同步登录状态，请稍候。')
 const error = ref(false)
@@ -34,6 +36,7 @@ const error = ref(false)
 function parseAllowedOrigins(): Set<string> {
   const origins = new Set<string>()
   const rawValues = [
+    appStore.cachedPublicSettings?.agent_page_url,
     import.meta.env.VITE_MANUS_BASE_URL,
     import.meta.env.VITE_MANUS_ALLOWED_REDIRECT_ORIGINS,
   ].filter(Boolean)
@@ -72,7 +75,11 @@ function goHome(): void {
   void router.push('/dashboard')
 }
 
-onMounted(() => {
+onMounted(async () => {
+  if (!appStore.publicSettingsLoaded) {
+    await appStore.fetchPublicSettings().catch(() => null)
+  }
+
   const redirectURI = route.query.redirect_uri
   if (typeof redirectURI !== 'string' || !redirectURI) {
     fail('缺少 Manus 回跳地址。')
@@ -106,7 +113,8 @@ onMounted(() => {
     return
   }
 
-  const params = new URLSearchParams()
+  const hashValue = target.hash.startsWith('#') ? target.hash.slice(1) : target.hash
+  const params = new URLSearchParams(hashValue)
   params.set('access_token', accessToken)
   params.set('token_type', 'Bearer')
 

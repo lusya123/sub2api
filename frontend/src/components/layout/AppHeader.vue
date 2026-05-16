@@ -1,8 +1,8 @@
 <template>
   <header class="app-topbar">
-    <div class="relative flex h-12 items-center justify-between gap-2 px-2 sm:px-3 md:px-4">
+    <div class="app-topbar__inner">
       <!-- Left: Mobile menu button (below lg) + Brand -->
-      <div class="flex flex-shrink-0 items-center gap-1 min-w-0">
+      <div class="app-topbar__left">
         <button
           v-if="!hideSidebar"
           type="button"
@@ -51,7 +51,7 @@
       </nav>
 
       <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
-      <div class="flex flex-shrink-0 items-center gap-3">
+      <div class="app-topbar__actions">
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
@@ -61,22 +61,27 @@
           :href="docUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+          class="app-topbar__docs flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
         >
           <Icon name="book" size="sm" />
-          <span class="hidden sm:inline">{{ t('nav.docs') }}</span>
+          <span class="app-topbar__docs-label hidden sm:inline">{{ t('nav.docs') }}</span>
         </a>
 
         <!-- Language Switcher -->
-        <LocaleSwitcher />
+        <div class="app-topbar__locale">
+          <LocaleSwitcher />
+        </div>
 
         <!-- Subscription Progress (for users with active subscriptions) -->
-        <SubscriptionProgressMini v-if="user" />
+        <div class="app-topbar__subscription">
+          <SubscriptionProgressMini v-if="user" />
+        </div>
 
         <!-- Balance Display -->
         <div
           v-if="user"
-          class="hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
+          class="app-topbar__balance hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
+          :title="`$${user.balance?.toFixed(2) || '0.00'}`"
         >
           <svg
             class="h-4 w-4 text-primary-600 dark:text-primary-400"
@@ -91,16 +96,16 @@
               d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
             />
           </svg>
-          <span class="text-sm font-semibold text-primary-700 dark:text-primary-300">
+          <span class="app-topbar__balance-value text-sm font-semibold text-primary-700 dark:text-primary-300">
             ${{ user.balance?.toFixed(2) || '0.00' }}
           </span>
         </div>
 
         <!-- User Dropdown -->
-        <div v-if="user" class="relative" ref="dropdownRef">
+        <div v-if="user" class="app-topbar__user-menu relative" ref="dropdownRef">
           <button
             @click="toggleDropdown"
-            class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
+            class="app-topbar__user-button flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
             aria-label="User Menu"
           >
             <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
@@ -112,7 +117,7 @@
               >
               <span v-else>{{ userInitials }}</span>
             </div>
-            <div class="hidden text-left md:block">
+            <div class="app-topbar__user-identity hidden text-left md:block">
               <div class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ displayName }}
               </div>
@@ -120,7 +125,7 @@
                 {{ user.role }}
               </div>
             </div>
-            <Icon name="chevronDown" size="sm" class="hidden text-gray-400 md:block" />
+            <Icon name="chevronDown" size="sm" class="app-topbar__user-chevron hidden text-gray-400 md:block" />
           </button>
 
           <!-- Dropdown Menu -->
@@ -250,6 +255,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const router = useRouter()
 const route = useRoute()
@@ -281,8 +287,8 @@ const consolePath = computed(() => {
   return authStore.canAccessAdmin ? '/admin/dashboard' : '/dashboard'
 })
 
-const primaryTopNavItems = computed(() => [
-  {
+const primaryTopNavItems = computed(() => {
+  const items: Array<{ key: string; path: string; label: string; icon: 'home' | 'grid' | 'chat' }> = [{
     key: 'console',
     path: consolePath.value,
     label: t('nav.console'),
@@ -294,11 +300,24 @@ const primaryTopNavItems = computed(() => [
     label: t('nav.modelMarketplace'),
     icon: 'grid' as const,
   },
-])
+  ]
+
+  if (isFeatureFlagEnabled(FeatureFlags.chatPage) || isFeatureFlagEnabled(FeatureFlags.agentPage)) {
+    items.push({
+      key: 'use-token',
+      path: '/chat',
+      label: t('nav.useToken'),
+      icon: 'chat' as const,
+    })
+  }
+
+  return items
+})
 
 function isPrimaryTopNavActive(key: string): boolean {
   if (key === 'marketplace') return route.path === '/model-marketplace'
-  return route.path !== '/model-marketplace'
+  if (key === 'use-token') return route.path === '/chat' || route.path === '/use-token'
+  return route.path !== '/model-marketplace' && route.path !== '/chat' && route.path !== '/use-token'
 }
 
 // Sliding underline indicator — measures the active tab's offsetLeft/Width and
@@ -327,7 +346,7 @@ function updateIndicator() {
 // must measure once it exists. Without the user watch the indicator stays
 // at opacity 0 on first load.
 watch(
-  [() => route.path, user],
+  [() => route.path, user, () => primaryTopNavItems.value.length],
   () => { nextTick(updateIndicator) },
   { flush: 'post' }
 )
@@ -446,6 +465,54 @@ onBeforeUnmount(() => {
   transition: background 0.25s ease;
 }
 
+.app-topbar__inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  height: 3rem;
+  padding: 0 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .app-topbar__inner {
+    padding-inline: 0.75rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-topbar__inner {
+    padding-inline: 1rem;
+  }
+}
+
+.app-topbar__left,
+.app-topbar__actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.app-topbar__left {
+  grid-column: 1;
+  justify-self: start;
+  gap: 0.25rem;
+  max-width: 100%;
+}
+
+.app-topbar__actions {
+  grid-column: 3;
+  justify-self: end;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  max-width: 100%;
+}
+
+.app-topbar__subscription {
+  display: contents;
+}
+
 /* ============ Mobile / tablet menu button ============
    Strictly hidden at lg (≥ 1024px) so it cannot leak to desktop the way the
    old Tailwind lg:hidden did. Below lg, opens the sidebar overlay drawer. */
@@ -528,15 +595,15 @@ onBeforeUnmount(() => {
 
 /* ============ Workspace tabs — text only, JS-driven sliding underline ============ */
 .app-topbar-nav {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
+  grid-column: 2;
+  position: relative;
+  align-self: stretch;
   display: flex;
   align-items: stretch;
+  justify-self: center;
   gap: 0;
-  max-width: calc(100vw - 2rem);
-  transform: translateX(-50%);
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -592,6 +659,62 @@ onBeforeUnmount(() => {
 @media (max-width: 767px) {
   .app-topbar-nav {
     display: none;
+  }
+}
+
+@media (max-width: 1279px) {
+  .app-topbar__user-identity,
+  .app-topbar__user-chevron {
+    display: none;
+  }
+
+  .app-topbar__actions {
+    gap: 0.5rem;
+  }
+
+  .app-topbar__docs {
+    padding-inline: 0.5rem;
+  }
+
+  .app-topbar__docs-label {
+    display: none;
+  }
+
+  .app-topbar__locale :deep(button) {
+    gap: 0.25rem;
+    padding-inline: 0.5rem;
+  }
+
+  .app-topbar__locale :deep(button > span:nth-of-type(2)) {
+    display: none;
+  }
+
+  .app-topbar__balance {
+    padding-inline: 0.5rem;
+  }
+
+  .app-topbar__balance-value {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .app-topbar__inner {
+    gap: 0.375rem;
+  }
+}
+
+@media (max-width: 899px) {
+  .app-brand__name {
+    max-width: 7.5rem;
+  }
+
+  .app-topbar-nav__item {
+    padding-inline: 0.75rem;
+  }
+
+  .app-topbar__actions {
+    gap: 0.375rem;
   }
 }
 </style>

@@ -347,6 +347,7 @@ export default {
     apiKeys: 'API Keys',
     clientInstall: 'One-Click Deploy',
     chat: 'Chat',
+    useToken: 'Use Token',
     usage: 'Usage',
     redeem: 'Redeem',
     affiliate: 'Affiliate Rebates',
@@ -647,6 +648,10 @@ export default {
   chatLaunch: {
     title: 'Choose a Model',
     description: 'Pick a model, choose a group if there is more than one, then open Lobe Chat.',
+    tabs: {
+      chat: 'Chat',
+      agent: 'Agent'
+    },
     loadingModels: 'Loading your available models and groups...',
     opening: 'Preparing your chat session...',
     openButton: 'Open Chat',
@@ -655,7 +660,53 @@ export default {
     searchPlaceholder: 'Search models or groups',
     groupCount: '{count} available groups',
     selectModel: 'Select a model',
-    noModels: 'This account does not have any Lobe Chat-compatible models yet.'
+    noModels: 'This account does not have any available models yet.',
+    agent: {
+      title: 'Choose Agent Config',
+      description: 'Pick an API key and model. AI Manus will open with sign-in and model config ready.',
+      loading: 'Loading your API keys, models, and groups...',
+      apiKey: 'API Key',
+      selectApiKey: 'Select an API key',
+      noApiKeys: 'There is no compatible API key for this model group yet. The button below will create an Agent key and continue.',
+      autoCreateHint: 'No need to visit the key page first; an Agent key will be created for the selected model group.',
+      openButton: 'Open Agent',
+      createAndOpenButton: 'Create API Key and Open Agent',
+      openingButton: 'Opening...',
+      opening: 'Syncing sign-in and model config...',
+      createdKey: 'Created Agent API key',
+      failed: 'Could not open Agent. Please try again.'
+    }
+  },
+
+  useToken: {
+    title: 'Use Token',
+    description: 'Choose an external app and enter with your token. Lobe Chat, AI Manus, and future tools can live on different servers and domains.',
+    chatDescription: 'Enter Lobe Chat and start with your current account token and default model.',
+    agentDescription: 'Enter AI Manus with sign-in, API key, model, and Base URL synced automatically.',
+    active: 'Active',
+    enterApp: 'Enter app',
+    launching: 'Entering...',
+    embeddedHint: 'The app is embedded on this page. If the external domain blocks embedding, open the full page from the button on the right.',
+    reload: 'Reload',
+    openExternal: 'Open full page',
+    configTitle: 'Default config',
+    modelLabel: 'Model',
+    providerLabel: 'Group',
+    modes: {
+      chat: 'Chat',
+      agent: 'Agent'
+    },
+    explanations: {
+      chat: 'Chat with AI — write copy, look things up, explain concepts, share ideas.',
+      agent: 'Let AI run a full task end-to-end — search the web, drive a browser, deliver a complete report.'
+    },
+    firstHint: 'Tap to switch',
+    backToConsole: 'Back to console',
+    preparing: 'Preparing…',
+    advanced: 'Advanced',
+    advancedHint: 'Defaults are already picked for you. You usually do not need to change these.',
+    openInNewTab: 'Open in new tab',
+    refresh: 'Refresh'
   },
 
   // Groups (shared)
@@ -797,7 +848,7 @@ export default {
       openclawDescription: 'Generate a one-click OpenClaw deployment command for this API key. The script installs the official openclaw npm package and writes config into ~/.openclaw.',
       claudeNote: 'XDT_TOKEN/XDT_API_URL are only temporary inputs for this installer run. The script installs official Claude Code, imports and switches the CC Switch provider, then starts claude.',
       codexNote: 'CODEX_TOKEN/CODEX_API_URL are temporary inputs for this installer run. The script installs official Codex CLI, imports and switches the CC Switch provider, then starts codex.',
-      codexWindowsNote: 'CODEX_TOKEN/CODEX_API_URL are temporary inputs for this installer run. The script installs official Codex CLI, imports and switches the CC Switch provider, then starts codex.',
+      codexWindowsNote: 'CODEX_TOKEN is only a temporary input for this installer run. The Windows installer is locked to the official XueDingToken endpoint, installs official Codex CLI, imports and switches the CC Switch provider, then starts codex.',
       openclawWindowsNote: 'OpenClaw officially still recommends WSL2 on Windows. A native PowerShell deployment command is provided here and requires Node.js 22.16+; prefer WSL if local policy or Node setup causes issues.',
       openclawNote: 'The OpenClaw script installs the official openclaw npm package and writes the default model plus auth config into ~/.openclaw. It also prepares Node.js 22.16+ and prefers npmmirror for downloads.',
       summary: {
@@ -6028,14 +6079,20 @@ export default {
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
         chatPage: {
-          title: 'Chat Page',
-          description: 'Show the user-facing chat entry in the sidebar and allow logged-in users to open the chat launch page.',
-          enabled: 'Enable Chat Page',
-          enabledHint: 'When off, the chat sidebar entry is hidden and direct access to /chat redirects away.',
-          url: 'Chat URL',
+          title: 'Use Token Apps',
+          description: 'Configure the external apps under Use Token, including Lobe Chat, AI Manus, and future tools.',
+          enabled: 'Enable Lobe Chat',
+          enabledHint: 'When off, the Chat entry under Use Token is hidden. The top entry remains visible if Agent is still enabled.',
+          url: 'Lobe Chat URL',
           urlPlaceholder: 'https://chat.example.com',
           urlHint: 'Absolute http(s) URL for the hosted chat app. Leave empty to use the backend lobe.chat_url config.',
-          urlInvalid: 'Chat URL must be an absolute http(s) URL.',
+          urlInvalid: 'Lobe Chat URL must be an absolute http(s) URL.',
+          agentEnabled: 'Enable Agent Page',
+          agentEnabledHint: 'Controls the Agent entry under Use Token. Lobe Chat and AI Manus are separate apps and can be toggled independently.',
+          agentUrl: 'Agent URL',
+          agentUrlPlaceholder: 'https://manus.example.com',
+          agentUrlHint: 'Absolute http(s) URL for AI Manus or another Agent app. Leave empty to use the frontend VITE_MANUS_BASE_URL config.',
+          agentUrlInvalid: 'Agent URL must be an absolute http(s) URL.',
         },
         riskControl: {
           title: 'Risk Control',

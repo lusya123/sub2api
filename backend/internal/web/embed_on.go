@@ -42,6 +42,8 @@ type FrontendServer struct {
 	overrideDir string // local file override directory
 }
 
+const indexHTMLCacheControl = "no-cache, must-revalidate"
+
 // NewFrontendServer creates a new frontend server with settings injection
 func NewFrontendServer(settingsProvider PublicSettingsProvider) (*FrontendServer, error) {
 	distFS, err := fs.Sub(frontendFS, "dist")
@@ -167,7 +169,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 		content := replaceNoncePlaceholder(cached.Content, nonce)
 
 		c.Header("ETag", cached.ETag)
-		c.Header("Cache-Control", "public, max-age=30, s-maxage=300, stale-while-revalidate=60")
+		c.Header("Cache-Control", indexHTMLCacheControl)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 		c.Abort()
 		return
@@ -193,12 +195,14 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	case <-ctx.Done():
 		// The frontend shell should never be blocked by slow public settings
 		// reads. Serve the base app and let client-side API calls hydrate.
+		c.Header("Cache-Control", indexHTMLCacheControl)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
 	}
 	if result.err != nil {
 		// Fallback: serve without injection
+		c.Header("Cache-Control", indexHTMLCacheControl)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
@@ -207,6 +211,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	settingsJSON, err := json.Marshal(result.value)
 	if err != nil {
 		// Fallback: serve without injection
+		c.Header("Cache-Control", indexHTMLCacheControl)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
@@ -222,7 +227,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	if cached != nil {
 		c.Header("ETag", cached.ETag)
 	}
-	c.Header("Cache-Control", "public, max-age=30, s-maxage=300, stale-while-revalidate=60")
+	c.Header("Cache-Control", indexHTMLCacheControl)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
 }

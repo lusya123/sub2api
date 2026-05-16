@@ -114,6 +114,11 @@ export const FeatureFlags = {
     mode: 'opt-out',
     label: 'Chat Page',
   }),
+  agentPage: defineFlag({
+    key: 'agent_page_enabled',
+    mode: 'opt-out',
+    label: 'Agent Page',
+  }),
   riskControl: defineFlag({
     key: 'risk_control_enabled',
     mode: 'opt-in',

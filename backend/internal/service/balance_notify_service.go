@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,11 @@ const (
 	quotaDimTotal  = "total"
 
 	defaultSiteName = "Sub2API"
+)
+
+var (
+	defaultBalanceFixedNotifyThresholds      = []float64{10, 5, 1}
+	defaultBalancePercentageNotifyThresholds = []float64{50, 30, 10}
 )
 
 // quotaDimLabels maps dimension names to display labels.
@@ -62,18 +68,67 @@ func resolveBalanceThreshold(threshold float64, thresholdType string, totalRecha
 	return threshold
 }
 
+func resolveBalanceThresholdCandidates(threshold float64, thresholdType string, totalRecharged float64, includeDefaultTiers bool) []float64 {
+	var raw []float64
+	if threshold > 0 {
+		raw = append(raw, resolveBalanceThreshold(threshold, thresholdType, totalRecharged))
+	}
+	if includeDefaultTiers {
+		for _, fixed := range defaultBalanceFixedNotifyThresholds {
+			raw = append(raw, fixed)
+		}
+		if totalRecharged > 0 {
+			for _, pct := range defaultBalancePercentageNotifyThresholds {
+				raw = append(raw, resolveBalanceThreshold(pct, thresholdTypePercentage, totalRecharged))
+			}
+		}
+	}
+
+	thresholds := make([]float64, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, value := range raw {
+		if value <= 0 {
+			continue
+		}
+		key := strconv.FormatFloat(value, 'f', 8, 64)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		thresholds = append(thresholds, value)
+	}
+	sort.Float64s(thresholds)
+	return thresholds
+}
+
+func selectCrossedBalanceThreshold(oldBalance, newBalance float64, thresholds []float64) (float64, bool) {
+	selected := 0.0
+	found := false
+	for _, threshold := range thresholds {
+		if crossedDownward(oldBalance, newBalance, threshold) {
+			selected = threshold
+			found = true
+			break
+		}
+	}
+	return selected, found
+}
+
 // CheckBalanceAfterDeduction checks if balance crossed below threshold after deduction.
-// Notification is sent only on first crossing: oldBalance >= threshold && newBalance < threshold.
+// Notification is sent only on threshold crossing: oldBalance >= threshold && newBalance < threshold.
+// The default policy uses several descending balance checkpoints, so users get a few useful
+// reminders during a recharge cycle without any timer-driven repeat emails.
 func (s *BalanceNotifyService) CheckBalanceAfterDeduction(ctx context.Context, user *User, oldBalance, cost float64) {
 	if !s.canNotifyBalance(user) {
 		return
 	}
-	effectiveThreshold, rechargeURL, ok := s.resolveUserEffectiveThreshold(ctx, user)
+	thresholds, rechargeURL, ok := s.resolveUserEffectiveThresholds(ctx, user)
 	if !ok {
 		return
 	}
 	newBalance := oldBalance - cost
-	if !crossedDownward(oldBalance, newBalance, effectiveThreshold) {
+	effectiveThreshold, crossed := selectCrossedBalanceThreshold(oldBalance, newBalance, thresholds)
+	if !crossed {
 		return
 	}
 	s.dispatchBalanceLowEmail(ctx, user, newBalance, effectiveThreshold, rechargeURL)
@@ -87,25 +142,27 @@ func (s *BalanceNotifyService) canNotifyBalance(user *User) bool {
 	return user.BalanceNotifyEnabled
 }
 
-// resolveUserEffectiveThreshold reads global + user config, returns the effective threshold.
+// resolveUserEffectiveThresholds reads global + user config, returns effective thresholds.
 // Returns ok=false when notifications should be skipped.
-func (s *BalanceNotifyService) resolveUserEffectiveThreshold(ctx context.Context, user *User) (effectiveThreshold float64, rechargeURL string, ok bool) {
+func (s *BalanceNotifyService) resolveUserEffectiveThresholds(ctx context.Context, user *User) (thresholds []float64, rechargeURL string, ok bool) {
 	globalEnabled, globalThreshold, rechargeURL := s.getBalanceNotifyConfig(ctx)
 	if !globalEnabled {
-		return 0, "", false
+		return nil, "", false
 	}
 	threshold := globalThreshold
+	includeDefaultTiers := true
 	if user.BalanceNotifyThreshold != nil {
 		threshold = *user.BalanceNotifyThreshold
+		includeDefaultTiers = false
 	}
 	if threshold <= 0 {
-		return 0, "", false
+		return nil, "", false
 	}
-	effectiveThreshold = resolveBalanceThreshold(threshold, user.BalanceNotifyThresholdType, user.TotalRecharged)
-	if effectiveThreshold <= 0 {
-		return 0, "", false
+	thresholds = resolveBalanceThresholdCandidates(threshold, user.BalanceNotifyThresholdType, user.TotalRecharged, includeDefaultTiers)
+	if len(thresholds) == 0 {
+		return nil, "", false
 	}
-	return effectiveThreshold, rechargeURL, true
+	return thresholds, rechargeURL, true
 }
 
 // crossedDownward returns true when oldV was at-or-above threshold but newV dropped below it.

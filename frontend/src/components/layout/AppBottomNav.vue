@@ -29,6 +29,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
 import Icon from '@/components/icons/Icon.vue'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -37,8 +38,8 @@ const authStore = useAuthStore()
 const user = computed(() => authStore.user)
 const consolePath = computed(() => (authStore.canAccessAdmin ? '/admin/dashboard' : '/dashboard'))
 
-const primaryTopNavItems = computed(() => [
-  {
+const primaryTopNavItems = computed(() => {
+  const items: Array<{ key: string; path: string; label: string; icon: 'home' | 'grid' | 'chat' }> = [{
     key: 'console',
     path: consolePath.value,
     label: t('nav.console'),
@@ -50,11 +51,24 @@ const primaryTopNavItems = computed(() => [
     label: t('nav.modelMarketplace'),
     icon: 'grid' as const,
   },
-])
+  ]
+
+  if (isFeatureFlagEnabled(FeatureFlags.chatPage) || isFeatureFlagEnabled(FeatureFlags.agentPage)) {
+    items.push({
+      key: 'use-token',
+      path: '/chat',
+      label: t('nav.useToken'),
+      icon: 'chat' as const,
+    })
+  }
+
+  return items
+})
 
 function isPrimaryTopNavActive(key: string): boolean {
   if (key === 'marketplace') return route.path === '/model-marketplace'
-  return route.path !== '/model-marketplace'
+  if (key === 'use-token') return route.path === '/chat' || route.path === '/use-token'
+  return route.path !== '/model-marketplace' && route.path !== '/chat' && route.path !== '/use-token'
 }
 
 // Sliding top indicator — same signature motion as the desktop top bar.
@@ -81,7 +95,7 @@ function updateIndicator() {
 // Watch both route AND user: the nav only renders once user is loaded, so a
 // late auth fetch must still trigger the first measurement.
 watch(
-  [() => route.path, user],
+  [() => route.path, user, () => primaryTopNavItems.value.length],
   () => { nextTick(updateIndicator) },
   { flush: 'post' }
 )

@@ -15,11 +15,16 @@ import (
 )
 
 type GlobalRateLimiter struct {
-	rdb *redis.Client
+	rdb           *redis.Client
+	visitorCookie *VisitorCookieManager
 }
 
-func NewGlobalRateLimiter(rdb *redis.Client) *GlobalRateLimiter {
-	return &GlobalRateLimiter{rdb: rdb}
+func NewGlobalRateLimiter(rdb *redis.Client, visitorCookie ...*VisitorCookieManager) *GlobalRateLimiter {
+	mgr := NewVisitorCookieManager(rdb)
+	if len(visitorCookie) > 0 && visitorCookie[0] != nil {
+		mgr = visitorCookie[0]
+	}
+	return &GlobalRateLimiter{rdb: rdb, visitorCookie: mgr}
 }
 
 func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
@@ -33,6 +38,14 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 			return
 		}
 		if isFrontendDocumentRequest(c) {
+			switch checkVisitorCookie(c, g.visitorCookie) {
+			case visitorCookieAllowed:
+				c.Next()
+				return
+			case visitorCookieLimited:
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (visitor cookie)")
+				return
+			}
 			if !g.allowFrontendDocumentGlobal(c) {
 				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (frontend global)")
 				return

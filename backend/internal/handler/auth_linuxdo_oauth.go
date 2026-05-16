@@ -532,7 +532,7 @@ func (h *AuthHandler) CompleteLinuxDoOAuthRegistration(c *gin.Context) {
 	clearOAuthPendingSessionCookie(c, secureCookie)
 	clearOAuthPendingBrowserCookie(c, secureCookie)
 
-	setSPAProtectTokenCookie(c, tokenPair.ExpiresIn)
+	setSPAProtectTokenCookie(c, tokenPair.ExpiresIn, tokenPair.AccessToken)
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  tokenPair.AccessToken,
 		"refresh_token": tokenPair.RefreshToken,

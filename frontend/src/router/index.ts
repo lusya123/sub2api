@@ -243,13 +243,14 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
   },
   {
     path: '/chat',
-    name: 'ChatLaunch',
+    alias: '/use-token',
+    name: 'UseToken',
     component: () => import('@/views/user/ChatLaunchView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Chat',
-      titleKey: 'chatLaunch.title',
+      title: 'Use Token',
+      titleKey: 'useToken.title',
       descriptionKey: 'chatLaunch.description',
       requiresChatPage: true
     }
@@ -922,7 +923,7 @@ router.beforeEach(async (to, _from, next) => {
     if (!appStore.publicSettingsLoaded) {
       await appStore.fetchPublicSettings()
     }
-    if (!isFeatureFlagEnabled(FeatureFlags.chatPage)) {
+    if (!isFeatureFlagEnabled(FeatureFlags.chatPage) && !isFeatureFlagEnabled(FeatureFlags.agentPage)) {
       next(adminSettingsOrHomePath({ isAdmin: authStore.isAdmin, isOperator: authStore.isOperator }))
       return
     }
