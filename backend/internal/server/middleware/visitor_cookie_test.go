@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"testing"
@@ -84,6 +85,23 @@ func TestVisitorCookieFingerprintBinding(t *testing.T) {
 	require.True(t, mgr.VerifyCookieWithFingerprint(value, "fingerprint-a"))
 	require.False(t, mgr.VerifyCookieWithFingerprint(value, "fingerprint-b"))
 	require.True(t, mgr.VerifyCookieWithFingerprint(value, ""))
+}
+
+func TestVisitorCookieChallengeConsumeOnce(t *testing.T) {
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
+	challenge := strconv.FormatInt(time.Now().UnixNano(), 36) + ".abcdef"
+
+	mgr.StoreChallenge(context.Background(), challenge, time.Minute)
+	consumed, err := mgr.ConsumeChallenge(context.Background(), challenge)
+	require.NoError(t, err)
+	require.True(t, consumed)
+
+	consumed, err = mgr.ConsumeChallenge(context.Background(), challenge)
+	require.NoError(t, err)
+	require.False(t, consumed)
 }
 
 func TestGlobalRateLimiterVisitorCookieBypassesFrontendGlobalAndLimitsReuse(t *testing.T) {

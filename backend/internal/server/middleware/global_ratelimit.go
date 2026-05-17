@@ -188,14 +188,6 @@ func (g *GlobalRateLimiter) allowVisitorCookieGlobal(c *gin.Context) bool {
 	return g.allowTwoSecondBucket(c, "rl:visitor:global:", limit)
 }
 
-func (g *GlobalRateLimiter) allowAPIKeyCandidateGlobal(c *gin.Context) bool {
-	limit := defenseEnvInt("DEFENSE_APIKEY_CANDIDATE_GLOBAL_PER_2S", 5000)
-	if limit <= 0 {
-		return true
-	}
-	return g.allowTwoSecondBucket(c, "rl:apikey:candidate:global:", limit)
-}
-
 func (g *GlobalRateLimiter) allowTwoSecondBucket(c *gin.Context, prefix string, limit int) bool {
 	bucket := strconv.FormatInt(time.Now().UTC().Unix()/2, 10)
 	ctx := c.Request.Context()

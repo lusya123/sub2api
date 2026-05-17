@@ -3,8 +3,6 @@ package middleware
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -535,9 +533,4 @@ func performDefenseRequest(router *gin.Engine, method, path string, body []byte,
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
-}
-
-func defenseTestFingerprint() string {
-	h := sha256.Sum256([]byte("203.0.113.10|Mozilla/5.0 defense-test|en-US"))
-	return hex.EncodeToString(h[:8])
 }

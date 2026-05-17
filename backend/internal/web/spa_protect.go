@@ -263,19 +263,3 @@ func spaProtectRequiresVerifiedUser(path string) bool {
 		trimmed == "/use-token" ||
 		strings.HasPrefix(trimmed, "/use-token/")
 }
-
-func spaProtectClientIP(c *gin.Context) string {
-	if ip := strings.TrimSpace(c.GetHeader("CF-Connecting-IP")); ip != "" {
-		return ip
-	}
-	if ip := strings.TrimSpace(c.GetHeader("X-Real-IP")); ip != "" {
-		return ip
-	}
-	if xff := strings.TrimSpace(c.GetHeader("X-Forwarded-For")); xff != "" {
-		if i := strings.Index(xff, ","); i > 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return xff
-	}
-	return strings.TrimSpace(c.ClientIP())
-}

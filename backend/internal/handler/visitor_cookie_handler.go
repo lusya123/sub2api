@@ -11,21 +11,15 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 )
 
 type VisitorCookieHandler struct {
 	mgr    *middleware.VisitorCookieManager
 	credit *middleware.CookieCreditSystem
-	rdb    *redis.Client
 }
 
-func NewVisitorCookieHandler(mgr *middleware.VisitorCookieManager, credit *middleware.CookieCreditSystem, rdb ...*redis.Client) *VisitorCookieHandler {
-	var client *redis.Client
-	if len(rdb) > 0 {
-		client = rdb[0]
-	}
-	return &VisitorCookieHandler{mgr: mgr, credit: credit, rdb: client}
+func NewVisitorCookieHandler(mgr *middleware.VisitorCookieManager, credit *middleware.CookieCreditSystem) *VisitorCookieHandler {
+	return &VisitorCookieHandler{mgr: mgr, credit: credit}
 }
 
 func (h *VisitorCookieHandler) Challenge(c *gin.Context) {
@@ -34,8 +28,8 @@ func (h *VisitorCookieHandler) Challenge(c *gin.Context) {
 		difficulty = middleware.DefenseEnvInt("DEFENSE_POW_DIFFICULTY_RECOVER", 5)
 	}
 	challenge := strconv.FormatInt(time.Now().UnixNano(), 36) + "." + randomChallengeString(16)
-	if h != nil && h.rdb != nil {
-		_ = h.rdb.Set(c.Request.Context(), visitorChallengeKey(challenge), "1", time.Minute).Err()
+	if h != nil && h.mgr != nil {
+		h.mgr.StoreChallenge(c.Request.Context(), challenge, time.Minute)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -63,16 +57,14 @@ func (h *VisitorCookieHandler) IssueCookie(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid challenge"})
 		return
 	}
-	if h.rdb != nil {
-		consumed, err := h.rdb.Del(c.Request.Context(), visitorChallengeKey(req.Challenge)).Result()
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "challenge unavailable"})
-			return
-		}
-		if consumed == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired challenge"})
-			return
-		}
+	consumed, err := h.mgr.ConsumeChallenge(c.Request.Context(), req.Challenge)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "challenge unavailable"})
+		return
+	}
+	if !consumed {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired challenge"})
+		return
 	}
 
 	difficulty := middleware.DefenseEnvInt("DEFENSE_POW_DIFFICULTY", 4)
@@ -116,9 +108,4 @@ func randomChallengeString(n int) string {
 		return strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
 	return hex.EncodeToString(b)[:n]
-}
-
-func visitorChallengeKey(challenge string) string {
-	sum := sha256.Sum256([]byte(challenge))
-	return "visitor:challenge:" + hex.EncodeToString(sum[:8])
 }

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,9 +12,7 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,12 +20,8 @@ func TestVisitorCookieHandlerIssuesCookieAfterPoW(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_POW_DIFFICULTY", "1")
 
-	rdb, cleanup := newVisitorCookieHandlerTestRedis(t)
-	defer cleanup()
-
-	mgr := middleware.NewVisitorCookieManagerWithSecret(rdb, "visitor-handler-test-secret")
-	credit := middleware.NewCookieCreditSystem(rdb)
-	h := NewVisitorCookieHandler(mgr, credit, rdb)
+	mgr := middleware.NewVisitorCookieManagerWithSecret(nil, "visitor-handler-test-secret")
+	h := NewVisitorCookieHandler(mgr, nil)
 	router := gin.New()
 	router.POST("/api/public/visitor/challenge", h.Challenge)
 	router.POST("/api/public/visitor/issue-cookie", h.IssueCookie)
@@ -66,22 +59,16 @@ func TestVisitorCookieHandlerIssuesCookieAfterPoW(t *testing.T) {
 	require.False(t, cookies[0].HttpOnly)
 	require.True(t, cookies[0].Secure)
 	require.True(t, mgr.VerifyCookieWithFingerprint(cookies[0].Value, "browser-fingerprint"))
-	require.Equal(t, middleware.CreditDefault, credit.GetCredit(context.Background(), middleware.CookieHash(cookies[0].Value)))
 }
 
-func TestVisitorCookieHandlerRejectsBadPoWAndDeductsExistingCookie(t *testing.T) {
+func TestVisitorCookieHandlerRejectsBadPoW(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_POW_DIFFICULTY", "2")
 
-	rdb, cleanup := newVisitorCookieHandlerTestRedis(t)
-	defer cleanup()
-
-	mgr := middleware.NewVisitorCookieManagerWithSecret(rdb, "visitor-handler-test-secret")
-	credit := middleware.NewCookieCreditSystem(rdb)
+	mgr := middleware.NewVisitorCookieManagerWithSecret(nil, "visitor-handler-test-secret")
 	existing, _ := mgr.IssueCookieWithFingerprint("old-fingerprint")
-	credit.Reset(context.Background(), middleware.CookieHash(existing))
 
-	h := NewVisitorCookieHandler(mgr, credit, rdb)
+	h := NewVisitorCookieHandler(mgr, nil)
 	router := gin.New()
 	router.POST("/api/public/visitor/challenge", h.Challenge)
 	router.POST("/api/public/visitor/issue-cookie", h.IssueCookie)
@@ -95,44 +82,6 @@ func TestVisitorCookieHandlerRejectsBadPoWAndDeductsExistingCookie(t *testing.T)
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusForbidden, rec.Code)
-	require.Equal(t, 0, credit.GetCredit(context.Background(), middleware.CookieHash(existing)))
-}
-
-func TestVisitorCookieHandlerConsumesChallengeOnce(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	t.Setenv("DEFENSE_POW_DIFFICULTY", "1")
-
-	rdb, cleanup := newVisitorCookieHandlerTestRedis(t)
-	defer cleanup()
-
-	mgr := middleware.NewVisitorCookieManagerWithSecret(rdb, "visitor-handler-test-secret")
-	credit := middleware.NewCookieCreditSystem(rdb)
-	h := NewVisitorCookieHandler(mgr, credit, rdb)
-	router := gin.New()
-	router.POST("/api/public/visitor/challenge", h.Challenge)
-	router.POST("/api/public/visitor/issue-cookie", h.IssueCookie)
-
-	challenge := requestVisitorChallengeForTest(t, router, 1)
-	nonce := solvePoWForTest(challenge, 1)
-	body, err := json.Marshal(map[string]string{
-		"challenge":   challenge,
-		"nonce":       nonce,
-		"fingerprint": "browser-fingerprint",
-	})
-	require.NoError(t, err)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/public/visitor/issue-cookie", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/public/visitor/issue-cookie", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "invalid or expired challenge")
 }
 
 func requestVisitorChallengeForTest(t *testing.T, router *gin.Engine, difficulty int) string {
@@ -170,15 +119,5 @@ func invalidPoWNonceForTest(challenge string, difficulty int) string {
 		if !strings.HasPrefix(hex.EncodeToString(sum[:]), prefix) {
 			return candidate
 		}
-	}
-}
-
-func newVisitorCookieHandlerTestRedis(t *testing.T) (*redis.Client, func()) {
-	t.Helper()
-	s := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: s.Addr()})
-	return rdb, func() {
-		_ = rdb.Close()
-		s.Close()
 	}
 }

@@ -166,6 +166,35 @@ func (m *VisitorCookieManager) AllowCookieRequest(ctx context.Context, cookieVal
 	return cnt <= int64(limit)
 }
 
+func (m *VisitorCookieManager) StoreChallenge(ctx context.Context, challenge string, ttl time.Duration) {
+	if m == nil || m.rdb == nil || strings.TrimSpace(challenge) == "" {
+		return
+	}
+	if ttl <= 0 {
+		ttl = time.Minute
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_ = m.rdb.Set(ctx, visitorChallengeKey(challenge), "1", ttl).Err()
+}
+
+func (m *VisitorCookieManager) ConsumeChallenge(ctx context.Context, challenge string) (bool, error) {
+	if m == nil || m.rdb == nil || strings.TrimSpace(challenge) == "" {
+		return true, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	consumed, err := m.rdb.Del(ctx, visitorChallengeKey(challenge)).Result()
+	return consumed > 0, err
+}
+
+func visitorChallengeKey(challenge string) string {
+	sum := sha256.Sum256([]byte(challenge))
+	return "visitor:challenge:" + hex.EncodeToString(sum[:8])
+}
+
 func VisitorCookieIssuerMiddleware(mgr *VisitorCookieManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if os.Getenv("DEFENSE_VISITOR_COOKIE_ENABLED") == "false" || mgr == nil {

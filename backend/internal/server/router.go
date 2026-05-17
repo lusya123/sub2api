@@ -126,7 +126,7 @@ func SetupRouter(
 		handlers.Auth.ConfigureLoginDefense(security.NewLoginDefense(cfg.LoginProtection, handlers.Auth.EntClient(), redisClient))
 	}
 
-	visitorCookieHandler := handler.NewVisitorCookieHandler(visitorCookieMgr, creditSystem, redisClient)
+	visitorCookieHandler := handler.NewVisitorCookieHandler(visitorCookieMgr, creditSystem)
 	visitor := r.Group("/api/public/visitor")
 	{
 		visitor.POST("/challenge", visitorCookieHandler.Challenge)
