@@ -63,11 +63,35 @@ func SetupRouter(
 		return nil
 	}))
 	visitorCookieMgr := middleware2.NewVisitorCookieManagerWithSecret(redisClient, cfg.JWT.Secret)
-	r.Use(middleware2.VisitorCookieIssuerMiddleware(visitorCookieMgr))
-	r.Use(middleware2.TrustTierDetector())
-	r.Use(middleware2.NewBanCheck(redisClient))
-	r.Use(middleware2.NewGlobalRateLimiter(redisClient, visitorCookieMgr).Middleware())
+	creditSystem := middleware2.NewCookieCreditSystem(redisClient)
+	creditSystem.StartAutoRecover()
 	r.Use(middleware2.APIPathGuard())
+	r.Use(middleware2.TrustTierDetector())
+	r.Use(middleware2.NewAttackDetector(redisClient, creditSystem).Middleware())
+	r.Use(func(c *gin.Context) {
+		if middleware2.IsGatewayAPIPath(c.Request.URL.Path) ||
+			middleware2.GetTrustTier(c) == middleware2.TierAPIKey ||
+			middleware2.GetTrustTier(c) == middleware2.TierUser {
+			c.Next()
+			return
+		}
+		cookieValue, _ := c.Cookie("_xdt_v")
+		if cookieValue != "" && creditSystem.IsBlocked(c.Request.Context(), middleware2.CookieHash(cookieValue)) {
+			c.AbortWithStatusJSON(403, gin.H{"error": "cookie reputation too low"})
+			return
+		}
+		c.Next()
+	})
+	r.Use(middleware2.VisitorCookieIssuerMiddleware(visitorCookieMgr))
+	r.Use(middleware2.NewGlobalRateLimiter(redisClient, visitorCookieMgr).Middleware())
+	pathLimiter := middleware2.NewPathLevelRateLimiter(redisClient)
+	r.Use(func(c *gin.Context) {
+		if !pathLimiter.Allow(c.Request.Context(), c.Request.URL.Path) {
+			c.AbortWithStatusJSON(503, gin.H{"error": "path overloaded, try later"})
+			return
+		}
+		c.Next()
+	})
 	r.Use(middleware2.NewBodyFingerprint(redisClient).Middleware())
 	r.Use(web.SPAProtect(redisClient, cfg.JWT.Secret))
 	handler.PreloadLogoCache(settingService)
@@ -100,6 +124,13 @@ func SetupRouter(
 
 	if handlers != nil && handlers.Auth != nil {
 		handlers.Auth.ConfigureLoginDefense(security.NewLoginDefense(cfg.LoginProtection, handlers.Auth.EntClient(), redisClient))
+	}
+
+	visitorCookieHandler := handler.NewVisitorCookieHandler(visitorCookieMgr, creditSystem, redisClient)
+	visitor := r.Group("/api/public/visitor")
+	{
+		visitor.POST("/challenge", visitorCookieHandler.Challenge)
+		visitor.POST("/issue-cookie", visitorCookieHandler.IssueCookie)
 	}
 
 	// 注册路由

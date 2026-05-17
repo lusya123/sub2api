@@ -168,7 +168,7 @@ func TestGlobalRateLimiterTiers(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, rec.Code, "fake API key on public path must not bypass anonymous limit")
 }
 
-func TestGlobalRateLimiterAPIKeyCandidateGlobalLimit(t *testing.T) {
+func TestGlobalRateLimiterBypassesGatewayAPIKeyTraffic(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
 	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
@@ -184,18 +184,12 @@ func TestGlobalRateLimiterAPIKeyCandidateGlobalLimit(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		rec := performDefenseRequest(router, http.MethodGet, "/v1/messages", nil, func(req *http.Request) {
 			req.Header.Set("x-api-key", "sk-legit-valid-candidate-0000")
 		})
-		require.Equal(t, http.StatusOK, rec.Code, "API key candidate request %d should be under global candidate limit", i+1)
+		require.Equal(t, http.StatusOK, rec.Code, "gateway API key request %d must bypass defense limits", i+1)
 	}
-
-	rec := performDefenseRequest(router, http.MethodGet, "/v1/messages", nil, func(req *http.Request) {
-		req.Header.Set("x-api-key", "sk-legit-valid-candidate-0000")
-	})
-	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	require.Contains(t, rec.Body.String(), "rate limited (api key candidate global)")
 }
 
 func TestGlobalRateLimiterBypassesHealthAndSetupStatus(t *testing.T) {
@@ -222,6 +216,91 @@ func TestGlobalRateLimiterBypassesHealthAndSetupStatus(t *testing.T) {
 			require.Equal(t, http.StatusOK, rec.Code, "%s request %d should bypass global defense limiter", path, i+1)
 		}
 	}
+}
+
+func TestGlobalRateLimiterBypassesVisitorCookieEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.POST("/api/public/visitor/challenge", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	router.POST("/api/public/visitor/issue-cookie", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for _, path := range []string{"/api/public/visitor/challenge", "/api/public/visitor/issue-cookie"} {
+		for i := 0; i < 40; i++ {
+			rec := performDefenseRequest(router, http.MethodPost, path, nil, nil)
+			require.Equal(t, http.StatusOK, rec.Code, "%s request %d should bypass anonymous global limiter", path, i+1)
+		}
+	}
+}
+
+func TestAttackDetectorBypassesGatewayAPIPaths(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_ATTACK_DETECTOR_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	credit := NewCookieCreditSystem(rdb)
+	router := gin.New()
+	router.Use(NewAttackDetector(rdb, credit).Middleware())
+	router.POST("/v1/messages", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	body := []byte(`{"email":"123123123123@qq.com"}`)
+	rec := performDefenseRequest(router, http.MethodPost, "/v1/messages", body, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestAttackDetectorDeductsCookieCreditForAttackPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_ATTACK_DETECTOR_ENABLED", "true")
+	t.Setenv("DEFENSE_CREDIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
+	cookieValue, _ := mgr.IssueCookieWithFingerprint("fp")
+	credit := NewCookieCreditSystem(rdb)
+	router := gin.New()
+	router.Use(NewAttackDetector(rdb, credit).Middleware())
+	router.POST("/api/v1/auth/login", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	body := []byte(`{"email":"123123123123@qq.com"}`)
+	rec := performDefenseRequest(router, http.MethodPost, "/api/v1/auth/login", body, func(req *http.Request) {
+		req.AddCookie(&http.Cookie{Name: visitorCookieName, Value: cookieValue})
+	})
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, 0, credit.GetCredit(context.Background(), CookieHash(cookieValue)))
+}
+
+func TestPathLevelRateLimiterLimitsConfiguredPathsAndBypassesGateway(t *testing.T) {
+	t.Setenv("DEFENSE_PATH_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	limiter := NewPathLevelRateLimiter(rdb)
+	limiter.limits["/api/v1/auth/login"] = pathLimit{limit: 1, window: time.Minute}
+
+	require.True(t, limiter.Allow(context.Background(), "/api/v1/auth/login"))
+	require.False(t, limiter.Allow(context.Background(), "/api/v1/auth/login"))
+	require.True(t, limiter.Allow(context.Background(), "/v1/messages"))
+	require.True(t, limiter.Allow(context.Background(), "/v1/messages"))
 }
 
 func TestGlobalRateLimiterBypassesPublicLogoAsset(t *testing.T) {
@@ -400,15 +479,13 @@ func TestBodyFingerprintBlocksAnonymousReplayAndSkipsAPIPaths(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rec.Code, "fake API key on login path must not bypass body fingerprint")
 }
 
-func TestBanCheckSkipsAPIKeyTier(t *testing.T) {
+func TestBanCheckIsDisabledForCDNFriendlyDefense(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
 	t.Setenv("DEFENSE_DYNAMIC_BAN_ENABLED", "true")
 
 	rdb, cleanup := newDefenseTestRedis(t)
 	defer cleanup()
-	err := rdb.Set(context.Background(), "ban:"+defenseTestFingerprint(), "test", time.Minute).Err()
-	require.NoError(t, err)
 
 	router := gin.New()
 	router.Use(TrustTierDetector())
@@ -421,12 +498,12 @@ func TestBanCheckSkipsAPIKeyTier(t *testing.T) {
 	})
 
 	rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, nil)
-	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	rec = performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, func(req *http.Request) {
 		req.Header.Set("x-api-key", "sk-fake")
 	})
-	require.Equal(t, http.StatusForbidden, rec.Code, "fake API key on public path must still be banned")
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	rec = performDefenseRequest(router, http.MethodGet, "/v1/messages", nil, func(req *http.Request) {
 		req.Header.Set("x-api-key", "sk-legit-valid-candidate-0000")

@@ -106,23 +106,5 @@ func hasUserCredential(c *gin.Context) bool {
 }
 
 func isGatewayAPIPath(path string) bool {
-	switch {
-	case path == "/v1" || strings.HasPrefix(path, "/v1/"):
-		return true
-	case path == "/v1beta" || strings.HasPrefix(path, "/v1beta/"):
-		return true
-	case path == "/responses" || strings.HasPrefix(path, "/responses/"):
-		return true
-	case path == "/backend-api/codex" || strings.HasPrefix(path, "/backend-api/codex/"):
-		return true
-	case path == "/chat/completions", path == "/images/generations", path == "/images/edits":
-		return true
-	case path == "/antigravity/models":
-		return true
-	case path == "/antigravity/v1" || strings.HasPrefix(path, "/antigravity/v1/"):
-		return true
-	case path == "/antigravity/v1beta" || strings.HasPrefix(path, "/antigravity/v1beta/"):
-		return true
-	}
-	return false
+	return IsGatewayAPIPath(path)
 }

@@ -204,25 +204,19 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	case <-ctx.Done():
 		// The frontend shell should never be blocked by slow public settings
 		// reads. Serve the base app and let client-side API calls hydrate.
-		c.Header("Cache-Control", indexHTMLCacheControl)
-		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
-		c.Abort()
+		s.serveBaseHTMLWithVisitorBootstrap(c, nonce)
 		return
 	}
 	if result.err != nil {
-		// Fallback: serve without injection
-		c.Header("Cache-Control", indexHTMLCacheControl)
-		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
-		c.Abort()
+		// Fallback without public settings, but keep the visitor-cookie bootstrap.
+		s.serveBaseHTMLWithVisitorBootstrap(c, nonce)
 		return
 	}
 
 	settingsJSON, err := json.Marshal(result.value)
 	if err != nil {
-		// Fallback: serve without injection
-		c.Header("Cache-Control", indexHTMLCacheControl)
-		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
-		c.Abort()
+		// Fallback without public settings, but keep the visitor-cookie bootstrap.
+		s.serveBaseHTMLWithVisitorBootstrap(c, nonce)
 		return
 	}
 
@@ -241,10 +235,18 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	c.Abort()
 }
 
+func (s *FrontendServer) serveBaseHTMLWithVisitorBootstrap(c *gin.Context, nonce string) {
+	content := injectVisitorCookieBootstrap(s.baseHTML, NonceHTMLPlaceholder)
+	content = replaceNoncePlaceholder(content, nonce)
+	c.Header("Cache-Control", indexHTMLCacheControl)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	c.Abort()
+}
+
 func (s *FrontendServer) injectSettings(settingsJSON []byte) []byte {
 	// Create the script tag to inject with nonce placeholder
 	// The placeholder will be replaced with actual nonce at request time
-	script := []byte(`<script nonce="` + NonceHTMLPlaceholder + `">window.__APP_CONFIG__=` + string(settingsJSON) + `;</script>`)
+	script := []byte(`<script nonce="` + NonceHTMLPlaceholder + `">window.__APP_CONFIG__=` + string(settingsJSON) + `;</script>` + visitorCookieBootstrapScript(NonceHTMLPlaceholder))
 
 	// Inject before </head>
 	headClose := []byte("</head>")
@@ -475,8 +477,101 @@ func serveIndexHTML(c *gin.Context, fsys fs.FS) {
 		return
 	}
 
+	nonce := middleware.GetNonceFromContext(c)
+	content = injectVisitorCookieBootstrap(content, nonce)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
+}
+
+func injectVisitorCookieBootstrap(html []byte, nonce string) []byte {
+	headClose := []byte("</head>")
+	script := []byte(visitorCookieBootstrapScript(nonce))
+	return bytes.Replace(html, headClose, append(script, headClose...), 1)
+}
+
+func visitorCookieBootstrapScript(nonce string) string {
+	return `<script nonce="` + nonce + `">
+(function(){
+  const cookieName = '_xdt_v=';
+  function hasVisitorCookie(){ return document.cookie.indexOf(cookieName) !== -1; }
+  async function sha256Hex(value){
+    const encoded = new TextEncoder().encode(value);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(hashBuffer)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }
+  async function canvasFingerprint(){
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.textBaseline = 'top';
+      ctx.font = '14px Arial';
+      ctx.fillText('fingerprint', 2, 2);
+      return canvas.toDataURL().slice(-50);
+    } catch(e) { return 'no-canvas'; }
+  }
+  function webglFingerprint(){
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl');
+      if (!gl) return 'no-webgl';
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (!ext) return 'webgl';
+      return String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || 'webgl').slice(0, 30);
+    } catch(e) { return 'no-webgl'; }
+  }
+  async function collectFingerprint(){
+    const data = {
+      ua: navigator.userAgent,
+      lang: navigator.language,
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      screen: screen.width + 'x' + screen.height,
+      color: screen.colorDepth,
+      hw: navigator.hardwareConcurrency || 0,
+      canvas: await canvasFingerprint(),
+      webgl: webglFingerprint()
+    };
+    return sha256Hex(JSON.stringify(data));
+  }
+  async function issueVisitorCookie(recover){
+    if (!window.crypto || !window.crypto.subtle) return;
+    const fingerprint = await collectFingerprint();
+    const challengeResp = await fetch('/api/public/visitor/challenge' + (recover ? '?recover=1' : ''), {method:'POST', credentials:'same-origin'});
+    if (!challengeResp.ok) return;
+    const challengeData = await challengeResp.json();
+    const prefix = '0'.repeat(challengeData.difficulty || 4);
+    let nonce = 0;
+    for (;;) {
+      const hash = await sha256Hex(challengeData.challenge + nonce);
+      if (hash.startsWith(prefix)) break;
+      nonce++;
+    }
+    await fetch('/api/public/visitor/issue-cookie' + (recover ? '?recover=1' : ''), {
+      method:'POST',
+      credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({challenge:challengeData.challenge, nonce:String(nonce), fingerprint:fingerprint})
+    });
+  }
+  if (!hasVisitorCookie()) issueVisitorCookie(false).catch(function(e){ console.error('Visitor cookie issue failed', e); });
+  const originalFetch = window.fetch;
+  if (originalFetch && !window.__xdtVisitorFetchWrapped) {
+    window.__xdtVisitorFetchWrapped = true;
+    window.fetch = async function(){
+      const response = await originalFetch.apply(this, arguments);
+      if (response && response.status === 403) {
+        response.clone().json().then(async function(data){
+          if (data && data.error === 'cookie reputation too low' && window.confirm('您的访问被暂时限制，点击确定完成验证恢复访问。')) {
+            document.cookie = '_xdt_v=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            await issueVisitorCookie(true);
+            window.location.reload();
+          }
+        }).catch(function(){});
+      }
+      return response;
+    };
+  }
+})();
+</script>`
 }
 
 func HasEmbeddedFrontend() bool {

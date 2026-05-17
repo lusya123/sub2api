@@ -367,6 +367,10 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		// Should still return 200 with base HTML
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+		body := w.Body.String()
+		assert.Contains(t, body, "/api/public/visitor/challenge")
+		assert.Contains(t, body, `nonce="nonce123"`)
+		assert.NotContains(t, body, NonceHTMLPlaceholder)
 	})
 }
 

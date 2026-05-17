@@ -63,7 +63,6 @@ func (b *BodyFingerprint) Middleware() gin.HandlerFunc {
 			_ = b.rdb.Expire(c.Request.Context(), key, time.Minute).Err()
 		}
 		if n > 50 {
-			TriggerDynamicBan(b.rdb, ClientFingerprint(c), "body_replay")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "abnormal pattern"})
 			return
 		}

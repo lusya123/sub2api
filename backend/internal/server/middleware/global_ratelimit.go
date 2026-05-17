@@ -19,12 +19,64 @@ type GlobalRateLimiter struct {
 	visitorCookie *VisitorCookieManager
 }
 
+type PathLevelRateLimiter struct {
+	rdb    *redis.Client
+	limits map[string]pathLimit
+}
+
+type pathLimit struct {
+	limit  int
+	window time.Duration
+}
+
+var defaultPathLimits = map[string]pathLimit{
+	"/api/v1/auth/login":            {limit: 200, window: time.Minute},
+	"/api/v1/auth/register":         {limit: 100, window: time.Minute},
+	"/api/v1/auth/send-verify-code": {limit: 100, window: time.Minute},
+	"/api/public/visitor/challenge": {limit: 5000, window: time.Minute},
+	"/api/public/visitor/issue-cookie": {
+		limit:  5000,
+		window: time.Minute,
+	},
+	"/api/v1/settings/logo":   {limit: 10000, window: time.Minute},
+	"/api/v1/settings/public": {limit: 1000, window: time.Minute},
+	"/":                       {limit: 2000, window: time.Minute},
+}
+
 func NewGlobalRateLimiter(rdb *redis.Client, visitorCookie ...*VisitorCookieManager) *GlobalRateLimiter {
 	mgr := NewVisitorCookieManager(rdb)
 	if len(visitorCookie) > 0 && visitorCookie[0] != nil {
 		mgr = visitorCookie[0]
 	}
 	return &GlobalRateLimiter{rdb: rdb, visitorCookie: mgr}
+}
+
+func NewPathLevelRateLimiter(rdb *redis.Client) *PathLevelRateLimiter {
+	return &PathLevelRateLimiter{rdb: rdb, limits: defaultPathLimits}
+}
+
+func (p *PathLevelRateLimiter) Allow(ctx context.Context, path string) bool {
+	if p == nil || p.rdb == nil || os.Getenv("DEFENSE_PATH_RATELIMIT_ENABLED") == "false" || IsGatewayAPIPath(path) {
+		return true
+	}
+	limit, ok := p.limits[path]
+	if !ok || limit.limit <= 0 || limit.window <= 0 {
+		return true
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	bucket := strconv.FormatInt(time.Now().Unix()/int64(limit.window.Seconds()), 10)
+	sum := sha256.Sum256([]byte(path))
+	key := "path:" + hex.EncodeToString(sum[:8]) + ":" + bucket
+	cnt, err := p.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return true
+	}
+	if cnt == 1 {
+		_ = p.rdb.Expire(ctx, key, limit.window).Err()
+	}
+	return cnt <= int64(limit.limit)
 }
 
 func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
@@ -64,10 +116,8 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 
 		switch GetTrustTier(c) {
 		case TierAPIKey:
-			if !g.allowAPIKeyCandidateGlobal(c) {
-				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (api key candidate global)")
-				return
-			}
+			// API forwarding traffic is the protected hot path: never challenge or
+			// throttle authenticated API users in this defense layer.
 			c.Next()
 			return
 		case TierUser:
@@ -94,6 +144,12 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 }
 
 func globalRateLimitBypassAll(path string) bool {
+	if IsGatewayAPIPath(path) {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/public/visitor/") {
+		return true
+	}
 	switch strings.TrimSpace(path) {
 	case "/health", "/setup/status":
 		return true
@@ -158,12 +214,38 @@ func (g *GlobalRateLimiter) allowTwoSecondBucket(c *gin.Context, prefix string, 
 }
 
 func defenseEnvInt(key string, defaultVal int) int {
+	return DefenseEnvInt(key, defaultVal)
+}
+
+func DefenseEnvInt(key string, defaultVal int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
 		}
 	}
 	return defaultVal
+}
+
+func IsGatewayAPIPath(path string) bool {
+	switch {
+	case path == "/v1" || strings.HasPrefix(path, "/v1/"):
+		return true
+	case path == "/v1beta" || strings.HasPrefix(path, "/v1beta/"):
+		return true
+	case path == "/responses" || strings.HasPrefix(path, "/responses/"):
+		return true
+	case path == "/backend-api/codex" || strings.HasPrefix(path, "/backend-api/codex/"):
+		return true
+	case path == "/chat/completions", path == "/images/generations", path == "/images/edits":
+		return true
+	case path == "/antigravity/models":
+		return true
+	case path == "/antigravity/v1" || strings.HasPrefix(path, "/antigravity/v1/"):
+		return true
+	case path == "/antigravity/v1beta" || strings.HasPrefix(path, "/antigravity/v1beta/"):
+		return true
+	}
+	return false
 }
 
 func isFrontendDocumentRequest(c *gin.Context) bool {

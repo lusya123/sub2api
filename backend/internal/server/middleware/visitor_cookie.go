@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -58,10 +57,15 @@ func NewVisitorCookieManagerWithSecret(rdb *redis.Client, fallbackSecret string)
 }
 
 func (m *VisitorCookieManager) IssueCookie() (value string, maxAge int) {
+	return m.IssueCookieWithFingerprint("")
+}
+
+func (m *VisitorCookieManager) IssueCookieWithFingerprint(fingerprint string) (value string, maxAge int) {
 	ttl := defenseEnvInt("DEFENSE_VISITOR_COOKIE_TTL_SECONDS", visitorCookieDefaultTTL)
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	fpHash := m.hashFingerprint(fingerprint)
 	nonce := randomVisitorCookieNonce()
-	payload := ts + "." + nonce
+	payload := ts + "." + fpHash + "." + nonce
 	return payload + "." + m.sign(payload), ttl
 }
 
@@ -70,7 +74,7 @@ func (m *VisitorCookieManager) VerifyCookie(cookieValue string) bool {
 		return false
 	}
 	parts := strings.Split(cookieValue, ".")
-	if len(parts) != 2 && len(parts) != 3 {
+	if len(parts) != 2 && len(parts) != 3 && len(parts) != 4 {
 		return false
 	}
 	if parts[0] == "" || parts[len(parts)-1] == "" {
@@ -94,9 +98,34 @@ func (m *VisitorCookieManager) VerifyCookie(cookieValue string) bool {
 	if len(parts) == 3 {
 		payload = parts[0] + "." + parts[1]
 		signature = parts[2]
+	} else if len(parts) == 4 {
+		payload = parts[0] + "." + parts[1] + "." + parts[2]
+		signature = parts[3]
 	}
 	expected := m.sign(payload)
 	return hmac.Equal([]byte(signature), []byte(expected))
+}
+
+func (m *VisitorCookieManager) VerifyCookieWithFingerprint(cookieValue, currentFingerprint string) bool {
+	if !m.VerifyCookie(cookieValue) {
+		return false
+	}
+	if os.Getenv("DEFENSE_VISITOR_COOKIE_BIND_FINGERPRINT") == "false" {
+		return true
+	}
+	parts := strings.Split(cookieValue, ".")
+	if len(parts) != 4 {
+		return currentFingerprint == ""
+	}
+	if strings.TrimSpace(currentFingerprint) == "" {
+		return true
+	}
+	return hmac.Equal([]byte(parts[1]), []byte(m.hashFingerprint(currentFingerprint)))
+}
+
+func (m *VisitorCookieManager) hashFingerprint(fingerprint string) string {
+	h := sha256.Sum256([]byte(strings.TrimSpace(fingerprint)))
+	return hex.EncodeToString(h[:8])
 }
 
 func randomVisitorCookieNonce() string {
@@ -147,21 +176,8 @@ func VisitorCookieIssuerMiddleware(mgr *VisitorCookieManager) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if existing, err := c.Cookie(visitorCookieName); err == nil && mgr.VerifyCookie(existing) {
-			c.Next()
-			return
-		}
-
-		value, ttl := mgr.IssueCookie()
-		http.SetCookie(c.Writer, &http.Cookie{
-			Name:     visitorCookieName,
-			Value:    value,
-			Path:     "/",
-			MaxAge:   ttl,
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteLaxMode,
-		})
+		// Cookie issuance is handled by the PoW visitor endpoints. This middleware
+		// only keeps the existing first-request ordering for verification.
 		c.Next()
 	}
 }

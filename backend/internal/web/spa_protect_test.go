@@ -35,15 +35,14 @@ func TestSPAProtectLimitsAnonymousSPARoutes(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "rate limit exceeded")
 
 	rec = performSPAProtectRequest(router, "/dashboard", nil)
-	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	require.Contains(t, rec.Body.String(), "blocked")
+	require.Equal(t, http.StatusOK, rec.Code)
 
-	exists, err := rdb.Exists(context.Background(), "spa:ban:203.0.113.10").Result()
+	keys, err := rdb.Keys(context.Background(), "spa:ban:*").Result()
 	require.NoError(t, err)
-	require.Equal(t, int64(1), exists)
+	require.Empty(t, keys)
 }
 
-func TestSPAProtectClearsRateCounterWhenBanStarts(t *testing.T) {
+func TestSPAProtectPathRateCounterExpires(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("SPA_PROTECT_ENABLED", "true")
 	t.Setenv("SPA_PROTECT_MAX_PER_MINUTE", "1")
@@ -60,11 +59,7 @@ func TestSPAProtectClearsRateCounterWhenBanStarts(t *testing.T) {
 	require.Equal(t, http.StatusOK, performSPAProtectRequest(router, "/model-marketplace", nil).Code)
 	require.Equal(t, http.StatusTooManyRequests, performSPAProtectRequest(router, "/model-marketplace", nil).Code)
 
-	exists, err := rdb.Exists(context.Background(), "spa:rate:203.0.113.10").Result()
-	require.NoError(t, err)
-	require.Equal(t, int64(0), exists)
-
-	s.FastForward(3 * time.Second)
+	s.FastForward(61 * time.Second)
 	require.Equal(t, http.StatusOK, performSPAProtectRequest(router, "/model-marketplace", nil).Code)
 }
 
@@ -215,7 +210,7 @@ func TestSPAProtectRequiresVerifiedUserForSensitiveRoutes(t *testing.T) {
 	}
 }
 
-func TestSPAProtectBansRepeatedSensitiveAnonymousRequests(t *testing.T) {
+func TestSPAProtectLimitsRepeatedSensitiveAnonymousRequestsByPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("SPA_PROTECT_ENABLED", "true")
 	t.Setenv("SPA_PROTECT_MAX_PER_MINUTE", "1")
@@ -234,8 +229,7 @@ func TestSPAProtectBansRepeatedSensitiveAnonymousRequests(t *testing.T) {
 	require.Contains(t, rec.Body.String(), "rate limit exceeded")
 
 	rec = performSPAProtectRequest(router, "/model-marketplace", nil)
-	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	require.Contains(t, rec.Body.String(), "blocked")
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestSPAProtectRequiresVerifiedUserWithoutRedis(t *testing.T) {

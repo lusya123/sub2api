@@ -2,14 +2,16 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
@@ -24,8 +26,8 @@ import (
 //   - Requests with an sk-* API key are allowed through so gateway API users are
 //     never affected by frontend protection.
 //   - API routes and static assets are allowed through to their own handlers.
-//   - Anonymous SPA routes are rate-limited per client IP and temporarily banned
-//     after exceeding the configured threshold.
+//   - Anonymous SPA routes are rate-limited by signed visitor cookie when
+//     available, otherwise by path-level buckets. No IP address is banned.
 //
 // Sensitive authenticated SPA routes, such as /chat, require a signed user
 // JWT before the frontend document is served.
@@ -55,7 +57,7 @@ func SPAProtect(rdb *redis.Client, jwtSecret string) gin.HandlerFunc {
 				c.Next()
 				return
 			}
-			if blocked := spaProtectRateLimit(c, rdb, path, maxPerMinute, banSeconds, banTTL, redisTimeout); blocked {
+			if blocked := spaProtectRateLimit(c, rdb, path, jwtSecret, maxPerMinute, banSeconds, banTTL, redisTimeout); blocked {
 				return
 			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -70,7 +72,7 @@ func SPAProtect(rdb *redis.Client, jwtSecret string) gin.HandlerFunc {
 			return
 		}
 
-		if blocked := spaProtectRateLimit(c, rdb, path, maxPerMinute, banSeconds, banTTL, redisTimeout); blocked {
+		if blocked := spaProtectRateLimit(c, rdb, path, jwtSecret, maxPerMinute, banSeconds, banTTL, redisTimeout); blocked {
 			return
 		}
 
@@ -82,6 +84,7 @@ func spaProtectRateLimit(
 	c *gin.Context,
 	rdb *redis.Client,
 	path string,
+	jwtSecret string,
 	maxPerMinute int,
 	banSeconds int,
 	banTTL time.Duration,
@@ -90,30 +93,18 @@ func spaProtectRateLimit(
 	if rdb == nil {
 		return false
 	}
-	ip := spaProtectClientIP(c)
-	if ip == "" {
-		return false
-	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), redisTimeout)
 	defer cancel()
 
-	banKey := "spa:ban:" + ip
-	rateKey := "spa:rate:" + ip
-	result, err := spaProtectRateScript.Run(ctx, rdb, []string{banKey, rateKey}, maxPerMinute, banSeconds).Int64()
+	rateKey := spaProtectRateKey(c, rdb, path, jwtSecret)
+	result, err := spaProtectRateScript.Run(ctx, rdb, []string{rateKey}, maxPerMinute).Int64()
 	if err != nil {
 		return false
 	}
 
-	switch result {
-	case spaProtectAlreadyBanned:
-		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-			"error":   "too many requests",
-			"message": "blocked, please try again later",
-		})
-		return true
-	case spaProtectNewlyBanned:
-		log.Printf("spa:ban ip=%s path=%s limit=%d ban_seconds=%d", ip, path, maxPerMinute, int(banTTL/time.Second))
+	_, _ = banSeconds, banTTL
+	if result == spaProtectRateLimited {
 		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 			"error":   "too many requests",
 			"message": "rate limit exceeded",
@@ -123,29 +114,31 @@ func spaProtectRateLimit(
 	return false
 }
 
-const (
-	spaProtectAlreadyBanned int64 = -1
-	spaProtectNewlyBanned   int64 = -2
-)
+const spaProtectRateLimited int64 = -1
 
 var spaProtectRateScript = redis.NewScript(`
-if redis.call("EXISTS", KEYS[1]) > 0 then
-	return -1
-end
-
-local current = redis.call("INCR", KEYS[2])
+local current = redis.call("INCR", KEYS[1])
 if current == 1 then
-	redis.call("EXPIRE", KEYS[2], 60)
+	redis.call("EXPIRE", KEYS[1], 60)
 end
 
 if current > tonumber(ARGV[1]) then
-	redis.call("SET", KEYS[1], "1", "EX", tonumber(ARGV[2]))
-	redis.call("DEL", KEYS[2])
-	return -2
+	return -1
 end
 
 return current
 `)
+
+func spaProtectRateKey(c *gin.Context, rdb *redis.Client, path, jwtSecret string) string {
+	if cookie, err := c.Cookie("_xdt_v"); err == nil && strings.TrimSpace(cookie) != "" {
+		mgr := servermiddleware.NewVisitorCookieManagerWithSecret(rdb, jwtSecret)
+		if mgr.VerifyCookie(cookie) {
+			return "spa:rate:cookie:" + servermiddleware.CookieHash(cookie)
+		}
+	}
+	sum := sha256.Sum256([]byte(strings.TrimSpace(path)))
+	return "spa:rate:path:" + hex.EncodeToString(sum[:8])
+}
 
 func spaProtectEnvInt(key string, defaultVal int) int {
 	if v := os.Getenv(key); v != "" {

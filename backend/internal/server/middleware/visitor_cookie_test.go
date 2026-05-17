@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestVisitorCookieIssuerSetsCookieOnlyForFrontendDocuments(t *testing.T) {
+func TestVisitorCookieIssuerDoesNotIssueWithoutPoW(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_VISITOR_COOKIE_ENABLED", "true")
 
@@ -29,13 +29,7 @@ func TestVisitorCookieIssuerSetsCookieOnlyForFrontendDocuments(t *testing.T) {
 
 	rec := performDefenseRequest(router, http.MethodGet, "/dashboard", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	cookies := rec.Result().Cookies()
-	require.Len(t, cookies, 1)
-	require.Equal(t, visitorCookieName, cookies[0].Name)
-	require.True(t, cookies[0].HttpOnly)
-	require.True(t, cookies[0].Secure)
-	require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
-	require.True(t, mgr.VerifyCookie(cookies[0].Value))
+	require.Empty(t, rec.Result().Cookies())
 
 	rec = performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -78,6 +72,18 @@ func TestVisitorCookieIssuerGeneratesUniqueCookies(t *testing.T) {
 	require.NotEqual(t, value1, value2)
 	require.True(t, mgr.VerifyCookie(value1))
 	require.True(t, mgr.VerifyCookie(value2))
+}
+
+func TestVisitorCookieFingerprintBinding(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_VISITOR_COOKIE_BIND_FINGERPRINT", "true")
+
+	mgr := NewVisitorCookieManagerWithSecret(nil, "visitor-test-secret")
+	value, _ := mgr.IssueCookieWithFingerprint("fingerprint-a")
+
+	require.True(t, mgr.VerifyCookieWithFingerprint(value, "fingerprint-a"))
+	require.False(t, mgr.VerifyCookieWithFingerprint(value, "fingerprint-b"))
+	require.True(t, mgr.VerifyCookieWithFingerprint(value, ""))
 }
 
 func TestGlobalRateLimiterVisitorCookieBypassesFrontendGlobalAndLimitsReuse(t *testing.T) {
@@ -176,7 +182,7 @@ func TestGlobalRateLimiterForgedVisitorCookieFallsBackToFrontendGlobal(t *testin
 	require.Contains(t, rec.Body.String(), "rate limited (frontend global)")
 }
 
-func TestVisitorCookieIssuerBeforeGlobalLetsBlockedFirstVisitRefreshThrough(t *testing.T) {
+func TestPoWVisitorCookieLetsBlockedFirstVisitRefreshThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
 	t.Setenv("DEFENSE_VISITOR_COOKIE_ENABLED", "true")
@@ -195,15 +201,14 @@ func TestVisitorCookieIssuerBeforeGlobalLetsBlockedFirstVisitRefreshThrough(t *t
 
 	rec := performDefenseRequest(router, http.MethodGet, "/dashboard", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.NotEmpty(t, rec.Result().Cookies())
+	require.Empty(t, rec.Result().Cookies())
 
 	rec = performDefenseRequest(router, http.MethodGet, "/dashboard", nil, nil)
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	cookies := rec.Result().Cookies()
-	require.NotEmpty(t, cookies)
 
+	value, _ := mgr.IssueCookieWithFingerprint("test-fingerprint")
 	rec = performDefenseRequest(router, http.MethodGet, "/dashboard", nil, func(req *http.Request) {
-		req.AddCookie(cookies[0])
+		req.AddCookie(&http.Cookie{Name: visitorCookieName, Value: value})
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 }
