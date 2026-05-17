@@ -86,6 +86,9 @@ func (h *VisitorCookieHandler) IssueCookie(c *gin.Context) {
 		h.credit.Reset(c.Request.Context(), middleware.CookieHash(value))
 	}
 	c.SetCookie("_xdt_v", value, ttl, "/", "", true, false)
+	if strings.TrimSpace(req.Fingerprint) != "" {
+		c.SetCookie("_xdt_fp", strings.TrimSpace(req.Fingerprint), ttl, "/", "", true, false)
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

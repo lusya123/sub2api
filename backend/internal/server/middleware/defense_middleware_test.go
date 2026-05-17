@@ -294,11 +294,15 @@ func TestPathLevelRateLimiterLimitsConfiguredPathsAndBypassesGateway(t *testing.
 
 	limiter := NewPathLevelRateLimiter(rdb)
 	limiter.limits["/api/v1/auth/login"] = pathLimit{limit: 1, window: time.Minute}
+	limiter.limits["/api/public/visitor/challenge"] = pathLimit{limit: 1, window: time.Minute}
 
 	require.True(t, limiter.Allow(context.Background(), "/api/v1/auth/login"))
 	require.False(t, limiter.Allow(context.Background(), "/api/v1/auth/login"))
 	require.True(t, limiter.Allow(context.Background(), "/v1/messages"))
 	require.True(t, limiter.Allow(context.Background(), "/v1/messages"))
+	require.True(t, limiter.Allow(context.Background(), "/api/public/visitor/challenge"))
+	require.True(t, limiter.Allow(context.Background(), "/api/public/visitor/challenge"))
+	require.True(t, limiter.Allow(context.Background(), "/api/public/visitor/issue-cookie"))
 }
 
 func TestGlobalRateLimiterBypassesPublicLogoAsset(t *testing.T) {

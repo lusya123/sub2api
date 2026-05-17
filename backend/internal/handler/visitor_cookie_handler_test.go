@@ -54,11 +54,15 @@ func TestVisitorCookieHandlerIssuesCookieAfterPoW(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	cookies := rec.Result().Cookies()
-	require.Len(t, cookies, 1)
+	require.Len(t, cookies, 2)
 	require.Equal(t, "_xdt_v", cookies[0].Name)
 	require.False(t, cookies[0].HttpOnly)
 	require.True(t, cookies[0].Secure)
 	require.True(t, mgr.VerifyCookieWithFingerprint(cookies[0].Value, "browser-fingerprint"))
+	require.Equal(t, "_xdt_fp", cookies[1].Name)
+	require.Equal(t, "browser-fingerprint", cookies[1].Value)
+	require.False(t, cookies[1].HttpOnly)
+	require.True(t, cookies[1].Secure)
 }
 
 func TestVisitorCookieHandlerRejectsBadPoW(t *testing.T) {

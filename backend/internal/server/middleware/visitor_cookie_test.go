@@ -84,7 +84,7 @@ func TestVisitorCookieFingerprintBinding(t *testing.T) {
 
 	require.True(t, mgr.VerifyCookieWithFingerprint(value, "fingerprint-a"))
 	require.False(t, mgr.VerifyCookieWithFingerprint(value, "fingerprint-b"))
-	require.True(t, mgr.VerifyCookieWithFingerprint(value, ""))
+	require.False(t, mgr.VerifyCookieWithFingerprint(value, ""))
 }
 
 func TestVisitorCookieChallengeConsumeOnce(t *testing.T) {
@@ -227,6 +227,7 @@ func TestPoWVisitorCookieLetsBlockedFirstVisitRefreshThrough(t *testing.T) {
 	value, _ := mgr.IssueCookieWithFingerprint("test-fingerprint")
 	rec = performDefenseRequest(router, http.MethodGet, "/dashboard", nil, func(req *http.Request) {
 		req.AddCookie(&http.Cookie{Name: visitorCookieName, Value: value})
+		req.AddCookie(&http.Cookie{Name: visitorFingerprintName, Value: "test-fingerprint"})
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 }

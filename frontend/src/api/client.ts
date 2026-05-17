@@ -7,6 +7,12 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig, AxiosResp
 import type { ApiResponse } from '@/types'
 import { getLocale } from '@/i18n'
 
+declare global {
+  interface Window {
+    __xdtReissueVisitorCookie?: () => Promise<void>
+  }
+}
+
 // ==================== Axios Instance Configuration ====================
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
@@ -26,6 +32,7 @@ export const apiClient: AxiosInstance = axios.create({
 let isRefreshing = false
 // Queue of requests waiting for token refresh
 let refreshSubscribers: Array<(token: string) => void> = []
+let isRecoveringVisitorCookie = false
 
 /**
  * Subscribe to token refresh completion
@@ -40,6 +47,25 @@ function subscribeTokenRefresh(callback: (token: string) => void): void {
 function onTokenRefreshed(token: string): void {
   refreshSubscribers.forEach((callback) => callback(token))
   refreshSubscribers = []
+}
+
+async function recoverVisitorCookie(): Promise<boolean> {
+  if (isRecoveringVisitorCookie) return false
+  if (typeof window === 'undefined') return false
+  if (typeof window.__xdtReissueVisitorCookie !== 'function') return false
+  const confirmed = window.confirm('您的访问被暂时限制，可能是误操作触发。点击确定完成验证恢复访问。')
+  if (!confirmed) return false
+
+  isRecoveringVisitorCookie = true
+  try {
+    document.cookie = '_xdt_v=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
+    document.cookie = '_xdt_fp=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'
+    await window.__xdtReissueVisitorCookie()
+    window.location.reload()
+    return true
+  } finally {
+    isRecoveringVisitorCookie = false
+  }
 }
 
 // ==================== Request Interceptor ====================
@@ -146,6 +172,10 @@ apiClient.interceptors.response.use(
           message: apiData.message || error.message,
           url
         })
+      }
+
+      if (status === 403 && apiData.error === 'cookie reputation too low') {
+        await recoverVisitorCookie()
       }
 
       // 401: Try to refresh the token if we have a refresh token

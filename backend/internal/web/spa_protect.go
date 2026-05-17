@@ -132,7 +132,8 @@ return current
 func spaProtectRateKey(c *gin.Context, rdb *redis.Client, path, jwtSecret string) string {
 	if cookie, err := c.Cookie("_xdt_v"); err == nil && strings.TrimSpace(cookie) != "" {
 		mgr := servermiddleware.NewVisitorCookieManagerWithSecret(rdb, jwtSecret)
-		if mgr.VerifyCookie(cookie) {
+		fingerprint, _ := c.Cookie("_xdt_fp")
+		if mgr.VerifyCookieWithFingerprint(cookie, fingerprint) {
 			return "spa:rate:cookie:" + servermiddleware.CookieHash(cookie)
 		}
 	}

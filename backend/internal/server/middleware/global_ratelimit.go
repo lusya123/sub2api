@@ -33,14 +33,9 @@ var defaultPathLimits = map[string]pathLimit{
 	"/api/v1/auth/login":            {limit: 200, window: time.Minute},
 	"/api/v1/auth/register":         {limit: 100, window: time.Minute},
 	"/api/v1/auth/send-verify-code": {limit: 100, window: time.Minute},
-	"/api/public/visitor/challenge": {limit: 5000, window: time.Minute},
-	"/api/public/visitor/issue-cookie": {
-		limit:  5000,
-		window: time.Minute,
-	},
-	"/api/v1/settings/logo":   {limit: 10000, window: time.Minute},
-	"/api/v1/settings/public": {limit: 1000, window: time.Minute},
-	"/":                       {limit: 2000, window: time.Minute},
+	"/api/v1/settings/logo":         {limit: 10000, window: time.Minute},
+	"/api/v1/settings/public":       {limit: 1000, window: time.Minute},
+	"/":                             {limit: 2000, window: time.Minute},
 }
 
 func NewGlobalRateLimiter(rdb *redis.Client, visitorCookie ...*VisitorCookieManager) *GlobalRateLimiter {
@@ -56,7 +51,11 @@ func NewPathLevelRateLimiter(rdb *redis.Client) *PathLevelRateLimiter {
 }
 
 func (p *PathLevelRateLimiter) Allow(ctx context.Context, path string) bool {
-	if p == nil || p.rdb == nil || os.Getenv("DEFENSE_PATH_RATELIMIT_ENABLED") == "false" || IsGatewayAPIPath(path) {
+	if p == nil ||
+		p.rdb == nil ||
+		os.Getenv("DEFENSE_PATH_RATELIMIT_ENABLED") == "false" ||
+		IsGatewayAPIPath(path) ||
+		strings.HasPrefix(path, "/api/public/visitor/") {
 		return true
 	}
 	limit, ok := p.limits[path]

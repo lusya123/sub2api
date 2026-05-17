@@ -17,6 +17,7 @@ import (
 
 const (
 	visitorCookieName       = "_xdt_v"
+	visitorFingerprintName  = "_xdt_fp"
 	visitorCookieDefaultTTL = 1800
 	visitorCookieMaxPerMin  = 300
 )
@@ -118,7 +119,7 @@ func (m *VisitorCookieManager) VerifyCookieWithFingerprint(cookieValue, currentF
 		return currentFingerprint == ""
 	}
 	if strings.TrimSpace(currentFingerprint) == "" {
-		return true
+		return hmac.Equal([]byte(parts[1]), []byte(m.hashFingerprint("")))
 	}
 	return hmac.Equal([]byte(parts[1]), []byte(m.hashFingerprint(currentFingerprint)))
 }
@@ -220,7 +221,11 @@ func checkVisitorCookie(c *gin.Context, mgr *VisitorCookieManager) visitorCookie
 		return visitorCookieNone
 	}
 	cookieValue, err := c.Cookie(visitorCookieName)
-	if err != nil || cookieValue == "" || !mgr.VerifyCookie(cookieValue) {
+	if err != nil || cookieValue == "" {
+		return visitorCookieNone
+	}
+	fingerprint, _ := c.Cookie(visitorFingerprintName)
+	if !mgr.VerifyCookieWithFingerprint(cookieValue, fingerprint) {
 		return visitorCookieNone
 	}
 	if !mgr.AllowCookieRequest(c.Request.Context(), cookieValue) {

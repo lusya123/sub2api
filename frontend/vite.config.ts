@@ -39,7 +39,12 @@ function visitorCookieBootstrapScript(): string {
   return `<script>
 (function(){
   const cookieName = '_xdt_v=';
+  const fingerprintCookieName = '_xdt_fp';
   function hasVisitorCookie(){ return document.cookie.indexOf(cookieName) !== -1; }
+  function setFingerprintCookie(fingerprint){
+    const secure = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = fingerprintCookieName + '=' + encodeURIComponent(fingerprint) + '; path=/; max-age=1800; SameSite=Lax' + secure;
+  }
   async function sha256Hex(value){
     const encoded = new TextEncoder().encode(value);
     const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoded);
@@ -82,6 +87,7 @@ function visitorCookieBootstrapScript(): string {
   async function issueVisitorCookie(recover){
     if (!window.crypto || !window.crypto.subtle) return;
     const fingerprint = await collectFingerprint();
+    setFingerprintCookie(fingerprint);
     const challengeResp = await fetch('/api/public/visitor/challenge' + (recover ? '?recover=1' : ''), {method:'POST', credentials:'same-origin'});
     if (!challengeResp.ok) return;
     const challengeData = await challengeResp.json();
@@ -99,6 +105,7 @@ function visitorCookieBootstrapScript(): string {
       body:JSON.stringify({challenge:challengeData.challenge, nonce:String(nonce), fingerprint:fingerprint})
     });
   }
+  window.__xdtReissueVisitorCookie = function(){ return issueVisitorCookie(true); };
   if (!hasVisitorCookie()) issueVisitorCookie(false).catch(function(e){ console.error('Visitor cookie issue failed', e); });
   const originalFetch = window.fetch;
   if (originalFetch && !window.__xdtVisitorFetchWrapped) {
@@ -109,6 +116,7 @@ function visitorCookieBootstrapScript(): string {
         response.clone().json().then(async function(data){
           if (data && data.error === 'cookie reputation too low' && window.confirm('您的访问被暂时限制，点击确定完成验证恢复访问。')) {
             document.cookie = '_xdt_v=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            document.cookie = fingerprintCookieName + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
             await issueVisitorCookie(true);
             window.location.reload();
           }
