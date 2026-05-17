@@ -431,6 +431,7 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		require.NoError(t, err)
 
 		apiPaths := []string{
+			"/api",
 			"/api/v1/users",
 			"/v1/models",
 			"/openai/v1/models",
@@ -440,6 +441,7 @@ func TestFrontendServer_Middleware(t *testing.T) {
 			"/antigravity/test",
 			"/setup/init",
 			"/health",
+			"/chat/completions",
 			"/responses",
 			"/responses/compact",
 		}
@@ -487,6 +489,82 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		assert.True(t, nextCalled, "next handler should be called for compact API route")
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t, `{"ok":true}`, w.Body.String())
+	})
+
+	t.Run("skips_chat_completions_post_route", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+		nextCalled := false
+		router.POST("/chat/completions", func(c *gin.Context) {
+			nextCalled = true
+			c.JSON(http.StatusUnauthorized, gin.H{"code": "INVALID_API_KEY"})
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/chat/completions", strings.NewReader(`{"model":"gpt-4o-mini"}`))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(w, req)
+
+		assert.True(t, nextCalled, "next handler should be called for chat completions API route")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.JSONEq(t, `{"code":"INVALID_API_KEY"}`, w.Body.String())
+		assert.NotContains(t, w.Body.String(), "<!doctype html>")
+	})
+
+	t.Run("skips_non_get_frontend_routes", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+		nextCalled := false
+		router.POST("/email-verify", func(c *gin.Context) {
+			nextCalled = true
+			c.String(http.StatusNotFound, "not found")
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/email-verify", strings.NewReader(`{"email":"attack@example.com"}`))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(w, req)
+
+		assert.True(t, nextCalled, "next handler should be called for non-GET frontend route")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.NotContains(t, w.Body.String(), "<!doctype html>")
+	})
+
+	t.Run("serves_head_for_spa_routes", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			c.Set(middleware.CSPNonceKey, "test-nonce")
+			c.Next()
+		})
+		router.Use(server.Middleware())
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodHead, "/dashboard", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 	})
 
 	t.Run("serves_index_for_spa_routes", func(t *testing.T) {
@@ -561,6 +639,41 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code)
 		assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 		assert.NotContains(t, w.Body.String(), "<!doctype html>")
+	})
+
+	t.Run("returns_404_for_sensitive_fallback_paths", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+
+		paths := []string{
+			"/.env",
+			"/.git/config",
+			"/wp-config.php",
+			"/backup.sql",
+			"/config.yaml",
+			"/vendor/autoload.php",
+			"/%2e%2e/%2e%2e/etc/passwd",
+			"/%00",
+			"/api/../admin",
+		}
+		for _, path := range paths {
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				router.ServeHTTP(w, req)
+
+				assert.Equal(t, http.StatusNotFound, w.Code)
+				assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+				assert.NotContains(t, w.Body.String(), "<!doctype html>")
+			})
+		}
 	})
 }
 
@@ -671,6 +784,7 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		middleware := ServeEmbeddedFrontend()
 
 		apiPaths := []string{
+			"/api",
 			"/api/users",
 			"/v1/models",
 			"/openai/v1/models",
@@ -680,6 +794,7 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 			"/antigravity/test",
 			"/setup/init",
 			"/health",
+			"/chat/completions",
 			"/responses",
 			"/responses/compact",
 		}
@@ -699,6 +814,57 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 				router.ServeHTTP(w, req)
 
 				assert.True(t, nextCalled, "next handler should be called for API route")
+			})
+		}
+	})
+
+	t.Run("skips_non_get_frontend_routes", func(t *testing.T) {
+		middleware := ServeEmbeddedFrontend()
+
+		nextCalled := false
+		router := gin.New()
+		router.Use(middleware)
+		router.POST("/email-verify", func(c *gin.Context) {
+			nextCalled = true
+			c.String(http.StatusNotFound, "not found")
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/email-verify", strings.NewReader(`{"email":"attack@example.com"}`))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(w, req)
+
+		assert.True(t, nextCalled, "next handler should be called for non-GET frontend route")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.NotContains(t, w.Body.String(), "<!doctype html>")
+	})
+
+	t.Run("returns_404_for_sensitive_fallback_paths", func(t *testing.T) {
+		middleware := ServeEmbeddedFrontend()
+
+		router := gin.New()
+		router.Use(middleware)
+
+		paths := []string{
+			"/.env",
+			"/.git/config",
+			"/wp-config.php",
+			"/backup.sql",
+			"/config.yaml",
+			"/vendor/autoload.php",
+			"/%2e%2e/%2e%2e/etc/passwd",
+			"/%00",
+			"/api/../admin",
+		}
+		for _, path := range paths {
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				router.ServeHTTP(w, req)
+
+				assert.Equal(t, http.StatusNotFound, w.Code)
+				assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+				assert.NotContains(t, w.Body.String(), "<!doctype html>")
 			})
 		}
 	})

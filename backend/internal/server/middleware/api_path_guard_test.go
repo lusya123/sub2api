@@ -41,6 +41,7 @@ func TestAPIPathGuardAllowsLegitimateAPIAndKnownFrontendPaths(t *testing.T) {
 	})
 
 	for _, path := range []string{
+		"/api",
 		"/api/v1/auth/send-verify-code",
 		"/v1/messages",
 		"/v1beta/models",

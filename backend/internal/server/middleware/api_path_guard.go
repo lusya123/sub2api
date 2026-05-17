@@ -95,6 +95,9 @@ func APIPathGuard() gin.HandlerFunc {
 }
 
 func isAPIPathGuardLegitimateAPI(path string) bool {
+	if path == "/api" {
+		return true
+	}
 	for _, prefix := range apiPathGuardAPIPrefixes {
 		if strings.HasPrefix(path, prefix) {
 			return true

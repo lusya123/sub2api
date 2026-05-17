@@ -13,6 +13,8 @@ const (
 	TierAnonymous = "anonymous"
 	TierUser      = "user"
 	TierAPIKey    = "apikey"
+
+	minAPIKeyCredentialLength = 16
 )
 
 // TrustTierDetector marks the request with its coarse trust tier. It does not
@@ -53,10 +55,10 @@ func MarkTrustTier(c *gin.Context, tier string) {
 }
 
 func hasAPIKeyCredential(c *gin.Context) bool {
-	if key := strings.TrimSpace(c.GetHeader("x-api-key")); strings.HasPrefix(key, "sk-") {
+	if key := strings.TrimSpace(c.GetHeader("x-api-key")); looksLikeAPIKeyCredential(key) {
 		return true
 	}
-	if key := strings.TrimSpace(c.GetHeader("x-goog-api-key")); strings.HasPrefix(key, "sk-") {
+	if key := strings.TrimSpace(c.GetHeader("x-goog-api-key")); looksLikeAPIKeyCredential(key) {
 		return true
 	}
 	auth := strings.TrimSpace(c.GetHeader("Authorization"))
@@ -66,7 +68,24 @@ func hasAPIKeyCredential(c *gin.Context) bool {
 	parts := strings.SplitN(auth, " ", 2)
 	return len(parts) == 2 &&
 		strings.EqualFold(parts[0], "Bearer") &&
-		strings.HasPrefix(strings.TrimSpace(parts[1]), "sk-")
+		looksLikeAPIKeyCredential(strings.TrimSpace(parts[1]))
+}
+
+func looksLikeAPIKeyCredential(key string) bool {
+	if !strings.HasPrefix(key, "sk-") || len(key) < minAPIKeyCredentialLength {
+		return false
+	}
+	for _, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func hasUserCredential(c *gin.Context) bool {
@@ -78,7 +97,12 @@ func hasUserCredential(c *gin.Context) bool {
 			return true
 		}
 	}
-	return strings.TrimSpace(c.GetHeader("Cookie")) != ""
+	for _, cookie := range c.Request.Cookies() {
+		if cookie.Name != visitorCookieName {
+			return true
+		}
+	}
+	return false
 }
 
 func isGatewayAPIPath(path string) bool {

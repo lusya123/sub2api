@@ -33,6 +33,10 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		if globalRateLimitBypassAll(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
 		if isPublicCacheableAssetRequest(c) {
 			c.Next()
 			return
@@ -40,6 +44,10 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 		if isFrontendDocumentRequest(c) {
 			switch checkVisitorCookie(c, g.visitorCookie) {
 			case visitorCookieAllowed:
+				if !g.allowVisitorCookieGlobal(c) {
+					abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (visitor cookie global)")
+					return
+				}
 				c.Next()
 				return
 			case visitorCookieLimited:
@@ -56,6 +64,10 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 
 		switch GetTrustTier(c) {
 		case TierAPIKey:
+			if !g.allowAPIKeyCandidateGlobal(c) {
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (api key candidate global)")
+				return
+			}
 			c.Next()
 			return
 		case TierUser:
@@ -81,6 +93,15 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 	}
 }
 
+func globalRateLimitBypassAll(path string) bool {
+	switch strings.TrimSpace(path) {
+	case "/health", "/setup/status":
+		return true
+	default:
+		return false
+	}
+}
+
 func (g *GlobalRateLimiter) allow(ctx context.Context, key string, limit int, window time.Duration) bool {
 	if ctx == nil {
 		ctx = context.Background()
@@ -100,12 +121,32 @@ func (g *GlobalRateLimiter) allowFrontendDocumentGlobal(c *gin.Context) bool {
 	if limit <= 0 {
 		return true
 	}
+	return g.allowTwoSecondBucket(c, "rl:frontend:global:", limit)
+}
+
+func (g *GlobalRateLimiter) allowVisitorCookieGlobal(c *gin.Context) bool {
+	limit := defenseEnvInt("DEFENSE_VISITOR_COOKIE_GLOBAL_PER_2S", 5000)
+	if limit <= 0 {
+		return true
+	}
+	return g.allowTwoSecondBucket(c, "rl:visitor:global:", limit)
+}
+
+func (g *GlobalRateLimiter) allowAPIKeyCandidateGlobal(c *gin.Context) bool {
+	limit := defenseEnvInt("DEFENSE_APIKEY_CANDIDATE_GLOBAL_PER_2S", 5000)
+	if limit <= 0 {
+		return true
+	}
+	return g.allowTwoSecondBucket(c, "rl:apikey:candidate:global:", limit)
+}
+
+func (g *GlobalRateLimiter) allowTwoSecondBucket(c *gin.Context, prefix string, limit int) bool {
 	bucket := strconv.FormatInt(time.Now().UTC().Unix()/2, 10)
 	ctx := c.Request.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	key := "rl:frontend:global:" + bucket
+	key := prefix + bucket
 	cnt, err := g.rdb.Incr(ctx, key).Result()
 	if err != nil {
 		return true
@@ -147,6 +188,7 @@ func globalRateLimitBypassFrontend(path string) bool {
 		strings.HasPrefix(path, "/v1beta/") ||
 		path == "/responses" ||
 		strings.HasPrefix(path, "/responses/") ||
+		path == "/api" ||
 		strings.HasPrefix(path, "/api/") ||
 		strings.HasPrefix(path, "/backend-api/") ||
 		strings.HasPrefix(path, "/openai/") ||

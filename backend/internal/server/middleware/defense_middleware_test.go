@@ -30,7 +30,7 @@ func TestTrustTierDetector(t *testing.T) {
 			set: func(r *http.Request) {
 				r.URL.Path = "/v1/messages"
 				r.RequestURI = "/v1/messages"
-				r.Header.Set("x-api-key", "sk-test")
+				r.Header.Set("x-api-key", "sk-test-valid-candidate-0000")
 			},
 			want: TierAPIKey,
 		},
@@ -39,7 +39,7 @@ func TestTrustTierDetector(t *testing.T) {
 			set: func(r *http.Request) {
 				r.URL.Path = "/v1beta/models"
 				r.RequestURI = "/v1beta/models"
-				r.Header.Set("x-goog-api-key", "sk-test")
+				r.Header.Set("x-goog-api-key", "sk-test-valid-candidate-0000")
 			},
 			want: TierAPIKey,
 		},
@@ -48,9 +48,27 @@ func TestTrustTierDetector(t *testing.T) {
 			set: func(r *http.Request) {
 				r.URL.Path = "/chat/completions"
 				r.RequestURI = "/chat/completions"
-				r.Header.Set("Authorization", "Bearer sk-test")
+				r.Header.Set("Authorization", "Bearer sk-test-valid-candidate-0000")
 			},
 			want: TierAPIKey,
+		},
+		{
+			name: "short fake api key on gateway path stays anonymous",
+			set: func(r *http.Request) {
+				r.URL.Path = "/v1/messages"
+				r.RequestURI = "/v1/messages"
+				r.Header.Set("x-api-key", "sk-short")
+			},
+			want: TierAnonymous,
+		},
+		{
+			name: "malformed fake api key on gateway path stays anonymous",
+			set: func(r *http.Request) {
+				r.URL.Path = "/v1/messages"
+				r.RequestURI = "/v1/messages"
+				r.Header.Set("x-api-key", "sk-invalid space")
+			},
+			want: TierAnonymous,
 		},
 		{
 			name: "fake api key on public path stays anonymous",
@@ -65,6 +83,16 @@ func TestTrustTierDetector(t *testing.T) {
 		{
 			name: "cookie user candidate",
 			set:  func(r *http.Request) { r.Header.Set("Cookie", "session=abc") },
+			want: TierUser,
+		},
+		{
+			name: "visitor cookie only stays anonymous",
+			set:  func(r *http.Request) { r.Header.Set("Cookie", visitorCookieName+"=abc") },
+			want: TierAnonymous,
+		},
+		{
+			name: "visitor cookie plus app cookie stays user",
+			set:  func(r *http.Request) { r.Header.Set("Cookie", visitorCookieName+"=abc; session=def") },
 			want: TierUser,
 		},
 		{
@@ -121,7 +149,7 @@ func TestGlobalRateLimiterTiers(t *testing.T) {
 
 	for i := 0; i < 40; i++ {
 		rec := performDefenseRequest(router, http.MethodGet, "/v1/messages", nil, func(req *http.Request) {
-			req.Header.Set("x-api-key", "sk-legit")
+			req.Header.Set("x-api-key", "sk-legit-valid-candidate-0000")
 		})
 		require.Equal(t, http.StatusOK, rec.Code, "API key request %d should bypass defense limiter", i+1)
 	}
@@ -138,6 +166,62 @@ func TestGlobalRateLimiterTiers(t *testing.T) {
 		req.Header.Set("x-api-key", "sk-fake")
 	})
 	require.Equal(t, http.StatusTooManyRequests, rec.Code, "fake API key on public path must not bypass anonymous limit")
+}
+
+func TestGlobalRateLimiterAPIKeyCandidateGlobalLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+	t.Setenv("DEFENSE_APIKEY_CANDIDATE_GLOBAL_PER_2S", "2")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/v1/messages", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for i := 0; i < 2; i++ {
+		rec := performDefenseRequest(router, http.MethodGet, "/v1/messages", nil, func(req *http.Request) {
+			req.Header.Set("x-api-key", "sk-legit-valid-candidate-0000")
+		})
+		require.Equal(t, http.StatusOK, rec.Code, "API key candidate request %d should be under global candidate limit", i+1)
+	}
+
+	rec := performDefenseRequest(router, http.MethodGet, "/v1/messages", nil, func(req *http.Request) {
+		req.Header.Set("x-api-key", "sk-legit-valid-candidate-0000")
+	})
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	require.Contains(t, rec.Body.String(), "rate limited (api key candidate global)")
+}
+
+func TestGlobalRateLimiterBypassesHealthAndSetupStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/health", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	router.GET("/setup/status", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for _, path := range []string{"/health", "/setup/status"} {
+		for i := 0; i < 40; i++ {
+			rec := performDefenseRequest(router, http.MethodGet, path, nil, nil)
+			require.Equal(t, http.StatusOK, rec.Code, "%s request %d should bypass global defense limiter", path, i+1)
+		}
+	}
 }
 
 func TestGlobalRateLimiterBypassesPublicLogoAsset(t *testing.T) {
@@ -345,7 +429,7 @@ func TestBanCheckSkipsAPIKeyTier(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rec.Code, "fake API key on public path must still be banned")
 
 	rec = performDefenseRequest(router, http.MethodGet, "/v1/messages", nil, func(req *http.Request) {
-		req.Header.Set("x-api-key", "sk-legit")
+		req.Header.Set("x-api-key", "sk-legit-valid-candidate-0000")
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 }

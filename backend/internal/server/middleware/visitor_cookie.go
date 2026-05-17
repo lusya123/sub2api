@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -59,15 +60,23 @@ func NewVisitorCookieManagerWithSecret(rdb *redis.Client, fallbackSecret string)
 func (m *VisitorCookieManager) IssueCookie() (value string, maxAge int) {
 	ttl := defenseEnvInt("DEFENSE_VISITOR_COOKIE_TTL_SECONDS", visitorCookieDefaultTTL)
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
-	return ts + "." + m.sign(ts), ttl
+	nonce := randomVisitorCookieNonce()
+	payload := ts + "." + nonce
+	return payload + "." + m.sign(payload), ttl
 }
 
 func (m *VisitorCookieManager) VerifyCookie(cookieValue string) bool {
 	if m == nil || cookieValue == "" {
 		return false
 	}
-	parts := strings.SplitN(cookieValue, ".", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+	parts := strings.Split(cookieValue, ".")
+	if len(parts) != 2 && len(parts) != 3 {
+		return false
+	}
+	if parts[0] == "" || parts[len(parts)-1] == "" {
+		return false
+	}
+	if len(parts) == 3 && parts[1] == "" {
 		return false
 	}
 
@@ -80,13 +89,27 @@ func (m *VisitorCookieManager) VerifyCookie(cookieValue string) bool {
 		return false
 	}
 
-	expected := m.sign(parts[0])
-	return hmac.Equal([]byte(parts[1]), []byte(expected))
+	payload := parts[0]
+	signature := parts[1]
+	if len(parts) == 3 {
+		payload = parts[0] + "." + parts[1]
+		signature = parts[2]
+	}
+	expected := m.sign(payload)
+	return hmac.Equal([]byte(signature), []byte(expected))
 }
 
-func (m *VisitorCookieManager) sign(ts string) string {
+func randomVisitorCookieNonce() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+func (m *VisitorCookieManager) sign(payload string) string {
 	mac := hmac.New(sha256.New, m.secret)
-	_, _ = mac.Write([]byte(ts))
+	_, _ = mac.Write([]byte(payload))
 	return hex.EncodeToString(mac.Sum(nil))[:16]
 }
 

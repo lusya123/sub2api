@@ -88,8 +88,13 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
+		if isEmbeddedFrontendMethod(c.Request.Method) && isBlockedRawFrontendPath(c.Request.RequestURI) {
+			serveMissingFrontendFallback(c)
+			return
+		}
+
 		// Skip API routes
-		if shouldBypassEmbeddedFrontend(path) {
+		if shouldBypassEmbeddedFrontend(path) || !isEmbeddedFrontendMethod(c.Request.Method) {
 			c.Next()
 			return
 		}
@@ -109,6 +114,10 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 		if !s.fileExists(cleanPath) {
 			if isAssetRequest(cleanPath) {
 				serveMissingAsset(c)
+				return
+			}
+			if isBlockedFrontendFallbackPath(cleanPath) {
+				serveMissingFrontendFallback(c)
 				return
 			}
 			s.serveIndexHTML(c)
@@ -290,7 +299,12 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		if shouldBypassEmbeddedFrontend(path) {
+		if isEmbeddedFrontendMethod(c.Request.Method) && isBlockedRawFrontendPath(c.Request.RequestURI) {
+			serveMissingFrontendFallback(c)
+			return
+		}
+
+		if shouldBypassEmbeddedFrontend(path) || !isEmbeddedFrontendMethod(c.Request.Method) {
 			c.Next()
 			return
 		}
@@ -314,6 +328,10 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			serveMissingAsset(c)
 			return
 		}
+		if isBlockedFrontendFallbackPath(cleanPath) {
+			serveMissingFrontendFallback(c)
+			return
+		}
 
 		serveIndexHTML(c, distFS)
 	}
@@ -334,9 +352,14 @@ func tryServeOverrideFile(c *gin.Context, overrideDir, cleanPath string) bool {
 	return true
 }
 
+func isEmbeddedFrontendMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
 func shouldBypassEmbeddedFrontend(path string) bool {
 	trimmed := strings.TrimSpace(path)
-	return strings.HasPrefix(trimmed, "/api/") ||
+	return trimmed == "/api" ||
+		strings.HasPrefix(trimmed, "/api/") ||
 		strings.HasPrefix(trimmed, "/v1/") ||
 		strings.HasPrefix(trimmed, "/v1beta/") ||
 		strings.HasPrefix(trimmed, "/backend-api/") ||
@@ -344,6 +367,7 @@ func shouldBypassEmbeddedFrontend(path string) bool {
 		strings.HasPrefix(trimmed, "/antigravity/") ||
 		strings.HasPrefix(trimmed, "/setup/") ||
 		trimmed == "/health" ||
+		trimmed == "/chat/completions" ||
 		trimmed == "/responses" ||
 		strings.HasPrefix(trimmed, "/responses/") ||
 		strings.HasPrefix(trimmed, "/images/")
@@ -353,9 +377,85 @@ func isAssetRequest(cleanPath string) bool {
 	return strings.HasPrefix(cleanPath, "assets/")
 }
 
+func isBlockedFrontendFallbackPath(cleanPath string) bool {
+	normalized := strings.Trim(strings.TrimSpace(cleanPath), "/")
+	if normalized == "" {
+		return false
+	}
+
+	lower := strings.ToLower(normalized)
+	if strings.Contains(lower, "..") || strings.Contains(lower, "%00") {
+		return true
+	}
+
+	for _, segment := range strings.Split(lower, "/") {
+		if segment == "" {
+			continue
+		}
+		if strings.HasPrefix(segment, ".") {
+			return true
+		}
+	}
+
+	switch lower {
+	case "api", "phpmyadmin", "wp-login.php", "wp-config.php":
+		return true
+	}
+	if strings.HasPrefix(lower, "phpmyadmin/") ||
+		strings.HasPrefix(lower, "wp-admin/") ||
+		strings.HasPrefix(lower, "wp-content/") ||
+		strings.HasPrefix(lower, "vendor/") {
+		return true
+	}
+
+	blockedExts := []string{
+		".php", ".asp", ".aspx", ".jsp",
+		".sql", ".sqlite", ".db",
+		".env", ".ini", ".conf", ".config", ".yaml", ".yml", ".toml",
+		".bak", ".backup", ".old", ".orig", ".log",
+		".zip", ".tar", ".gz", ".tgz", ".rar", ".7z",
+	}
+	for _, ext := range blockedExts {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+func isBlockedRawFrontendPath(requestURI string) bool {
+	raw := strings.ToLower(strings.TrimSpace(requestURI))
+	if raw == "" {
+		return false
+	}
+	if idx := strings.IndexByte(raw, '?'); idx >= 0 {
+		raw = raw[:idx]
+	}
+	raw = strings.Trim(raw, "/")
+	if raw == "" {
+		return false
+	}
+	if strings.Contains(raw, "\x00") ||
+		strings.Contains(raw, "%00") ||
+		strings.Contains(raw, "..") ||
+		strings.Contains(raw, "%2e") ||
+		strings.Contains(raw, "%2f") ||
+		strings.Contains(raw, "%5c") ||
+		strings.Contains(raw, "etc/passwd") {
+		return true
+	}
+	return false
+}
+
 func serveMissingAsset(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.String(http.StatusNotFound, "Asset not found")
+	c.Abort()
+}
+
+func serveMissingFrontendFallback(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.String(http.StatusNotFound, "404 page not found")
 	c.Abort()
 }
 
