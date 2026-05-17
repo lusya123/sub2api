@@ -97,10 +97,8 @@ func hasUserCredential(c *gin.Context) bool {
 			return true
 		}
 	}
-	for _, cookie := range c.Request.Cookies() {
-		if cookie.Name != visitorCookieName {
-			return true
-		}
+	if token, err := c.Cookie("token"); err == nil && strings.TrimSpace(token) != "" {
+		return true
 	}
 	return false
 }

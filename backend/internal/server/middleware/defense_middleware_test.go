@@ -79,8 +79,8 @@ func TestTrustTierDetector(t *testing.T) {
 			want: TierUser,
 		},
 		{
-			name: "cookie user candidate",
-			set:  func(r *http.Request) { r.Header.Set("Cookie", "session=abc") },
+			name: "token cookie user candidate",
+			set:  func(r *http.Request) { r.Header.Set("Cookie", "token=abc") },
 			want: TierUser,
 		},
 		{
@@ -89,8 +89,15 @@ func TestTrustTierDetector(t *testing.T) {
 			want: TierAnonymous,
 		},
 		{
-			name: "visitor cookie plus app cookie stays user",
-			set:  func(r *http.Request) { r.Header.Set("Cookie", visitorCookieName+"=abc; session=def") },
+			name: "visitor fingerprint cookie stays anonymous",
+			set: func(r *http.Request) {
+				r.Header.Set("Cookie", visitorCookieName+"=abc; "+visitorFingerprintName+"=def")
+			},
+			want: TierAnonymous,
+		},
+		{
+			name: "visitor cookie plus token cookie stays user",
+			set:  func(r *http.Request) { r.Header.Set("Cookie", visitorCookieName+"=abc; token=def") },
 			want: TierUser,
 		},
 		{
