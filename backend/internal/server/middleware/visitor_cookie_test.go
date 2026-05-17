@@ -104,6 +104,25 @@ func TestVisitorCookieChallengeConsumeOnce(t *testing.T) {
 	require.False(t, consumed)
 }
 
+func TestVisitorCookieIssueRateLimitUsesFingerprintKey(t *testing.T) {
+	t.Setenv("DEFENSE_VISITOR_COOKIE_ISSUE_PER_MIN", "2")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
+	ctx := context.Background()
+
+	require.True(t, mgr.AllowIssueRequest(ctx, "fingerprint-a"))
+	require.True(t, mgr.AllowIssueRequest(ctx, "fingerprint-a"))
+	require.False(t, mgr.AllowIssueRequest(ctx, "fingerprint-a"))
+	require.True(t, mgr.AllowIssueRequest(ctx, "fingerprint-b"))
+
+	keys, err := rdb.Keys(ctx, "vci:*").Result()
+	require.NoError(t, err)
+	require.Len(t, keys, 2)
+}
+
 func TestGlobalRateLimiterVisitorCookieBypassesFrontendGlobalAndLimitsReuse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")

@@ -20,6 +20,7 @@ const (
 	visitorFingerprintName  = "_xdt_fp"
 	visitorCookieDefaultTTL = 1800
 	visitorCookieMaxPerMin  = 300
+	visitorIssueMaxPerMin   = 300
 )
 
 type visitorCookieDecision int
@@ -157,6 +158,34 @@ func (m *VisitorCookieManager) AllowCookieRequest(ctx context.Context, cookieVal
 
 	h := sha256.Sum256([]byte(cookieValue))
 	key := "vck:" + hex.EncodeToString(h[:8])
+	cnt, err := m.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return true
+	}
+	if cnt == 1 {
+		_ = m.rdb.Expire(ctx, key, time.Minute).Err()
+	}
+	return cnt <= int64(limit)
+}
+
+func (m *VisitorCookieManager) AllowIssueRequest(ctx context.Context, fingerprint string) bool {
+	if m == nil || m.rdb == nil {
+		return true
+	}
+	limit := defenseEnvInt("DEFENSE_VISITOR_COOKIE_ISSUE_PER_MIN", visitorIssueMaxPerMin)
+	if limit <= 0 {
+		return true
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	normalized := strings.TrimSpace(fingerprint)
+	if normalized == "" {
+		normalized = "empty-fingerprint"
+	}
+	sum := sha256.Sum256([]byte(normalized))
+	key := "vci:" + hex.EncodeToString(sum[:8])
 	cnt, err := m.rdb.Incr(ctx, key).Result()
 	if err != nil {
 		return true

@@ -57,6 +57,10 @@ func (h *VisitorCookieHandler) IssueCookie(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid challenge"})
 		return
 	}
+	if !h.mgr.AllowIssueRequest(c.Request.Context(), req.Fingerprint) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "visitor cookie issue rate limited"})
+		return
+	}
 	consumed, err := h.mgr.ConsumeChallenge(c.Request.Context(), req.Challenge)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "challenge unavailable"})
