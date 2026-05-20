@@ -7,7 +7,7 @@ import (
 const (
 	modelMarketplaceRequestTimeout             = 45 * time.Second
 	modelMarketplacePingTimeout                = 8 * time.Second
-	modelMarketplaceDegradedThreshold          = 6 * time.Second
+	modelMarketplaceDegradedThreshold          = 20 * time.Second
 	modelMarketplaceWorkerConcurrency          = 5
 	modelMarketplaceStartupLoadTimeout         = 10 * time.Second
 	modelMarketplaceMinIntervalSeconds         = 15
