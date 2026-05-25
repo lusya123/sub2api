@@ -2,11 +2,14 @@
 package routes
 
 import (
+	"net/http"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // RegisterAdminRoutes 注册管理员路由
@@ -15,10 +18,17 @@ func RegisterAdminRoutes(
 	h *handler.Handlers,
 	adminAuth middleware.AdminAuthMiddleware,
 	auditService *service.AdminAuditService,
+	redisClient *redis.Client,
 ) {
 	admin := v1.Group("/admin")
 	admin.Use(middleware.AdminAuditMiddleware(auditService))
+	admin.Use(middleware.AdminAuthFailureRecorder(redisClient))
 	admin.Use(gin.HandlerFunc(adminAuth))
+	admin.GET("/auth-fastpath/metrics", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"data": middleware.AdminAuthFastPathMetricsSnapshot(),
+		})
+	})
 	admin.Use(middleware.AdminPermissionGuard())
 	{
 		// 仪表盘
