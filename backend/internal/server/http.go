@@ -18,6 +18,7 @@ import (
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/net/http2"
+	//nolint:staticcheck // Keep existing h2c behavior until the server is migrated to net/http Protocols.
 	"golang.org/x/net/http2/h2c"
 )
 
@@ -115,6 +116,7 @@ func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
 	// 根据配置决定是否启用 H2C
 	if cfg.Server.H2C.Enabled {
 		h2cConfig := cfg.Server.H2C
+		//nolint:staticcheck // Preserve configured h2c behavior while consuming x/net security fixes.
 		httpHandler = h2c.NewHandler(router, &http2.Server{
 			MaxConcurrentStreams:         h2cConfig.MaxConcurrentStreams,
 			IdleTimeout:                  time.Duration(h2cConfig.IdleTimeout) * time.Second,

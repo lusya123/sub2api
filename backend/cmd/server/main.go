@@ -25,6 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/http2"
+	//nolint:staticcheck // Keep existing h2c behavior until the server is migrated to net/http Protocols.
 	"golang.org/x/net/http2/h2c"
 )
 
@@ -117,7 +118,8 @@ func runSetupServer() {
 	log.Println("Complete the setup wizard to configure Sub2API")
 
 	server := &http.Server{
-		Addr:              addr,
+		Addr: addr,
+		//nolint:staticcheck // Keep setup wizard h2c behavior unchanged for this security dependency update.
 		Handler:           h2c.NewHandler(r, &http2.Server{}),
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       120 * time.Second,
