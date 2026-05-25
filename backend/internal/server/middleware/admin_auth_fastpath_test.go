@@ -203,7 +203,7 @@ func TestAdminAuthFastPathBansRepeatedFailures(t *testing.T) {
 
 	s := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: s.Addr()})
-	defer rdb.Close()
+	t.Cleanup(func() { require.NoError(t, rdb.Close()) })
 
 	router := newAdminAuthFastPathTestRouterWithRedis(t, rdb)
 	for i := 0; i < 3; i++ {
@@ -232,7 +232,7 @@ func TestAdminAuthFailureRecorderCountsRealAuth401(t *testing.T) {
 
 	s := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: s.Addr()})
-	defer rdb.Close()
+	t.Cleanup(func() { require.NoError(t, rdb.Close()) })
 
 	router := gin.New()
 	router.Use(AdminAuthFailureRecorder(rdb))
