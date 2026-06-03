@@ -24,9 +24,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/web"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/net/http2"
-	//nolint:staticcheck // Keep existing h2c behavior until the server is migrated to net/http Protocols.
-	"golang.org/x/net/http2/h2c"
 )
 
 //go:embed VERSION
@@ -117,12 +114,16 @@ func runSetupServer() {
 	log.Printf("Setup wizard available at http://%s", addr)
 	log.Println("Complete the setup wizard to configure Sub2API")
 
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
 	server := &http.Server{
-		Addr: addr,
-		//nolint:staticcheck // Keep setup wizard h2c behavior unchanged for this security dependency update.
-		Handler:           h2c.NewHandler(r, &http2.Server{}),
+		Addr:              addr,
+		Handler:           r,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		Protocols:         protocols,
 	}
 
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

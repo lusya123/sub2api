@@ -337,7 +337,7 @@ func (s *ModelMarketplaceMonitorService) modelMarketplaceDisplayPricing(model st
 	if s == nil || s.pricingService == nil {
 		return nil
 	}
-	return synthesizePricingFromLiteLLM(s.pricingService.GetModelPricing(model))
+	return synthesizePricingFromLiteLLM(s.pricingService.GetModelPricing(model), nil)
 }
 
 func (s *ModelMarketplaceMonitorService) modelMarketplaceDisplayPricingForConfig(

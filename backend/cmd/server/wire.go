@@ -99,6 +99,7 @@ func provideCleanup(
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
 	modelMarketplaceMonitorRunner *service.ModelMarketplaceMonitorRunner,
+	quotaFlusher *service.UserPlatformQuotaUsageFlusher,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -250,6 +251,12 @@ func provideCleanup(
 			{"ModelMarketplaceMonitorRunner", func() error {
 				if modelMarketplaceMonitorRunner != nil {
 					modelMarketplaceMonitorRunner.Stop()
+				}
+				return nil
+			}},
+			{"UserPlatformQuotaUsageFlusher", func() error {
+				if quotaFlusher != nil {
+					quotaFlusher.Stop()
 				}
 				return nil
 			}},

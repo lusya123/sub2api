@@ -494,7 +494,6 @@ func (s *AccountTestService) testBedrockAccountConnection(c *gin.Context, ctx co
 // testOpenAIAccountConnection tests an OpenAI account's connection
 func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account *Account, modelID string, prompt string, mode string) error {
 	ctx := c.Request.Context()
-	_ = prompt
 	mode = normalizeAccountTestMode(mode)
 
 	// Default to openai.DefaultTestModel for OpenAI testing
@@ -556,7 +555,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
 		}
 		if !openai_compat.ShouldUseResponsesAPI(account.Extra) {
-			return s.testOpenAIRawChatCompletionsAPIKey(c, ctx, account, testModelID, normalizedBaseURL)
+			return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
 		}
 		apiURL = buildOpenAIResponsesURL(normalizedBaseURL)
 	} else {
@@ -581,6 +580,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create request")
 	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 
 	// Set common headers
 	req.Header.Set("Content-Type", "application/json")
@@ -631,17 +631,18 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	return s.processOpenAIStream(c, resp.Body)
 }
 
-func (s *AccountTestService) testOpenAIRawChatCompletionsAPIKey(
+// testOpenAIChatCompletionsConnection tests an OpenAI-compatible APIKey account
+// through the raw /v1/chat/completions endpoint.
+func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	c *gin.Context,
-	ctx context.Context,
 	account *Account,
-	modelID string,
+	testModelID string,
+	prompt string,
 	normalizedBaseURL string,
+	authToken string,
 ) error {
-	apiKey := account.GetOpenAIApiKey()
-	if apiKey == "" {
-		return s.sendErrorAndEnd(c, "No API key available")
-	}
+	ctx := c.Request.Context()
+	apiURL := buildOpenAIChatCompletionsURL(normalizedBaseURL)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -649,18 +650,20 @@ func (s *AccountTestService) testOpenAIRawChatCompletionsAPIKey(
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.Flush()
 
-	targetURL := buildOpenAIChatCompletionsURL(normalizedBaseURL)
-	payloadBytes, _ := json.Marshal(createOpenAIChatCompletionsTestPayload(modelID))
+	payload := createOpenAIChatCompletionsTestPayload(testModelID, prompt)
+	payloadBytes, _ := json.Marshal(payload)
 
-	s.sendEvent(c, TestEvent{Type: "test_start", Model: modelID})
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+	s.sendEvent(c, TestEvent{Type: "status", Text: "正在通过 /v1/chat/completions 测试连接"})
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(payloadBytes))
 	if err != nil {
-		return s.sendErrorAndEnd(c, "Failed to create request")
+		return s.sendErrorAndEnd(c, "Failed to create Chat Completions request")
 	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+authToken)
 	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
 		req.Header.Set("User-Agent", customUA)
 	}
@@ -672,34 +675,23 @@ func (s *AccountTestService) testOpenAIRawChatCompletionsAPIKey(
 
 	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
 	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) request failed: %s", err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	if readErr != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to read response: %s", readErr.Error()))
-	}
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
+		}
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
-			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
+			errMsg := fmt.Sprintf("Chat Completions authentication failed (401): %s", string(body))
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) returned %d: %s", resp.StatusCode, string(body)))
 	}
 
-	text, err := extractOpenAIChatCompletionsText(body)
-	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to parse response: %s", err.Error()))
-	}
-	if strings.TrimSpace(text) == "" {
-		text = "(empty response)"
-	}
-
-	s.sendEvent(c, TestEvent{Type: "content", Text: text})
-	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-	return nil
+	return s.processOpenAIChatCompletionsStream(c, resp.Body)
 }
 
 // testOpenAICompactConnection probes /responses/compact and persists the
@@ -752,6 +744,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create request")
 	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -1262,62 +1255,22 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 	return payload
 }
 
-func createOpenAIChatCompletionsTestPayload(modelID string) map[string]any {
+func createOpenAIChatCompletionsTestPayload(modelID string, prompt string) map[string]any {
+	testPrompt := strings.TrimSpace(prompt)
+	if testPrompt == "" {
+		testPrompt = "hi"
+	}
+
 	return map[string]any{
 		"model": modelID,
 		"messages": []map[string]any{
 			{
 				"role":    "user",
-				"content": "hi",
+				"content": testPrompt,
 			},
 		},
-		"stream":     false,
-		"max_tokens": 64,
+		"stream": true,
 	}
-}
-
-func extractOpenAIChatCompletionsText(body []byte) (string, error) {
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content any `json:"content"`
-			} `json:"message"`
-			Text string `json:"text"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", err
-	}
-	if len(result.Choices) == 0 {
-		return "", errors.New("chat completions response has no choices")
-	}
-	if text := strings.TrimSpace(result.Choices[0].Text); text != "" {
-		return text, nil
-	}
-	return extractOpenAIChatContentText(result.Choices[0].Message.Content), nil
-}
-
-func extractOpenAIChatContentText(content any) string {
-	switch v := content.(type) {
-	case string:
-		return v
-	case []any:
-		var parts []string
-		for _, item := range v {
-			if text := strings.TrimSpace(extractOpenAIChatContentText(item)); text != "" {
-				parts = append(parts, text)
-			}
-		}
-		return strings.Join(parts, "")
-	case map[string]any:
-		if text, ok := v["text"].(string); ok {
-			return text
-		}
-		if text, ok := v["content"].(string); ok {
-			return text
-		}
-	}
-	return ""
 }
 
 // processClaudeStream processes the SSE stream from Claude API
@@ -1370,6 +1323,82 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 				}
 			}
 			return s.sendErrorAndEnd(c, errorMsg)
+		}
+	}
+}
+
+// processOpenAIChatCompletionsStream processes SSE chunks from the
+// OpenAI-compatible Chat Completions API.
+func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, body io.Reader) error {
+	reader := bufio.NewReader(body)
+	seenJSON := false
+	seenFinish := false
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				if seenFinish {
+					s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/chat/completions 验证"})
+					s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+					return nil
+				}
+				if seenJSON {
+					return s.sendErrorAndEnd(c, "Chat Completions stream from /v1/chat/completions ended before [DONE]")
+				}
+				return s.sendErrorAndEnd(c, "Invalid Chat Completions response from /v1/chat/completions: expected SSE JSON data")
+			}
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions stream read error from /v1/chat/completions: %s", err.Error()))
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" || !sseDataPrefix.MatchString(line) {
+			continue
+		}
+
+		jsonStr := sseDataPrefix.ReplaceAllString(line, "")
+		if jsonStr == "[DONE]" {
+			s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/chat/completions 验证"})
+			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+			return nil
+		}
+
+		var data map[string]any
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			return s.sendErrorAndEnd(c, "Invalid Chat Completions response from /v1/chat/completions: expected JSON data")
+		}
+		seenJSON = true
+
+		if errData, ok := data["error"].(map[string]any); ok {
+			errorMsg := "Chat Completions API (/v1/chat/completions) returned an error"
+			if msg, ok := errData["message"].(string); ok && msg != "" {
+				errorMsg = msg
+			}
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) error: %s", errorMsg))
+		}
+
+		choices, ok := data["choices"].([]any)
+		if !ok {
+			continue
+		}
+		for _, choiceValue := range choices {
+			choice, ok := choiceValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			if delta, ok := choice["delta"].(map[string]any); ok {
+				if text, ok := delta["content"].(string); ok && text != "" {
+					s.sendEvent(c, TestEvent{Type: "content", Text: text})
+				}
+			}
+			if message, ok := choice["message"].(map[string]any); ok {
+				if text, ok := message["content"].(string); ok && text != "" {
+					s.sendEvent(c, TestEvent{Type: "content", Text: text})
+				}
+			}
+			if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" {
+				seenFinish = true
+			}
 		}
 	}
 }
@@ -1482,6 +1511,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create request")
 	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+authToken)
 
@@ -1570,6 +1600,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create request")
 	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 	req.Host = "chatgpt.com"
 	req.Header.Set("Authorization", "Bearer "+authToken)
 	req.Header.Set("Content-Type", "application/json")

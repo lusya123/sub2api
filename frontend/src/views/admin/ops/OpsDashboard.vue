@@ -311,8 +311,6 @@ const applyRouteQueryToState = () => {
   }
 }
 
-applyRouteQueryToState()
-
 const buildQueryFromState = () => {
   const next: Record<string, any> = { ...route.query }
 
@@ -380,6 +378,8 @@ const requestDetailsPreset = ref<OpsRequestDetailsPreset>({
 
 const showSettingsDialog = ref(false)
 const showAlertRulesCard = ref(false)
+
+applyRouteQueryToState()
 
 // Auto refresh settings
 const showAlertEvents = ref(true)
