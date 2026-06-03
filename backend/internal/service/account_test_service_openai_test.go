@@ -166,7 +166,7 @@ func TestAccountTestService_OpenAIAPIKeyUnsupportedResponsesUsesRawChatCompletio
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
 
-	resp := newJSONResponse(http.StatusOK, `{"choices":[{"message":{"content":"pong"}}]}`)
+	resp := newJSONResponse(http.StatusOK, "data: {\"choices\":[{\"delta\":{\"content\":\"pong\"}}]}\n\ndata: [DONE]\n\n")
 	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
 	svc := &AccountTestService{
 		httpUpstream: upstream,
@@ -190,12 +190,12 @@ func TestAccountTestService_OpenAIAPIKeyUnsupportedResponsesUsesRawChatCompletio
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
 	require.Equal(t, "https://api.siliconflow.cn/v1/chat/completions", upstream.requests[0].URL.String())
-	require.Equal(t, "application/json", upstream.requests[0].Header.Get("Accept"))
+	require.Equal(t, "text/event-stream", upstream.requests[0].Header.Get("Accept"))
 	require.Equal(t, "Bearer sk-test", upstream.requests[0].Header.Get("Authorization"))
 	body, readErr := io.ReadAll(upstream.requests[0].Body)
 	require.NoError(t, readErr)
 	require.Contains(t, string(body), `"model":"deepseek-ai/DeepSeek-V4-Flash"`)
-	require.Contains(t, string(body), `"stream":false`)
+	require.Contains(t, string(body), `"stream":true`)
 	require.Contains(t, recorder.Body.String(), `"text":"pong"`)
 	require.Contains(t, recorder.Body.String(), `"type":"test_complete"`)
 }

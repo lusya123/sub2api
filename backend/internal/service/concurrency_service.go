@@ -90,9 +90,6 @@ const (
 	// window so wait counters cannot expire while requests are still queued.
 	DefaultUserConcurrencyWaitSeconds = 30
 
-	// 默认等待队列额外槽位
-	defaultExtraWaitSlots = 20
-
 	defaultAccountLoadBatchCacheTTL = 200 * time.Millisecond
 	accountLoadBatchFetchTimeout    = 3 * time.Second
 	maxAccountLoadBatchCacheEntries = 256

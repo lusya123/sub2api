@@ -59,6 +59,10 @@ func (s *redeemTrialRepoStub) Update(ctx context.Context, code *RedeemCode) erro
 	panic("unexpected Update call")
 }
 
+func (s *redeemTrialRepoStub) BatchUpdate(ctx context.Context, ids []int64, fields RedeemCodeBatchUpdateFields) (int64, error) {
+	panic("unexpected BatchUpdate call")
+}
+
 func (s *redeemTrialRepoStub) Delete(ctx context.Context, id int64) error {
 	panic("unexpected Delete call")
 }
