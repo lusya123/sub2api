@@ -122,7 +122,7 @@ ensure_node() {
 download_helper() {
   local base="${OPENCLAW_INSTALLER_BASE:-https://xuedingtoken.com}"
   local target
-  target="$(mktemp "${TMPDIR:-/tmp}/install-openclaw.XXXXXX")"
+  target="$(mktemp "${TMPDIR:-/tmp}/install-openclaw.XXXXXX.js")"
 
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL "${base%/}/install-openclaw.js" -o "$target"

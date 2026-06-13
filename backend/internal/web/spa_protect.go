@@ -237,11 +237,16 @@ func spaProtectStaticAsset(path string) bool {
 	}
 	if strings.HasPrefix(path, "/assets/") ||
 		strings.HasPrefix(path, "/static/") ||
-		strings.HasPrefix(path, "/images/") {
+		strings.HasPrefix(path, "/images/") ||
+		strings.HasPrefix(path, "/downloads/") {
 		return true
 	}
 	switch path {
-	case "/favicon.ico", "/logo.png", "/robots.txt", "/sitemap.xml", "/manifest.json":
+	case "/favicon.ico", "/logo.png", "/robots.txt", "/sitemap.xml", "/manifest.json",
+		"/install-claude.sh", "/install-claude-ccswitch.sh",
+		"/install-claude-win.ps1", "/install-claude-ccswitch-win.ps1",
+		"/install-codex.sh", "/install-codex-win.ps1", "/install-codex-win-bootstrap.ps1",
+		"/install-openclaw.sh", "/install-openclaw-win.ps1", "/install-openclaw.js":
 		return true
 	}
 

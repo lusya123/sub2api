@@ -221,6 +221,7 @@ export interface PublicSettings {
   purchase_subscription_embedded_url?: string
   purchase_subscription_redirect_url?: string
   purchase_subscription_url?: string
+  model_health_page_enabled: boolean
   risk_control_enabled: boolean
   table_default_page_size: number
   table_page_size_options: number[]

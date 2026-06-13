@@ -82,3 +82,14 @@ func BackendModeAuthGuard(settingService *service.SettingService) gin.HandlerFun
 		c.Abort()
 	}
 }
+
+func ModelHealthPageGuard(settingService *service.SettingService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if settingService == nil || settingService.GetModelHealthPageRuntime(c.Request.Context()).Enabled {
+			c.Next()
+			return
+		}
+		response.Forbidden(c, "Model marketplace is disabled.")
+		c.Abort()
+	}
+}

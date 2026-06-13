@@ -5380,6 +5380,18 @@
             <div class="flex items-center justify-between">
               <div>
                 <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.channelMonitor.modelMarketplaceEnabled') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.channelMonitor.modelMarketplaceEnabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.model_health_page_enabled" />
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {{ t('admin.settings.features.channelMonitor.enabled') }}
                 </label>
                 <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -7223,6 +7235,7 @@ const form = reactive<SettingsForm>({
   purchase_subscription_embedded_url: "",
   purchase_subscription_redirect_url: "",
   purchase_subscription_url: "",
+  model_health_page_enabled: true,
   payment_enabled: false,
   risk_control_enabled: false,
   payment_min_amount: 1,
@@ -8424,6 +8437,7 @@ async function saveSettings() {
       purchase_subscription_redirect_url:
         form.purchase_subscription_redirect_url,
       purchase_subscription_url: form.purchase_subscription_embedded_url,
+      model_health_page_enabled: form.model_health_page_enabled,
       table_default_page_size: form.table_default_page_size,
       table_page_size_options: form.table_page_size_options,
       custom_menu_items: form.custom_menu_items,

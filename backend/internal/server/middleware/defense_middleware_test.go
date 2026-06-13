@@ -350,6 +350,66 @@ func TestGlobalRateLimiterBypassesPublicLogoAsset(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 }
 
+func TestGlobalRateLimiterBypassesInstallerDownloads(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	for _, path := range []string{
+		"/install-claude-ccswitch.sh",
+		"/install-codex-win-bootstrap.ps1",
+		"/install-openclaw.sh",
+		"/downloads/cc-switch/CC-Switch-XDT-Linux-x64.deb",
+	} {
+		path := path
+		router.GET(path, func(c *gin.Context) {
+			c.Status(http.StatusOK)
+		})
+	}
+
+	for _, path := range []string{
+		"/install-claude-ccswitch.sh",
+		"/install-codex-win-bootstrap.ps1",
+		"/install-openclaw.sh",
+		"/downloads/cc-switch/CC-Switch-XDT-Linux-x64.deb",
+	} {
+		for i := 0; i < 100; i++ {
+			rec := performDefenseRequest(router, http.MethodGet, path, nil, nil)
+			require.Equal(t, http.StatusOK, rec.Code, "%s request %d should bypass anonymous limiter", path, i+1)
+		}
+	}
+}
+
+func TestGlobalRateLimiterDoesNotBypassUnknownInstallerLikePath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+	t.Setenv("DEFENSE_FRONTEND_DOC_GLOBAL_PER_2S", "30")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/unknown-installer.sh", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for i := 0; i < 30; i++ {
+		rec := performDefenseRequest(router, http.MethodGet, "/unknown-installer.sh", nil, nil)
+		require.Equal(t, http.StatusOK, rec.Code, "unknown installer-like request %d should be under frontend document limit", i+1)
+	}
+	rec := performDefenseRequest(router, http.MethodGet, "/unknown-installer.sh", nil, nil)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+}
+
 func TestGlobalRateLimiterUsesGlobalOnlyLimitForFrontendDocuments(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")

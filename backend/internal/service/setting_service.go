@@ -987,6 +987,22 @@ func (s *SettingService) IsUserErrorViewAllowed(ctx context.Context) bool {
 	return vals[SettingKeyAllowUserViewErrorRequests] == "true"
 }
 
+// ModelHealthPageRuntime is the lightweight view of the user-facing model
+// marketplace/status page switch. Fail-open to preserve the historic default.
+type ModelHealthPageRuntime struct {
+	Enabled bool
+}
+
+func (s *SettingService) GetModelHealthPageRuntime(ctx context.Context) ModelHealthPageRuntime {
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyModelHealthPageEnabled})
+	if err != nil {
+		return ModelHealthPageRuntime{Enabled: true}
+	}
+	return ModelHealthPageRuntime{
+		Enabled: !isFalseSettingValue(vals[SettingKeyModelHealthPageEnabled]),
+	}
+}
+
 // GetAntigravityUserAgentVersion 返回 Antigravity 上游请求使用的版本号。
 // 后台设置优先；为空、缺失或非法时回退到 ANTIGRAVITY_USER_AGENT_VERSION / 内置默认值。
 func (s *SettingService) GetAntigravityUserAgentVersion(ctx context.Context) string {

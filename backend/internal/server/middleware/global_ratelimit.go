@@ -88,6 +88,10 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		if globalRateLimitStaticAsset(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
 		if isPublicCacheableAssetRequest(c) {
 			c.Next()
 			return
@@ -273,11 +277,16 @@ func globalRateLimitBypassFrontend(path string) bool {
 func globalRateLimitStaticAsset(path string) bool {
 	if strings.HasPrefix(path, "/assets/") ||
 		strings.HasPrefix(path, "/static/") ||
-		strings.HasPrefix(path, "/images/") {
+		strings.HasPrefix(path, "/images/") ||
+		strings.HasPrefix(path, "/downloads/") {
 		return true
 	}
 	switch path {
-	case "/favicon.ico", "/logo.png", "/robots.txt", "/sitemap.xml", "/manifest.json":
+	case "/favicon.ico", "/logo.png", "/robots.txt", "/sitemap.xml", "/manifest.json",
+		"/install-claude.sh", "/install-claude-ccswitch.sh",
+		"/install-claude-win.ps1", "/install-claude-ccswitch-win.ps1",
+		"/install-codex.sh", "/install-codex-win.ps1", "/install-codex-win-bootstrap.ps1",
+		"/install-openclaw.sh", "/install-openclaw-win.ps1", "/install-openclaw.js":
 		return true
 	}
 	staticExts := []string{

@@ -68,6 +68,12 @@ declare module 'vue-router' {
     requiresChatPage?: boolean
 
     /**
+     * Whether this route requires the user-facing model marketplace to be enabled
+     * @default false
+     */
+    requiresModelMarketplace?: boolean
+
+    /**
      * i18n key for the page title
      */
     titleKey?: string

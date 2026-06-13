@@ -13,6 +13,7 @@ describe('primary Use Token navigation', () => {
   it('wires Use Token into desktop and mobile primary navigation behind the chat-page flag', () => {
     for (const source of [headerSource, bottomNavSource]) {
       expect(source).toContain('FeatureFlags.chatPage')
+      expect(source).toContain('FeatureFlags.modelMarketplace')
       expect(source).toContain("path: '/chat'")
       expect(source).toContain("label: t('nav.useToken')")
       expect(source).toContain("route.path === '/chat' || route.path === '/use-token'")

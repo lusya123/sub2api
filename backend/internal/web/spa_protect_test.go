@@ -105,6 +105,22 @@ func TestSPAProtectBypassesTrustedTraffic(t *testing.T) {
 			name: "static asset",
 			path: "/assets/index.js",
 		},
+		{
+			name: "claude installer",
+			path: "/install-claude-ccswitch.sh",
+		},
+		{
+			name: "codex installer",
+			path: "/install-codex-win-bootstrap.ps1",
+		},
+		{
+			name: "openclaw installer",
+			path: "/install-openclaw.sh",
+		},
+		{
+			name: "downloaded package",
+			path: "/downloads/cc-switch/CC-Switch-XDT-Linux-x64.deb",
+		},
 	}
 
 	for _, tt := range tests {

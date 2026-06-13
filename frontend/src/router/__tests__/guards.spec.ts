@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import { readFileSync } from 'node:fs'
 import { adminHomePath, canAccessAdminState } from '@/modules/adminAccess'
 import { resolveCompletedSetupRedirectPath } from '@/router/setupRedirect'
 
@@ -570,5 +571,17 @@ describe('路由守卫逻辑', () => {
       const redirect = simulateGuard('/email-verify', { requiresAuth: false }, authState)
       expect(redirect).toBe('/login')
     })
+  })
+})
+
+describe('模型广场路由开关', () => {
+  it('forces a fresh public settings fetch before allowing /model-marketplace', () => {
+    const routerSource = readFileSync(
+      'src/router/index.ts',
+      'utf8',
+    )
+
+    expect(routerSource).toContain('requiresModelMarketplace: true')
+    expect(routerSource).toContain('appStore.fetchPublicSettings(true)')
   })
 })

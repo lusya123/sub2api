@@ -6386,6 +6386,8 @@ export default {
           title: 'Channel Monitor',
           description: 'Periodically probe configured channels and surface availability / latency to users. Turning it off stops the scheduler and returns an empty list on the user page.',
           configureLink: 'Configure monitors in Channel Management > Channel Monitor',
+          modelMarketplaceEnabled: 'Show Model Marketplace to regular users',
+          modelMarketplaceEnabledHint: 'When off, the top and bottom Model Marketplace entries are hidden, and direct page/API access is blocked.',
           enabled: 'Enable Channel Monitor',
           enabledHint: 'Disabling stops background checks; existing history is preserved.',
           defaultInterval: 'Default check interval (seconds)',

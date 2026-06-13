@@ -132,7 +132,7 @@ func RegisterUserRoutes(
 		}
 
 		// 模型广场（用户只读，独立于渠道监控）
-		marketplace := authenticated.Group("/model-marketplace")
+		marketplace := authenticated.Group("/model-marketplace", middleware.ModelHealthPageGuard(settingService))
 		{
 			marketplace.GET("", h.ModelMarketplace.List)
 			marketplace.GET("/exchange-rate", h.ModelMarketplace.ExchangeRate)

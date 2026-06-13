@@ -6546,6 +6546,8 @@ export default {
           title: '渠道监控',
           description: '定期对配置的渠道发起健康检查，向用户展示可用性与延迟。关闭后调度器停止扫描，用户端列表为空。',
           configureLink: '前往 渠道管理 > 渠道监控 配置监控项',
+          modelMarketplaceEnabled: '向普通用户显示模型广场',
+          modelMarketplaceEnabledHint: '关闭后顶部/底部“模型广场”入口隐藏，用户直接访问页面或接口也会被拦截。',
           enabled: '启用渠道监控',
           enabledHint: '关闭后后台不再执行定时检测，已有数据保留。',
           defaultInterval: '默认检测间隔（秒）',

@@ -44,14 +44,16 @@ const primaryTopNavItems = computed(() => {
     path: consolePath.value,
     label: t('nav.console'),
     icon: 'home' as const,
-  },
-  {
-    key: 'marketplace',
-    path: '/model-marketplace',
-    label: t('nav.modelMarketplace'),
-    icon: 'grid' as const,
-  },
-  ]
+  }]
+
+  if (isFeatureFlagEnabled(FeatureFlags.modelMarketplace)) {
+    items.push({
+      key: 'marketplace',
+      path: '/model-marketplace',
+      label: t('nav.modelMarketplace'),
+      icon: 'grid' as const,
+    })
+  }
 
   if (isFeatureFlagEnabled(FeatureFlags.chatPage) || isFeatureFlagEnabled(FeatureFlags.agentPage)) {
     items.push({

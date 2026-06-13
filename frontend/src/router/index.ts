@@ -198,6 +198,7 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
+      requiresModelMarketplace: true,
       title: 'Model Marketplace',
       titleKey: 'modelMarketplaceStatus.title',
       descriptionKey: 'modelMarketplaceStatus.description'
@@ -975,6 +976,14 @@ router.beforeEach(async (to, _from, next) => {
     }
     if (!isFeatureFlagEnabled(FeatureFlags.chatPage) && !isFeatureFlagEnabled(FeatureFlags.agentPage)) {
       next(adminSettingsOrHomePath({ isAdmin: authStore.isAdmin, isOperator: authStore.isOperator }))
+      return
+    }
+  }
+
+  if (to.meta.requiresModelMarketplace) {
+    await appStore.fetchPublicSettings(true)
+    if (!isFeatureFlagEnabled(FeatureFlags.modelMarketplace)) {
+      next(adminHomePath(authStore.canAccessAdmin))
       return
     }
   }

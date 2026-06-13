@@ -12,7 +12,7 @@
           <router-link :to="consolePath" class="use-token-nav__item">
             {{ t('nav.console') }}
           </router-link>
-          <router-link to="/model-marketplace" class="use-token-nav__item">
+          <router-link v-if="modelMarketplaceEnabled" to="/model-marketplace" class="use-token-nav__item">
             {{ t('nav.modelMarketplace') }}
           </router-link>
         </nav>
@@ -173,6 +173,7 @@ import { chatAPI, keysAPI } from '@/api'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import type { LobeProviderConfig } from '@/api/chat'
 import type { ApiKey } from '@/types'
 
@@ -199,6 +200,7 @@ const authStore = useAuthStore()
 const siteName = computed(() => appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => appStore.siteLogo)
 const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
+const modelMarketplaceEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelMarketplace))
 const consolePath = computed(() => (authStore.canAccessAdmin ? '/admin/dashboard' : '/dashboard'))
 
 const providers = ref<LobeProviderConfig[]>([])
