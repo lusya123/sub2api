@@ -362,7 +362,9 @@ export const useAppStore = defineStore('app', () => {
         agent_page_enabled: true,
         agent_page_url: '',
         risk_control_enabled: false,
+        service_quota_enabled: false,
         affiliate_enabled: false,
+        allow_user_view_error_requests: false,
       }
     }
 

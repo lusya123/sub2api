@@ -264,6 +264,10 @@ func (s *stubAdminService) GetAllGroupsByPlatform(ctx context.Context, platform 
 	return s.groups, nil
 }
 
+func (s *stubAdminService) GetAllGroupsIncludingInactive(ctx context.Context) ([]service.Group, error) {
+	return s.groups, nil
+}
+
 func (s *stubAdminService) GetGroup(ctx context.Context, id int64) (*service.Group, error) {
 	group := service.Group{ID: id, Name: "group", Status: service.StatusActive}
 	return &group, nil
@@ -630,6 +634,10 @@ func (s *stubAdminService) ReplaceUserGroup(ctx context.Context, userID, oldGrou
 
 func (s *stubAdminService) UpdateUserRole(ctx context.Context, id int64, role string) (*service.User, error) {
 	return &service.User{ID: id, Role: role}, nil
+}
+
+func (s *stubAdminService) RevertAccountProxyFallback(ctx context.Context, id int64) error {
+	return nil
 }
 
 // Ensure stub implements interface.
