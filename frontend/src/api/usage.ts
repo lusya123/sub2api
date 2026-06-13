@@ -9,8 +9,6 @@ import type {
   UsageQueryParams,
   UsageStatsResponse,
   PaginatedResponse,
-  TrendDataPoint,
-  ModelStat,
   UserErrorRequest,
   UserErrorRequestDetail,
   UserErrorListParams

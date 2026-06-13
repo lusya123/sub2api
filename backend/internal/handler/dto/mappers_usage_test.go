@@ -8,6 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func requireJSONFieldAbsent(t *testing.T, payload []byte, field string) {
+	t.Helper()
+
+	var object map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(payload, &object))
+	require.NotContains(t, object, field)
+}
+
 func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	t.Parallel()
 
@@ -152,12 +160,12 @@ func TestUsageLogFromService_HidesBillingInternalsFromUserJSON(t *testing.T) {
 	userJSON, err := json.Marshal(UsageLogFromService(log))
 	require.NoError(t, err)
 	require.Contains(t, string(userJSON), `"actual_cost":0.8`)
-	require.NotContains(t, string(userJSON), "input_cost")
-	require.NotContains(t, string(userJSON), "output_cost")
-	require.NotContains(t, string(userJSON), "cache_creation_cost")
-	require.NotContains(t, string(userJSON), "cache_read_cost")
-	require.NotContains(t, string(userJSON), "total_cost")
-	require.NotContains(t, string(userJSON), "rate_multiplier")
+	requireJSONFieldAbsent(t, userJSON, "input_cost")
+	requireJSONFieldAbsent(t, userJSON, "output_cost")
+	requireJSONFieldAbsent(t, userJSON, "cache_creation_cost")
+	requireJSONFieldAbsent(t, userJSON, "cache_read_cost")
+	requireJSONFieldAbsent(t, userJSON, "total_cost")
+	requireJSONFieldAbsent(t, userJSON, "rate_multiplier")
 
 	adminJSON, err := json.Marshal(UsageLogFromServiceAdmin(log))
 	require.NoError(t, err)
@@ -213,8 +221,8 @@ func TestUsageLogFromService_UsesSnapshotOverCurrentGroupSetting(t *testing.T) {
 	userJSON, err := json.Marshal(UsageLogFromService(log))
 	require.NoError(t, err)
 	require.Contains(t, string(userJSON), `"show_cost_breakdown":false`)
-	require.NotContains(t, string(userJSON), "input_cost")
-	require.NotContains(t, string(userJSON), "output_cost")
+	requireJSONFieldAbsent(t, userJSON, "input_cost")
+	requireJSONFieldAbsent(t, userJSON, "output_cost")
 }
 
 func TestUsageLogFromService_FallsBackToLegacyModelWhenRequestedModelMissing(t *testing.T) {
