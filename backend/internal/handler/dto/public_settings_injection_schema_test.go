@@ -33,6 +33,8 @@ func TestPublicSettingsInjectionPayload_SchemaDoesNotDrift(t *testing.T) {
 		"sora_client_enabled": "upstream-only field, not used on this fork",
 		// force_email_on_third_party_signup lives on the DTO but is not injected via SSR.
 		"force_email_on_third_party_signup": "auth-source default, not a feature flag",
+		// customer_service_qrcode can be a large inline image; pages that display it fetch public settings.
+		"customer_service_qrcode": "large optional image, avoid inflating every injected HTML response",
 	}
 
 	var missing []string

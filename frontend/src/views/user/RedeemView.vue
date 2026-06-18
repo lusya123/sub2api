@@ -193,6 +193,12 @@
                 </li>
                 <li>{{ t('redeem.codeRule4') }}</li>
               </ul>
+              <img
+                v-if="customerServiceQrcode"
+                :src="customerServiceQrcode"
+                alt=""
+                class="mt-4 h-28 w-28 rounded border border-primary-200 bg-white object-contain p-1 dark:border-primary-800 dark:bg-dark-900"
+              />
             </div>
           </div>
         </div>
@@ -376,6 +382,7 @@ const errorMessage = ref('')
 const history = ref<RedeemHistoryItem[]>([])
 const loadingHistory = ref(false)
 const contactInfo = ref('')
+const customerServiceQrcode = ref('')
 
 // Helper functions for history display
 const isBalanceType = (type: string) => {
@@ -486,6 +493,7 @@ onMounted(async () => {
   try {
     const settings = await authAPI.getPublicSettings()
     contactInfo.value = settings.contact_info || ''
+    customerServiceQrcode.value = settings.customer_service_qrcode || ''
   } catch (error) {
     console.error('Failed to load contact info:', error)
   }

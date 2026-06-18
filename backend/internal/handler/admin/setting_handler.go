@@ -216,6 +216,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		SiteSubtitle:                           settings.SiteSubtitle,
 		APIBaseURL:                             settings.APIBaseURL,
 		ContactInfo:                            settings.ContactInfo,
+		CustomerServiceQRCode:                  settings.CustomerServiceQRCode,
 		DocURL:                                 settings.DocURL,
 		HomeContent:                            settings.HomeContent,
 		HideCcsImportButton:                    settings.HideCcsImportButton,
@@ -506,6 +507,7 @@ type UpdateSettingsRequest struct {
 	SiteSubtitle                    string                `json:"site_subtitle"`
 	APIBaseURL                      string                `json:"api_base_url"`
 	ContactInfo                     string                `json:"contact_info"`
+	CustomerServiceQRCode           string                `json:"customer_service_qrcode"`
 	DocURL                          string                `json:"doc_url"`
 	HomeContent                     string                `json:"home_content"`
 	HideCcsImportButton             bool                  `json:"hide_ccs_import_button"`
@@ -1612,6 +1614,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SiteSubtitle:                     req.SiteSubtitle,
 		APIBaseURL:                       req.APIBaseURL,
 		ContactInfo:                      req.ContactInfo,
+		CustomerServiceQRCode:            req.CustomerServiceQRCode,
 		DocURL:                           req.DocURL,
 		HomeContent:                      req.HomeContent,
 		HideCcsImportButton:              req.HideCcsImportButton,
@@ -2100,6 +2103,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SiteSubtitle:                           updatedSettings.SiteSubtitle,
 		APIBaseURL:                             updatedSettings.APIBaseURL,
 		ContactInfo:                            updatedSettings.ContactInfo,
+		CustomerServiceQRCode:                  updatedSettings.CustomerServiceQRCode,
 		DocURL:                                 updatedSettings.DocURL,
 		HomeContent:                            updatedSettings.HomeContent,
 		HideCcsImportButton:                    updatedSettings.HideCcsImportButton,
@@ -2504,6 +2508,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.ContactInfo != after.ContactInfo {
 		changed = append(changed, "contact_info")
+	}
+	if before.CustomerServiceQRCode != after.CustomerServiceQRCode {
+		changed = append(changed, "customer_service_qrcode")
 	}
 	if before.DocURL != after.DocURL {
 		changed = append(changed, "doc_url")

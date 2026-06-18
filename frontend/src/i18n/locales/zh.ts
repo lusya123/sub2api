@@ -6937,6 +6937,8 @@ export default {
         contactInfo: '客服联系方式',
         contactInfoPlaceholder: '例如：QQ: 123456789',
         contactInfoHint: '填写客服联系方式，将展示在兑换页面、个人资料等位置',
+        customerServiceQrcode: '客服微信二维码',
+        customerServiceQrcodeHint: '上传官方客服微信二维码，建议使用 PNG/JPG/WebP 格式，最大 500KB。',
         docUrl: '文档链接',
         docUrlHint: '文档网站的链接。留空则隐藏文档链接。',
         docUrlPlaceholder: 'https://docs.example.com',

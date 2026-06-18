@@ -4712,6 +4712,23 @@
                 </p>
               </div>
 
+              <!-- Customer Service WeChat QR Code -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.site.customerServiceQrcode") }}
+                </label>
+                <ImageUpload
+                  v-model="form.customer_service_qrcode"
+                  mode="image"
+                  :upload-label="t('admin.settings.site.uploadImage')"
+                  :remove-label="t('admin.settings.site.remove')"
+                  :hint="t('admin.settings.site.customerServiceQrcodeHint')"
+                  :max-size="500 * 1024"
+                />
+              </div>
+
               <!-- Doc URL -->
               <div>
                 <label
@@ -7226,6 +7243,7 @@ const form = reactive<SettingsForm>({
   site_subtitle: "Subscription to API Conversion Platform",
   api_base_url: "",
   contact_info: "",
+  customer_service_qrcode: "",
   doc_url: "",
   home_content: "",
   backend_mode_enabled: false,
@@ -8426,6 +8444,7 @@ async function saveSettings() {
       site_subtitle: form.site_subtitle,
       api_base_url: form.api_base_url,
       contact_info: form.contact_info,
+      customer_service_qrcode: form.customer_service_qrcode,
       doc_url: form.doc_url,
       home_content: form.home_content,
       backend_mode_enabled: form.backend_mode_enabled,

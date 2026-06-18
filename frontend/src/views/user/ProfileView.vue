@@ -16,19 +16,25 @@
       />
 
       <div
-        v-if="contactInfo"
+        v-if="contactInfo || customerServiceQrcode"
         class="card border-primary-200 bg-primary-50 p-6 dark:bg-primary-900/20"
       >
-        <div class="flex items-center gap-4">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div class="rounded-xl bg-primary-100 p-3 text-primary-600">
             <Icon name="chat" size="lg" />
           </div>
-          <div>
+          <div class="min-w-0 flex-1">
             <h3 class="font-semibold text-primary-800 dark:text-primary-200">
               {{ t('common.contactSupport') }}
             </h3>
-            <p class="text-sm font-medium">{{ contactInfo }}</p>
+            <p v-if="contactInfo" class="break-words text-sm font-medium">{{ contactInfo }}</p>
           </div>
+          <img
+            v-if="customerServiceQrcode"
+            :src="customerServiceQrcode"
+            alt=""
+            class="h-28 w-28 flex-shrink-0 rounded border border-primary-200 bg-white object-contain p-1 dark:border-primary-800 dark:bg-dark-900"
+          />
         </div>
       </div>
 
@@ -76,18 +82,20 @@ const wechatOAuthOpenEnabled = ref<boolean | undefined>(undefined)
 const wechatOAuthMPEnabled = ref<boolean | undefined>(undefined)
 const oidcOAuthEnabled = ref(false)
 const oidcOAuthProviderName = ref('OIDC')
+const customerServiceQrcode = ref('')
 
 onMounted(async () => {
   const profileRefresh = authStore.refreshUser().catch((error) => {
     console.error('Failed to refresh profile:', error)
   })
 
-  const settingsLoad = appStore.fetchPublicSettings()
+  const settingsLoad = appStore.fetchPublicSettings(true)
     .then((settings) => {
       if (!settings) {
         return
       }
       contactInfo.value = settings.contact_info || ''
+      customerServiceQrcode.value = settings.customer_service_qrcode || ''
       balanceLowNotifyEnabled.value = settings.balance_low_notify_enabled ?? false
       systemDefaultThreshold.value = settings.balance_low_notify_threshold ?? 0
       linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled ?? false
