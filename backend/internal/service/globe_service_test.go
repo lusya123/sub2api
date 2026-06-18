@@ -27,6 +27,7 @@ func TestGlobeServiceNoDBReturnsEmptySnapshots(t *testing.T) {
 	snap := s.Snapshot()
 	if snap == nil {
 		t.Fatal("expected non-nil snapshot from no-DB service")
+		return
 	}
 	if snap.ServerLocation == nil || snap.ServerLocation.Label == "" {
 		t.Fatal("expected fallback server location to be populated")

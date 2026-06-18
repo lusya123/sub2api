@@ -532,13 +532,15 @@ type AdminUsageLog struct {
 
 // UsageStats 是普通用户接口使用的 usage stats DTO（只包含最终扣费口径）。
 type UsageStats struct {
-	TotalRequests     int64   `json:"total_requests"`
-	TotalInputTokens  int64   `json:"total_input_tokens"`
-	TotalOutputTokens int64   `json:"total_output_tokens"`
-	TotalCacheTokens  int64   `json:"total_cache_tokens"`
-	TotalTokens       int64   `json:"total_tokens"`
-	TotalActualCost   float64 `json:"total_actual_cost"`
-	AverageDurationMs float64 `json:"average_duration_ms"`
+	TotalRequests            int64   `json:"total_requests"`
+	TotalInputTokens         int64   `json:"total_input_tokens"`
+	TotalOutputTokens        int64   `json:"total_output_tokens"`
+	TotalCacheTokens         int64   `json:"total_cache_tokens"`
+	TotalCacheCreationTokens int64   `json:"total_cache_creation_tokens"`
+	TotalCacheReadTokens     int64   `json:"total_cache_read_tokens"`
+	TotalTokens              int64   `json:"total_tokens"`
+	TotalActualCost          float64 `json:"total_actual_cost"`
+	AverageDurationMs        float64 `json:"average_duration_ms"`
 }
 
 // UserDashboardStats 是普通用户接口使用的 dashboard stats DTO（只包含最终扣费口径）。

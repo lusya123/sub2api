@@ -697,13 +697,15 @@ func UsageStatsFromService(stats *service.UsageStats) *UsageStats {
 		return nil
 	}
 	return &UsageStats{
-		TotalRequests:     stats.TotalRequests,
-		TotalInputTokens:  stats.TotalInputTokens,
-		TotalOutputTokens: stats.TotalOutputTokens,
-		TotalCacheTokens:  stats.TotalCacheTokens,
-		TotalTokens:       stats.TotalTokens,
-		TotalActualCost:   stats.TotalActualCost,
-		AverageDurationMs: stats.AverageDurationMs,
+		TotalRequests:            stats.TotalRequests,
+		TotalInputTokens:         stats.TotalInputTokens,
+		TotalOutputTokens:        stats.TotalOutputTokens,
+		TotalCacheTokens:         stats.TotalCacheTokens,
+		TotalCacheCreationTokens: stats.TotalCacheCreationTokens,
+		TotalCacheReadTokens:     stats.TotalCacheReadTokens,
+		TotalTokens:              stats.TotalTokens,
+		TotalActualCost:          stats.TotalActualCost,
+		AverageDurationMs:        stats.AverageDurationMs,
 	}
 }
 

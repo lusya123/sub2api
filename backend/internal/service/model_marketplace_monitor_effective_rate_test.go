@@ -50,6 +50,7 @@ func TestModelMarketplacePricingOverride(t *testing.T) {
 	pricing := modelMarketplacePricingOverrideFor(cfgs, "missing-default-price-model")
 	if pricing == nil {
 		t.Fatal("pricing override = nil")
+		return
 	}
 	if pricing.InputPrice == nil || *pricing.InputPrice != input/1_000_000 {
 		t.Fatalf("input price = %v, want %v", pricing.InputPrice, input/1_000_000)
