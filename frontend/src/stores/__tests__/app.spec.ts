@@ -259,6 +259,7 @@ describe('useAppStore', () => {
         site_logo: '/logo.png',
         version: '1.0.0',
         contact_info: 'test@test.com',
+        customer_service_qrcode: 'data:image/png;base64,qr',
         api_base_url: 'https://api.test.com',
         doc_url: 'https://docs.test.com',
       }
@@ -270,6 +271,7 @@ describe('useAppStore', () => {
       expect(store.siteName).toBe('TestSite')
       expect(store.siteLogo).toBe('/logo.png')
       expect(store.siteVersion).toBe('1.0.0')
+      expect(store.customerServiceQrcode).toBe('data:image/png;base64,qr')
       expect(store.publicSettingsLoaded).toBe(true)
     })
 
@@ -310,6 +312,7 @@ describe('useAppStore', () => {
         site_subtitle: '',
         api_base_url: '',
         contact_info: '',
+        customer_service_qrcode: 'data:image/png;base64,updated',
         doc_url: '',
         home_content: '',
         hide_ccs_import_button: false,
@@ -329,6 +332,7 @@ describe('useAppStore', () => {
 
       expect((window as any).__APP_CONFIG__.table_default_page_size).toBe(1000)
       expect((window as any).__APP_CONFIG__.table_page_size_options).toEqual([20, 100, 1000])
+      expect(store.customerServiceQrcode).toBe('data:image/png;base64,updated')
       expect(localStorage.getItem('table-page-size')).toBeNull()
       expect(localStorage.getItem('table-page-size-source')).toBeNull()
     })

@@ -24,4 +24,11 @@ describe('primary Use Token navigation', () => {
     expect(sidebarSource).not.toContain("path: '/chat'")
     expect(sidebarSource).not.toContain("label: t('nav.chat')")
   })
+
+  it('shows the configured customer service QR code from the right user menu', () => {
+    expect(headerSource).toContain('customerServiceQrcode')
+    expect(headerSource).toContain('openCustomerServiceQrcode')
+    expect(headerSource).toContain('customerServiceQrcodeOpen')
+    expect(headerSource).toContain('<Teleport to="body">')
+  })
 })

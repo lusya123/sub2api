@@ -182,27 +182,44 @@
 
               <!-- Contact Support (only show if configured) -->
               <div
-                v-if="contactInfo"
+                v-if="contactInfo || customerServiceQrcode"
                 class="border-t border-gray-100 px-4 py-2.5 dark:border-dark-700"
               >
-                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <svg
-                    class="h-3.5 w-3.5 flex-shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="1.5"
+                <div class="flex items-start gap-3">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <svg
+                        class="h-3.5 w-3.5 flex-shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"
+                        />
+                      </svg>
+                      <span>{{ t('common.contactSupport') }}</span>
+                    </div>
+                    <p v-if="contactInfo" class="mt-1 break-words text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ contactInfo }}
+                    </p>
+                  </div>
+                  <button
+                    v-if="customerServiceQrcode"
+                    type="button"
+                    class="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-white p-1 transition hover:border-primary-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800 dark:hover:border-primary-500"
+                    :aria-label="t('common.contactSupport')"
+                    @click.stop="openCustomerServiceQrcode"
                   >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"
-                    />
-                  </svg>
-                  <span>{{ t('common.contactSupport') }}:</span>
-                  <span class="font-medium text-gray-700 dark:text-gray-300">{{
-                    contactInfo
-                  }}</span>
+                    <img
+                      :src="customerServiceQrcode"
+                      :alt="t('common.contactSupport')"
+                      class="h-full w-full object-contain"
+                    >
+                  </button>
                 </div>
               </div>
 
@@ -244,6 +261,43 @@
       </div>
     </div>
   </header>
+
+  <Teleport to="body">
+    <div
+      v-if="customerServiceQrcodeOpen && customerServiceQrcode"
+      class="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="t('common.contactSupport')"
+      @click.self="closeCustomerServiceQrcode"
+    >
+      <section class="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl dark:bg-dark-800">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+            {{ t('common.contactSupport') }}
+          </h2>
+          <button
+            type="button"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-dark-300 dark:hover:bg-dark-700 dark:hover:text-white"
+            :aria-label="t('common.close')"
+            @click="closeCustomerServiceQrcode"
+          >
+            <Icon name="x" size="sm" :stroke-width="1.8" />
+          </button>
+        </div>
+        <div class="rounded-lg border border-gray-100 bg-white p-3 dark:border-dark-700">
+          <img
+            :src="customerServiceQrcode"
+            :alt="t('common.contactSupport')"
+            class="mx-auto aspect-square w-full max-w-72 object-contain"
+          >
+        </div>
+        <p v-if="contactInfo" class="mt-3 break-words text-center text-sm text-gray-600 dark:text-dark-300">
+          {{ contactInfo }}
+        </p>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -277,6 +331,8 @@ const user = computed(() => authStore.user)
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
+const customerServiceQrcode = computed(() => appStore.customerServiceQrcode?.trim() || '')
+const customerServiceQrcodeOpen = ref(false)
 const docUrl = computed(() => appStore.docUrl)
 const siteName = computed(() => appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => appStore.siteLogo)
@@ -392,6 +448,15 @@ function closeDropdown() {
   dropdownOpen.value = false
 }
 
+function openCustomerServiceQrcode() {
+  customerServiceQrcodeOpen.value = true
+  closeDropdown()
+}
+
+function closeCustomerServiceQrcode() {
+  customerServiceQrcodeOpen.value = false
+}
+
 async function handleLogout() {
   closeDropdown()
   try {
@@ -414,14 +479,28 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeCustomerServiceQrcode()
+  }
+}
+
+watch(customerServiceQrcode, (value) => {
+  if (!value) {
+    closeCustomerServiceQrcode()
+  }
+})
+
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('keydown', handleKeydown)
   nextTick(updateIndicator)
   window.addEventListener('resize', updateIndicator)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', updateIndicator)
 })
 </script>
