@@ -13,6 +13,10 @@ func OperatorRouteAllowed(method, fullPath, rawPath string) bool {
 	}
 	path = strings.TrimSpace(path)
 
+	if path == "/api/v1/admin/compliance" || strings.HasPrefix(path, "/api/v1/admin/compliance/") {
+		return method == "GET" || method == "POST"
+	}
+
 	if strings.HasPrefix(path, "/api/v1/admin/dashboard") {
 		if method == "GET" {
 			return true

@@ -14,6 +14,10 @@ func TestOperatorRouteAllowed(t *testing.T) {
 		want   bool
 	}{
 		{name: "dashboard read", method: "GET", path: "/api/v1/admin/dashboard", want: true},
+		{name: "compliance status allowed", method: "GET", path: "/api/v1/admin/compliance", want: true},
+		{name: "compliance accept allowed", method: "POST", path: "/api/v1/admin/compliance/accept", want: true},
+		{name: "compliance unsupported write denied", method: "PUT", path: "/api/v1/admin/compliance/accept", want: false},
+		{name: "compliance lookalike denied", method: "GET", path: "/api/v1/admin/compliance-settings", want: false},
 		{name: "operations read allowed", method: "GET", path: "/api/v1/admin/operations/snapshot", want: true},
 		{name: "operations write denied", method: "POST", path: "/api/v1/admin/operations/snapshot", want: false},
 		{name: "usage read", method: "GET", path: "/api/v1/admin/usage", want: true},

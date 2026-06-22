@@ -13,6 +13,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAdminPermissionGuardAllowsOperatorComplianceRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{name: "status", method: http.MethodGet, path: "/api/v1/admin/compliance", wantStatus: http.StatusOK},
+		{name: "accept", method: http.MethodPost, path: "/api/v1/admin/compliance/accept", wantStatus: http.StatusOK},
+		{name: "unsupported method", method: http.MethodPut, path: "/api/v1/admin/compliance/accept", wantStatus: http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.New()
+			r.Use(func(c *gin.Context) {
+				c.Set(string(ContextKeyUserRole), service.RoleOperator)
+				c.Next()
+			})
+			r.Use(AdminPermissionGuard())
+			r.Handle(tt.method, tt.path, func(c *gin.Context) {
+				c.String(http.StatusOK, "ok")
+			})
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+		})
+	}
+}
+
 func TestAdminAuditMiddlewareRecordsRedactedRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &captureAdminAuditRepo{}
