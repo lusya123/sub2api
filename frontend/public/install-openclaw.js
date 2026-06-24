@@ -6,6 +6,8 @@ import path from 'node:path';
 import cp from 'node:child_process';
 
 const REQUIRED_NODE_VERSION = '22.16.0';
+const CURRENT_OFFICIAL_BASE_URL = 'https://xuedingtoken1.com';
+const LEGACY_OFFICIAL_BASE_URL = 'https://xuedingtoken.com';
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -13,6 +15,14 @@ function requiredEnv(name) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value.trim();
+}
+
+function migrateOfficialBaseUrl(value) {
+  const normalized = value.trim().replace(/\/+$/, '');
+  if (normalized === LEGACY_OFFICIAL_BASE_URL || normalized.startsWith(`${LEGACY_OFFICIAL_BASE_URL}/`)) {
+    return `${CURRENT_OFFICIAL_BASE_URL}${normalized.slice(LEGACY_OFFICIAL_BASE_URL.length)}`;
+  }
+  return normalized;
 }
 
 function versionAtLeast(current, required) {
@@ -192,7 +202,7 @@ function restartGateway() {
 
 function main() {
   const token = requiredEnv('OPENCLAW_TOKEN');
-  const baseUrl = requiredEnv('OPENCLAW_BASE_URL');
+  const baseUrl = migrateOfficialBaseUrl(requiredEnv('OPENCLAW_BASE_URL'));
   const modelKey = requiredEnv('OPENCLAW_MODEL');
 
   ensureSupportedNode();

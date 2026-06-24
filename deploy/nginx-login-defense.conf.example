@@ -1,5 +1,5 @@
 # Copy the http-level block into nginx.conf http {} and the location block into
-# the xuedingtoken.com server {} that proxies Sub2API.
+# the xuedingtoken1.com server {} that proxies Sub2API.
 #
 # If your CDN sends the real visitor IP in a different header, replace
 # $http_x_real_ip with that header.

@@ -1,7 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$script:XdtOfficialApiUrl = 'https://xuedingtoken.com/v1'
-$script:XdtAllowedApiHosts = @('xuedingtoken.com')
+$script:XdtOfficialApiUrl = 'https://xuedingtoken1.com/v1'
+$script:XdtAllowedApiHosts = @('xuedingtoken1.com')
+$script:XdtCurrentOfficialBaseUrl = 'https://xuedingtoken1.com'
+$script:XdtLegacyOfficialBaseUrl = 'https://xuedingtoken.com'
 
 function Write-XdtLog([string]$Message) {
   Write-Host "[XueDingToken] $Message"
@@ -9,6 +11,14 @@ function Write-XdtLog([string]$Message) {
 
 function Fail-Xdt([string]$Message) {
   throw "[XueDingToken] $Message"
+}
+
+function Convert-XdtOfficialUrl([string]$Value) {
+  $normalized = $Value.Trim().TrimEnd('/')
+  if ($normalized -eq $script:XdtLegacyOfficialBaseUrl -or $normalized.StartsWith($script:XdtLegacyOfficialBaseUrl + '/')) {
+    return $script:XdtCurrentOfficialBaseUrl + $normalized.Substring($script:XdtLegacyOfficialBaseUrl.Length)
+  }
+  return $normalized
 }
 
 function Require-Token {
@@ -35,7 +45,7 @@ function Normalize-Url([string]$Value) {
     }
   }
 
-  $normalized = $Value.Trim().TrimEnd('/')
+  $normalized = Convert-XdtOfficialUrl $Value
   if ($normalized -match '^https?://[^/]+$') {
     $normalized = "$normalized/v1"
   }
@@ -428,7 +438,7 @@ function Ensure-WebView2Runtime {
   Write-XdtLog 'Installing Microsoft Edge WebView2 Runtime'
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   $baseUrl = if ([string]::IsNullOrWhiteSpace($env:XDT_INSTALLER_BASE)) {
-    'https://xuedingtoken.com'
+    'https://xuedingtoken1.com'
   } else {
     $env:XDT_INSTALLER_BASE.TrimEnd('/')
   }
@@ -901,7 +911,7 @@ function Invoke-XdtImport([string]$CcSwitch, [string]$ApiUrl, [string]$Token) {
     '--app', 'codex',
     '--endpoint', $ApiUrl,
     '--api-key', $Token,
-    '--homepage', 'https://xuedingtoken.com',
+    '--homepage', 'https://xuedingtoken1.com',
     '--icon', 'codex',
     '--switch'
   )
@@ -1176,7 +1186,7 @@ function Install-XdtCcSwitchForWindows {
   $arch = Get-XdtCcSwitchWindowsPackageArch
   Write-XdtLog "Using Windows $arch package for CC Switch"
   $baseUrl = if ([string]::IsNullOrWhiteSpace($env:XDT_INSTALLER_BASE)) {
-    'https://xuedingtoken.com'
+    'https://xuedingtoken1.com'
   } else {
     $env:XDT_INSTALLER_BASE.TrimEnd('/')
   }

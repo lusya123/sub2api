@@ -13,7 +13,9 @@ import (
 	"strings"
 )
 
-const officialAPIURL = "https://xuedingtoken.com/v1"
+const officialAPIURL = "https://xuedingtoken1.com/v1"
+const currentOfficialBaseURL = "https://xuedingtoken1.com"
+const legacyOfficialBaseURL = "https://xuedingtoken.com"
 
 var embeddedScriptB64 string
 var payloadSHA256 string
@@ -102,11 +104,18 @@ func rejectCustomEndpoint(value string) error {
 	if value == "" {
 		return nil
 	}
-	value = strings.TrimRight(value, "/")
-	if value == "https://xuedingtoken.com" || value == officialAPIURL {
+	value = migrateOfficialBaseURL(strings.TrimRight(value, "/"))
+	if value == currentOfficialBaseURL || value == officialAPIURL {
 		return nil
 	}
 	return fmt.Errorf("this installer is locked to %s and does not support custom API endpoints", officialAPIURL)
+}
+
+func migrateOfficialBaseURL(value string) string {
+	if value == legacyOfficialBaseURL || strings.HasPrefix(value, legacyOfficialBaseURL+"/") {
+		return currentOfficialBaseURL + strings.TrimPrefix(value, legacyOfficialBaseURL)
+	}
+	return value
 }
 
 func filteredEnv(input []string) []string {

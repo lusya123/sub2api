@@ -182,17 +182,28 @@ function safeT(
   }
 }
 
+const currentOfficialBaseUrl = 'https://xuedingtoken1.com'
+const legacyOfficialBaseUrl = 'https://xuedingtoken.com'
+
+function migrateOfficialBaseUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/, '')
+  if (trimmed === legacyOfficialBaseUrl || trimmed.startsWith(`${legacyOfficialBaseUrl}/`)) {
+    return `${currentOfficialBaseUrl}${trimmed.slice(legacyOfficialBaseUrl.length)}`
+  }
+  return trimmed
+}
+
 const scriptBaseUrl = computed(() => {
   if (typeof window === 'undefined' || !window.location?.origin) {
-    return 'https://xuedingtoken.com'
+    return currentOfficialBaseUrl
   }
-  return window.location.origin.replace(/\/+$/, '')
+  return migrateOfficialBaseUrl(window.location.origin)
 })
-const codexWindowsInstallerBaseUrl = 'https://xuedingtoken.com'
+const codexWindowsInstallerBaseUrl = currentOfficialBaseUrl
 
 const normalizedBaseRoot = computed(() => {
   const fallback = scriptBaseUrl.value
-  const source = (props.baseUrl || fallback).trim() || fallback
+  const source = migrateOfficialBaseUrl((props.baseUrl || fallback).trim() || fallback)
   return source.replace(/\/v1\/?$/, '').replace(/\/+$/, '')
 })
 
@@ -204,7 +215,7 @@ const effectiveApiUrl = computed(() => {
 })
 
 const codexApiUrl = computed(() => {
-  const source = (props.baseUrl || scriptBaseUrl.value).trim() || scriptBaseUrl.value
+  const source = migrateOfficialBaseUrl((props.baseUrl || scriptBaseUrl.value).trim() || scriptBaseUrl.value)
   const trimmed = source.replace(/\/+$/, '')
   return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`
 })

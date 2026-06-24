@@ -103,6 +103,25 @@ describe('ClientInstallPanel', () => {
     expect(wrapper.text()).not.toContain('/install-openclaw.sh')
   })
 
+  it('migrates legacy official install URLs to the current domain', () => {
+    const wrapper = mount(ClientInstallPanel, {
+      props: {
+        apiKey: 'sk-test',
+        baseUrl: 'https://xuedingtoken.com',
+        platform: 'anthropic'
+      },
+      global: {
+        stubs: {
+          Icon: { template: '<span />' }
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('XDT_API_URL="https://xuedingtoken1.com"')
+    expect(wrapper.text()).toContain('/install-claude-ccswitch.sh')
+    expect(wrapper.text()).not.toContain('https://xuedingtoken.com')
+  })
+
   it('keeps the selected OS command when switching from OpenClaw back to Claude Code', async () => {
     const wrapper = mount(ClientInstallPanel, {
       props: {
@@ -169,7 +188,7 @@ describe('ClientInstallPanel', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain("$env:CODEX_TOKEN='sk-test'")
-    expect(wrapper.text()).toContain('https://xuedingtoken.com/install-codex-win-bootstrap.ps1')
+    expect(wrapper.text()).toContain('https://xuedingtoken1.com/install-codex-win-bootstrap.ps1')
     expect(wrapper.text()).not.toContain("$env:CODEX_API_URL='https://example.com/api/v1'")
   })
 })

@@ -11,6 +11,20 @@ fail() {
   exit 1
 }
 
+CURRENT_OFFICIAL_BASE_URL="https://xuedingtoken1.com"
+LEGACY_OFFICIAL_BASE_URL="https://xuedingtoken.com"
+
+migrate_official_url() {
+  local value="${1:-}"
+  value="${value%/}"
+  case "$value" in
+    "$LEGACY_OFFICIAL_BASE_URL"|"$LEGACY_OFFICIAL_BASE_URL"/*)
+      value="$CURRENT_OFFICIAL_BASE_URL${value#"$LEGACY_OFFICIAL_BASE_URL"}"
+      ;;
+  esac
+  printf '%s' "$value"
+}
+
 version_ge() {
   local current="$1"
   local required="$2"
@@ -37,8 +51,8 @@ require_token() {
 }
 
 normalize_url() {
-  local value="${1:-${CLAUDE_API_URL:-https://xuedingtoken.com}}"
-  value="${value%/}"
+  local value="${1:-${CLAUDE_API_URL:-$CURRENT_OFFICIAL_BASE_URL}}"
+  value="$(migrate_official_url "$value")"
   printf '%s' "$value"
 }
 
@@ -232,7 +246,7 @@ install_node() {
 
 install_nvm() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  local base_url="${XDT_INSTALLER_BASE:-https://xuedingtoken.com}"
+  local base_url="${XDT_INSTALLER_BASE:-https://xuedingtoken1.com}"
   base_url="${base_url%/}"
   local version="${XDT_NVM_VERSION:-v0.40.3}"
   local tmpdir
@@ -257,7 +271,7 @@ install_nvm() {
 }
 
 install_ccswitch_macos() {
-  local base_url="${XDT_INSTALLER_BASE:-https://xuedingtoken.com}"
+  local base_url="${XDT_INSTALLER_BASE:-https://xuedingtoken1.com}"
   base_url="${base_url%/}"
   local arch
   arch="$(uname -m)"
@@ -377,7 +391,7 @@ install_deb_with_apt() {
 }
 
 install_ccswitch_linux() {
-  local base_url="${XDT_INSTALLER_BASE:-https://xuedingtoken.com}"
+  local base_url="${XDT_INSTALLER_BASE:-https://xuedingtoken1.com}"
   base_url="${base_url%/}"
   local arch
   arch="$(uname -m)"
@@ -463,7 +477,7 @@ ensure_ccswitch() {
 main() {
   require_token
   local api_url
-  api_url="$(normalize_url "${XDT_API_URL:-${CLAUDE_API_URL:-https://xuedingtoken.com}}")"
+  api_url="$(normalize_url "${XDT_API_URL:-${CLAUDE_API_URL:-https://xuedingtoken1.com}}")"
 
   ensure_node_and_claude
 
@@ -477,7 +491,7 @@ main() {
     --app claude \
     --endpoint "$api_url" \
     --api-key "$XDT_TOKEN" \
-    --homepage "https://xuedingtoken.com" \
+    --homepage "https://xuedingtoken1.com" \
     --icon claude \
     --switch
 

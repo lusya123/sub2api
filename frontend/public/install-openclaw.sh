@@ -120,7 +120,7 @@ ensure_node() {
 }
 
 download_helper() {
-  local base="${OPENCLAW_INSTALLER_BASE:-https://xuedingtoken.com}"
+  local base="${OPENCLAW_INSTALLER_BASE:-https://xuedingtoken1.com}"
   local target
   target="$(mktemp "${TMPDIR:-/tmp}/install-openclaw.XXXXXX.js")"
 

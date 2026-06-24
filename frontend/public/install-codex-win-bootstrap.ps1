@@ -1,12 +1,14 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$officialApiUrl = 'https://xuedingtoken.com/v1'
+$officialApiUrl = 'https://xuedingtoken1.com/v1'
+$currentOfficialBaseUrl = 'https://xuedingtoken1.com'
+$legacyOfficialBaseUrl = 'https://xuedingtoken.com'
 $staticBaseUrls = @(
-  'https://xuedingtoken.com'
+  'https://xuedingtoken1.com'
 )
 $installerPath = '/downloads/codex/XueDingToken-Codex-Installer-Windows-x64.exe'
-$installerSha256 = '6d762400d127af57b2087219ec51077fc415f639ea6b06cc46a49dd048c309b4'
+$installerSha256 = '127d2d652e39b3717acc5138249ca5c1984103fe76b530f24511e8019f4e96ce'
 
 function Write-XdtLog([string]$Message) {
   Write-Host "[XueDingToken] $Message"
@@ -16,12 +18,20 @@ function Fail-Xdt([string]$Message) {
   throw "[XueDingToken] $Message"
 }
 
+function Convert-XdtOfficialUrl([string]$Value) {
+  $normalized = $Value.Trim().TrimEnd('/')
+  if ($normalized -eq $legacyOfficialBaseUrl -or $normalized.StartsWith($legacyOfficialBaseUrl + '/')) {
+    return $currentOfficialBaseUrl + $normalized.Substring($legacyOfficialBaseUrl.Length)
+  }
+  return $normalized
+}
+
 function Test-XdtOfficialEndpoint([string]$Value) {
   if ([string]::IsNullOrWhiteSpace($Value)) {
     return
   }
-  $normalized = $Value.Trim().TrimEnd('/')
-  if ($normalized -eq 'https://xuedingtoken.com' -or $normalized -eq $officialApiUrl) {
+  $normalized = Convert-XdtOfficialUrl $Value
+  if ($normalized -eq $currentOfficialBaseUrl -or $normalized -eq $officialApiUrl) {
     return
   }
   Fail-Xdt "This installer is locked to $officialApiUrl and does not support custom API endpoints"

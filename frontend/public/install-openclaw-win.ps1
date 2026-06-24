@@ -9,6 +9,16 @@ function Require-Env([string]$Name) {
   return $value
 }
 
+function Convert-XdtOfficialUrl([string]$Value) {
+  $current = 'https://xuedingtoken1.com'
+  $legacy = 'https://xuedingtoken.com'
+  $normalized = $Value.Trim().TrimEnd('/')
+  if ($normalized -eq $legacy -or $normalized.StartsWith($legacy + '/')) {
+    return $current + $normalized.Substring($legacy.Length)
+  }
+  return $normalized
+}
+
 function Test-NodeVersion {
   try {
     $version = (& node --version 2>$null)
@@ -36,8 +46,9 @@ $null = Require-Env 'OPENCLAW_BASE_URL'
 $null = Require-Env 'OPENCLAW_MODEL'
 $installerBase = [Environment]::GetEnvironmentVariable('OPENCLAW_INSTALLER_BASE', 'Process')
 if ([string]::IsNullOrWhiteSpace($installerBase)) {
-  $installerBase = 'https://xuedingtoken.com'
+  $installerBase = 'https://xuedingtoken1.com'
 }
+$installerBase = Convert-XdtOfficialUrl $installerBase
 
 Ensure-Node
 

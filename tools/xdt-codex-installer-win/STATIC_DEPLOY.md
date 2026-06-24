@@ -3,7 +3,7 @@
 Serve these files from the existing main domain static layer:
 
 ```text
-https://xuedingtoken.com
+https://xuedingtoken1.com
 ```
 
 Required static paths:
@@ -18,10 +18,10 @@ Required static paths:
 The frontend-generated command points to:
 
 ```text
-https://xuedingtoken.com/install-codex-win-bootstrap.ps1
+https://xuedingtoken1.com/install-codex-win-bootstrap.ps1
 ```
 
-The bootstrap downloads the EXE from `https://xuedingtoken.com/downloads/codex/`.
+The bootstrap downloads the EXE from `https://xuedingtoken1.com/downloads/codex/`.
 
 Example Nginx server:
 
