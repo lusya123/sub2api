@@ -59,8 +59,13 @@ logs/
 
 # Temporary files
 tmp/
+.tmp/
 temp/
 *.tmp
+.codex-skill-staging/
+.gopath/
+.worktrees/
+data/
 
 # Deploy files (not needed in image)
 deploy/install.sh
