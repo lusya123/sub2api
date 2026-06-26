@@ -143,6 +143,35 @@ func TestThirdPayVerifyNotification(t *testing.T) {
 	}
 }
 
+func TestThirdPayVerifyNotificationAcceptsAggregatorAliases(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestThirdPay(t, "https://thirdpay.example")
+	params := map[string]string{
+		"order_no":    "sub2_20260626abcd1234",
+		"platform_sn": "tp-001",
+		"status":      "3",
+		"money":       "12.34",
+	}
+	params["sign"] = thirdPaySign(params, "secret-1")
+	params["sign_type"] = thirdPayDefaultSignType
+
+	values := url.Values{}
+	for key, value := range params {
+		values.Set(key, value)
+	}
+	notification, err := provider.VerifyNotification(context.Background(), values.Encode(), nil)
+	if err != nil {
+		t.Fatalf("VerifyNotification() error = %v", err)
+	}
+	if notification.OrderID != "sub2_20260626abcd1234" ||
+		notification.TradeNo != "tp-001" ||
+		notification.Status != payment.ProviderStatusSuccess ||
+		notification.Amount != 12.34 {
+		t.Fatalf("VerifyNotification() = %+v", notification)
+	}
+}
+
 func newTestThirdPay(t *testing.T, baseURL string) *ThirdPay {
 	t.Helper()
 	provider, err := NewThirdPay("thirdpay-test", map[string]string{

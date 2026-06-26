@@ -240,20 +240,31 @@ func (t *ThirdPay) VerifyNotification(_ context.Context, rawBody string, _ map[s
 	if !thirdPayVerifySign(params, t.config["merchantKey"], sign) {
 		return nil, fmt.Errorf("thirdpay invalid signature")
 	}
-	status := payment.ProviderStatusFailed
-	if strings.EqualFold(strings.TrimSpace(params["status"]), thirdPayTradeSuccess) {
-		status = payment.ProviderStatusSuccess
-	}
-	amount, _ := strconv.ParseFloat(strings.TrimSpace(params["amount"]), 64)
+	status := thirdPayNotificationStatus(params)
+	amount, _ := strconv.ParseFloat(strings.TrimSpace(thirdPayFirst(params, "amount", "money", "total_amount", "total_fee")), 64)
 	metadata := t.MerchantIdentityMetadata()
 	return &payment.PaymentNotification{
-		TradeNo:  strings.TrimSpace(thirdPayFirst(params, "sys_sn", "platform_sn")),
-		OrderID:  strings.TrimSpace(params["out_trade_no"]),
+		TradeNo:  strings.TrimSpace(thirdPayFirst(params, "sys_sn", "platform_sn", "trade_no", "transaction_id")),
+		OrderID:  strings.TrimSpace(thirdPayFirst(params, "out_trade_no", "outTradeNo", "order_no")),
 		Amount:   amount,
 		Status:   status,
 		RawData:  rawBody,
 		Metadata: metadata,
 	}, nil
+}
+
+func thirdPayNotificationStatus(params map[string]string) string {
+	status := strings.TrimSpace(thirdPayFirst(params, "status", "trade_status", "pay_status"))
+	switch strings.ToUpper(status) {
+	case thirdPayTradeSuccess, "TRADE_SUCCESS", "PAY_SUCCESS", "PAID":
+		return payment.ProviderStatusSuccess
+	}
+	switch status {
+	case thirdPayQueryPaidStatus:
+		return payment.ProviderStatusSuccess
+	default:
+		return payment.ProviderStatusFailed
+	}
 }
 
 func (t *ThirdPay) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
