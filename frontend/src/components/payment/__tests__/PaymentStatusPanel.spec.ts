@@ -98,6 +98,7 @@ describe('PaymentStatusPanel', () => {
     expect(pollOrderStatus).toHaveBeenCalledWith(42)
     expect(wrapper.text()).toContain('payment.result.success')
     expect(wrapper.emitted('success')).toHaveLength(1)
+    expect(wrapper.emitted('settled')).toEqual([['success']])
   })
 
   it('shows reopen button in QR mode when payUrl is also available', async () => {

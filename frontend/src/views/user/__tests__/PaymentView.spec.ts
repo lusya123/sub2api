@@ -191,7 +191,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     routerPush.mockReset().mockResolvedValue(undefined)
     routerResolve.mockClear()
     createOrder.mockReset()
-    refreshUser.mockReset()
+    refreshUser.mockReset().mockResolvedValue({})
     fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
     showError.mockReset()
     showInfo.mockReset()
@@ -213,6 +213,9 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          AppLayout: {
+            template: '<div><slot /></div>',
+          },
           Teleport: true,
           Transition: false,
         },
@@ -230,6 +233,68 @@ describe('PaymentView WeChat JSAPI flow', () => {
         resume_token: 'resume-token-123',
       },
     })
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
+  })
+
+  it('refreshes the current user when the embedded payment panel settles successfully', async () => {
+    routeState.query = {}
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      paymentState: {
+        orderId: number
+        amount: number
+        qrCode: string
+        expiresAt: string
+        paymentType: string
+        payUrl: string
+        outTradeNo: string
+        clientSecret: string
+        intentId: string
+        currency: string
+        countryCode: string
+        paymentEnv: string
+        payAmount: number
+        orderType: 'balance'
+        paymentMode: string
+        resumeToken: string
+        createdAt: number
+      }
+      onPaymentSettled: (outcome: 'success') => void
+      onPaymentSuccess: () => void
+    }
+    vm.paymentState = {
+      orderId: 4242,
+      amount: 10,
+      qrCode: 'weixin://wxpay/bizpayurl?pr=paid-order',
+      expiresAt: '2099-01-01T00:10:00.000Z',
+      paymentType: 'wxpay',
+      payUrl: '',
+      outTradeNo: 'sub2_paid_4242',
+      clientSecret: '',
+      intentId: '',
+      currency: '',
+      countryCode: '',
+      paymentEnv: '',
+      payAmount: 10,
+      orderType: 'balance',
+      paymentMode: 'qrcode',
+      resumeToken: '',
+      createdAt: Date.now(),
+    }
+    vm.onPaymentSettled('success')
+    vm.onPaymentSuccess()
+    await flushPromises()
+
+    expect(refreshUser).toHaveBeenCalledTimes(1)
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
   })
 

@@ -143,6 +143,10 @@ function paymentAmountSymbol(order: PaymentOrder): string {
   return currencySymbol(order.currency)
 }
 
+function isSuccessStatus(status: string | null | undefined): boolean {
+  return status === 'COMPLETED' || status === 'PAID' || status === 'RECHARGING'
+}
+
 const countdownDisplay = computed(() => {
   const m = Math.floor(remainingSeconds.value / 60)
   const s = remainingSeconds.value % 60
@@ -200,7 +204,7 @@ async function pollStatus() {
   let order = await paymentStore.pollOrderStatus(props.orderId)
   if (!order) return
   order = await tryRecoverPendingOrder(order)
-  if (order.status === 'COMPLETED' || order.status === 'PAID') {
+  if (isSuccessStatus(order.status)) {
     cleanup()
     paidOrder.value = order
     success.value = true

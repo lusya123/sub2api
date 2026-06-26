@@ -463,16 +463,46 @@ function onPaymentDone() {
   }
 }
 
-function onPaymentSuccess() {
-  removeRecoverySnapshot()
-  authStore.refreshUser()
+let lastSuccessfulPaymentRefreshKey = ''
+
+function successfulPaymentRefreshKey(): string {
+  const state = paymentState.value
+  if (!state.orderId) return ''
+  return [
+    state.orderId,
+    state.outTradeNo || '',
+    state.orderType || '',
+  ].join(':')
+}
+
+function refreshUserAfterPaymentSuccess() {
+  const refreshKey = successfulPaymentRefreshKey()
+  if (!refreshKey || lastSuccessfulPaymentRefreshKey === refreshKey) return
+  lastSuccessfulPaymentRefreshKey = refreshKey
+  authStore.refreshUser().catch((error: unknown) => {
+    lastSuccessfulPaymentRefreshKey = ''
+    console.error('Failed to refresh user after payment success:', error)
+  })
+}
+
+function refreshSubscriptionAfterPaymentSuccess() {
   if (paymentState.value.orderType === 'subscription') {
     subscriptionStore.fetchActiveSubscriptions(true).catch(() => {})
   }
 }
 
-function onPaymentSettled() {
+function onPaymentSuccess() {
   removeRecoverySnapshot()
+  refreshUserAfterPaymentSuccess()
+  refreshSubscriptionAfterPaymentSuccess()
+}
+
+function onPaymentSettled(outcome?: 'success' | 'cancelled' | 'expired') {
+  removeRecoverySnapshot()
+  if (outcome === 'success') {
+    refreshUserAfterPaymentSuccess()
+    refreshSubscriptionAfterPaymentSuccess()
+  }
 }
 
 // All checkout data from single API call
