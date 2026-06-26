@@ -14,6 +14,7 @@ const messages: Record<string, string> = {
   'admin.settings.payment.stripeWebhookHint': 'Configure Stripe webhook.',
   'admin.settings.payment.stripeWebhookApiVersionHint': 'Use Stripe API version {version}.',
   'admin.settings.payment.airwallexWebhookHint': 'Select payment_intent.succeeded and use the latest stable API version.',
+  'admin.settings.payment.thirdpayWebhookHint': 'Configure ThirdPay webhook.',
 }
 
 vi.mock('vue-i18n', () => ({
@@ -55,12 +56,14 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
       allKeyOptions: [
         { value: 'alipay', label: 'Alipay' },
         { value: 'wxpay', label: 'WeChat Pay' },
+        { value: 'thirdpay', label: 'ThirdPay' },
         { value: 'stripe', label: 'Stripe' },
         { value: 'airwallex', label: 'Airwallex' },
       ],
       enabledKeyOptions: [
         { value: 'alipay', label: 'Alipay' },
         { value: 'wxpay', label: 'WeChat Pay' },
+        { value: 'thirdpay', label: 'ThirdPay' },
         { value: 'airwallex', label: 'Airwallex' },
       ],
       allPaymentTypes: [
@@ -155,5 +158,33 @@ describe('PaymentProviderDialog payment guide', () => {
 
     const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
     expect(payload.config.accountId).toBe('')
+  })
+
+  it('forces ThirdPay refund flags off when saving', async () => {
+    const provider = providerFactory({
+      provider_key: 'thirdpay',
+      name: 'ThirdPay',
+      supported_types: ['alipay', 'wxpay'],
+      refund_enabled: true,
+      allow_user_refund: true,
+      config: {
+        createOrderUrl: 'https://pay.example.com/ThirdApi/Pay/create_order',
+        merchantId: 'mch_123',
+        reserve: 'reserve-token',
+        notifyUrl: 'https://merchant.example.com/api/v1/payment/webhook/thirdpay',
+      },
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+    await wrapper.find('form').trigger('submit.prevent')
+
+    const payload = wrapper.emitted('save')?.[0]?.[0] as {
+      refund_enabled: boolean
+      allow_user_refund: boolean
+    }
+    expect(payload.refund_enabled).toBe(false)
+    expect(payload.allow_user_refund).toBe(false)
   })
 })

@@ -111,6 +111,7 @@ var pendingOrderStatuses = []string{
 // stripe publishableKey) are returned in plaintext by the admin GET API.
 var providerSensitiveConfigFields = map[string]map[string]struct{}{
 	payment.TypeEasyPay:   {"pkey": {}},
+	payment.TypeThirdPay:  {"merchantkey": {}},
 	payment.TypeAlipay:    {"privatekey": {}, "publickey": {}, "alipaypublickey": {}},
 	payment.TypeWxpay:     {"privatekey": {}, "apiv3key": {}, "publickey": {}},
 	payment.TypeStripe:    {"secretkey": {}, "webhooksecret": {}},
@@ -123,6 +124,7 @@ var providerSensitiveConfigFields = map[string]map[string]struct{}{
 // webhook/refund verification.
 var providerPendingOrderProtectedConfigFields = map[string]map[string]struct{}{
 	payment.TypeEasyPay:   {"pkey": {}, "pid": {}},
+	payment.TypeThirdPay:  {"merchantkey": {}, "merchantid": {}, "reserve": {}, "createorderurl": {}, "selectorderurl": {}},
 	payment.TypeAlipay:    {"privatekey": {}, "publickey": {}, "alipaypublickey": {}, "appid": {}},
 	payment.TypeWxpay:     {"privatekey": {}, "apiv3key": {}, "publickey": {}, "appid": {}, "mpappid": {}, "mchid": {}, "publickeyid": {}, "certserial": {}},
 	payment.TypeStripe:    {"secretkey": {}, "webhooksecret": {}, "currency": {}},
@@ -177,7 +179,11 @@ func (s *PaymentConfigService) countPendingOrdersByPlan(ctx context.Context, pla
 }
 
 var validProviderKeys = map[string]bool{
-	payment.TypeEasyPay: true, payment.TypeAlipay: true, payment.TypeWxpay: true, payment.TypeStripe: true, payment.TypeAirwallex: true,
+	payment.TypeEasyPay: true, payment.TypeThirdPay: true, payment.TypeAlipay: true, payment.TypeWxpay: true, payment.TypeStripe: true, payment.TypeAirwallex: true,
+}
+
+func providerSupportsRefund(providerKey string) bool {
+	return providerKey != payment.TypeThirdPay
 }
 
 func (s *PaymentConfigService) CreateProviderInstance(ctx context.Context, req CreateProviderInstanceRequest) (*dbent.PaymentProviderInstance, error) {
@@ -197,11 +203,12 @@ func (s *PaymentConfigService) CreateProviderInstance(ctx context.Context, req C
 	if err != nil {
 		return nil, err
 	}
-	allowUserRefund := req.AllowUserRefund && req.RefundEnabled
+	refundEnabled := req.RefundEnabled && providerSupportsRefund(req.ProviderKey)
+	allowUserRefund := req.AllowUserRefund && refundEnabled
 	return s.entClient.PaymentProviderInstance.Create().
 		SetProviderKey(req.ProviderKey).SetName(req.Name).SetConfig(enc).
 		SetSupportedTypes(typesStr).SetEnabled(req.Enabled).SetPaymentMode(req.PaymentMode).
-		SetSortOrder(req.SortOrder).SetLimits(req.Limits).SetRefundEnabled(req.RefundEnabled).
+		SetSortOrder(req.SortOrder).SetLimits(req.Limits).SetRefundEnabled(refundEnabled).
 		SetAllowUserRefund(allowUserRefund).
 		Save(ctx)
 }
@@ -348,27 +355,32 @@ func (s *PaymentConfigService) UpdateProviderInstance(ctx context.Context, id in
 	if req.Limits != nil {
 		u.SetLimits(*req.Limits)
 	}
-	if req.RefundEnabled != nil {
-		u.SetRefundEnabled(*req.RefundEnabled)
-		// Cascade: turning off refund_enabled also disables allow_user_refund
-		if !*req.RefundEnabled {
-			u.SetAllowUserRefund(false)
+	if !providerSupportsRefund(current.ProviderKey) {
+		u.SetRefundEnabled(false)
+		u.SetAllowUserRefund(false)
+	} else {
+		if req.RefundEnabled != nil {
+			u.SetRefundEnabled(*req.RefundEnabled)
+			// Cascade: turning off refund_enabled also disables allow_user_refund
+			if !*req.RefundEnabled {
+				u.SetAllowUserRefund(false)
+			}
 		}
-	}
-	if req.AllowUserRefund != nil {
-		// Only allow enabling when refund_enabled is (or will be) true
-		if *req.AllowUserRefund {
-			refundEnabled := false
-			if req.RefundEnabled != nil {
-				refundEnabled = *req.RefundEnabled
+		if req.AllowUserRefund != nil {
+			// Only allow enabling when refund_enabled is (or will be) true
+			if *req.AllowUserRefund {
+				refundEnabled := false
+				if req.RefundEnabled != nil {
+					refundEnabled = *req.RefundEnabled
+				} else {
+					refundEnabled = current.RefundEnabled
+				}
+				if refundEnabled {
+					u.SetAllowUserRefund(true)
+				}
 			} else {
-				refundEnabled = current.RefundEnabled
+				u.SetAllowUserRefund(false)
 			}
-			if refundEnabled {
-				u.SetAllowUserRefund(true)
-			}
-		} else {
-			u.SetAllowUserRefund(false)
 		}
 	}
 	if req.PaymentMode != nil {

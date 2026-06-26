@@ -85,8 +85,10 @@ export type PaymentVisibleMethodSource =
   | ""
   | "official_alipay"
   | "easypay_alipay"
+  | "thirdpay_alipay"
   | "official_wxpay"
-  | "easypay_wxpay";
+  | "easypay_wxpay"
+  | "thirdpay_wxpay";
 export type WeChatConnectMode = "open" | "mp" | "mobile";
 
 export interface PaymentVisibleMethodSourceOption {
@@ -128,6 +130,11 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
       labelZh: "易支付支付宝",
       labelEn: "EasyPay Alipay",
     },
+    {
+      value: "thirdpay_alipay",
+      labelZh: "ThirdPay 支付宝",
+      labelEn: "ThirdPay Alipay",
+    },
   ],
   wxpay: [
     { value: "", labelZh: "未配置", labelEn: "Not configured" },
@@ -140,6 +147,11 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
       value: "easypay_wxpay",
       labelZh: "易支付微信",
       labelEn: "EasyPay WeChat Pay",
+    },
+    {
+      value: "thirdpay_wxpay",
+      labelZh: "ThirdPay 微信",
+      labelEn: "ThirdPay WeChat Pay",
     },
   ],
 };
@@ -154,6 +166,8 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
     official: "official_alipay",
     easypay_alipay: "easypay_alipay",
     easypay: "easypay_alipay",
+    thirdpay_alipay: "thirdpay_alipay",
+    thirdpay: "thirdpay_alipay",
   },
   wxpay: {
     official_wxpay: "official_wxpay",
@@ -163,6 +177,8 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
     official: "official_wxpay",
     easypay_wxpay: "easypay_wxpay",
     easypay: "easypay_wxpay",
+    thirdpay_wxpay: "thirdpay_wxpay",
+    thirdpay: "thirdpay_wxpay",
   },
 };
 const WECHAT_CONNECT_MODE_OPTIONS: WeChatConnectModeOption[] = [

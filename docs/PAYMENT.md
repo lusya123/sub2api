@@ -22,11 +22,12 @@ Sub2API has a built-in payment system that enables user self-service top-up with
 | Provider | Payment Methods | Description |
 |----------|----------------|-------------|
 | **EasyPay** | Alipay, WeChat Pay | Third-party aggregation via EasyPay protocol |
+| **ThirdPay** | Alipay, WeChat Pay | Third-party aggregation via the Dujiao-Next ThirdPay protocol |
 | **Alipay (Direct)** | Desktop QR code, mobile Alipay redirect | Direct integration with Alipay Open Platform, returning desktop QR codes and mobile WAP/app launch links |
 | **WeChat Pay (Direct)** | Native QR, H5, MP/JSAPI Pay | Direct integration with WeChat Pay APIv3 with environment-aware routing |
 | **Stripe** | Card, Alipay, WeChat Pay, Link, etc. | International payments, multi-currency support |
 
-> Alipay/WeChat Pay direct and EasyPay can both exist as backend provider instances, but the frontend always exposes only two visible buttons: `Alipay` and `WeChat Pay`. Admins choose exactly one source for each visible method: direct or EasyPay. Direct channels connect to payment APIs directly with lower fees; EasyPay aggregates through third-party platforms with easier setup.
+> Alipay/WeChat Pay direct, EasyPay, and ThirdPay can all exist as backend provider instances, but the frontend always exposes only two visible buttons: `Alipay` and `WeChat Pay`. Admins choose exactly one source for each visible method: direct, EasyPay, or ThirdPay.
 
 > **EasyPay Provider Recommendations**: Both options below are third-party aggregators compatible with the EasyPay protocol. Pick based on the funding channel and settlement currency you need:
 >
@@ -69,8 +70,8 @@ Configure the following in Admin Dashboard **Settings → Payment Settings**:
 
 The current payment UX keeps the frontend method list unified and does not expose provider brands directly:
 
-- **Alipay**: when enabled, this button must be routed to either `Alipay (Direct)` or `EasyPay Alipay`
-- **WeChat Pay**: when enabled, this button must be routed to either `WeChat Pay (Direct)` or `EasyPay WeChat`
+- **Alipay**: when enabled, this button must be routed to `Alipay (Direct)`, `EasyPay Alipay`, or `ThirdPay Alipay`
+- **WeChat Pay**: when enabled, this button must be routed to `WeChat Pay (Direct)`, `EasyPay WeChat`, or `ThirdPay WeChat`
 - Each visible method can route to only one source at a time
 - If a visible method is enabled without a selected source, the frontend will not expose that method
 
@@ -119,6 +120,21 @@ Compatible with any payment service that implements the EasyPay protocol.
 | **API Base URL** | EasyPay API base address | Yes |
 | **Alipay Channel ID** | Specify Alipay channel (optional) | No |
 | **WeChat Channel ID** | Specify WeChat channel (optional) | No |
+
+### ThirdPay
+
+Compatible with the third-party aggregation payment protocol used by Dujiao-Next (`mch_id`, `reserve`, `create_order_url`).
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| **Create Order URL** | ThirdPay create-order endpoint | Yes |
+| **Query Order URL** | ThirdPay query endpoint, used for reconciliation before expiry | No |
+| **Merchant ID** | ThirdPay merchant ID (`mch_id`) | Yes |
+| **Merchant Key** | MD5 signing key | Yes |
+| **Reserve Header** | `reserve` request header required by the gateway | Yes |
+| **Alipay Type Value** | Gateway payment type value for Alipay (default `2`) | No |
+| **WeChat Type Value** | Gateway payment type value for WeChat Pay (default `1`) | No |
+| **Order Body** | Optional short payment description | No |
 
 ### Alipay (Direct)
 
@@ -192,6 +208,7 @@ When adding a provider, the system auto-generates callback URLs from your site d
 | Provider | Callback Path |
 |----------|-------------|
 | **EasyPay** | `https://your-domain.com/api/v1/payment/webhook/easypay` |
+| **ThirdPay** | `https://your-domain.com/api/v1/payment/webhook/thirdpay` |
 | **Alipay (Direct)** | `https://your-domain.com/api/v1/payment/webhook/alipay` |
 | **WeChat Pay (Direct)** | `https://your-domain.com/api/v1/payment/webhook/wxpay` |
 | **Stripe** | `https://your-domain.com/api/v1/payment/webhook/stripe` |

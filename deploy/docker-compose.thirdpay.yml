@@ -1,0 +1,14 @@
+# =============================================================================
+# Sub2API ThirdPay Image Override
+# =============================================================================
+# Use this as an override when deploying the ThirdPay aggregation-payment image:
+#
+#   docker compose -f docker-compose.local.yml -f docker-compose.thirdpay.yml up -d
+#
+# The image repository is intentionally different from the default/custom image
+# series so both image families can coexist in the same registry.
+# =============================================================================
+
+services:
+  sub2api:
+    image: ${SUB2API_THIRDPAY_IMAGE:-ghcr.io/lusya123/sub2api-thirdpay:thirdpay-branch}

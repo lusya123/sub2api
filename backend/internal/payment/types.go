@@ -17,6 +17,7 @@ const (
 	TypeCard         PaymentType = "card"
 	TypeLink         PaymentType = "link"
 	TypeEasyPay      PaymentType = "easypay"
+	TypeThirdPay     PaymentType = "thirdpay"
 	TypeAirwallex    PaymentType = "airwallex"
 )
 
@@ -83,6 +84,8 @@ func GetBasePaymentType(t string) string {
 	switch {
 	case t == TypeEasyPay:
 		return TypeEasyPay
+	case t == TypeThirdPay:
+		return TypeThirdPay
 	case t == TypeAirwallex:
 		return TypeAirwallex
 	case t == TypeStripe || t == TypeCard || t == TypeLink:

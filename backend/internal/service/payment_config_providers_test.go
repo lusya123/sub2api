@@ -336,6 +336,40 @@ func TestUpdateProviderInstancePersistsEnabledAndSupportedTypes(t *testing.T) {
 	require.Equal(t, "alipay,wxpay", saved.SupportedTypes)
 }
 
+func TestThirdPayProviderInstanceDisablesRefunds(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	svc := &PaymentConfigService{
+		entClient:     client,
+		encryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	}
+
+	instance, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+		ProviderKey:     payment.TypeThirdPay,
+		Name:            "ThirdPay",
+		SupportedTypes:  []string{payment.TypeAlipay, payment.TypeWxpay},
+		Enabled:         false,
+		RefundEnabled:   true,
+		AllowUserRefund: true,
+		Config:          map[string]string{},
+		PaymentMode:     "",
+		SortOrder:       0,
+	})
+	require.NoError(t, err)
+	require.False(t, instance.RefundEnabled)
+	require.False(t, instance.AllowUserRefund)
+
+	updated, err := svc.UpdateProviderInstance(ctx, instance.ID, UpdateProviderInstanceRequest{
+		RefundEnabled:   boolPtrValue(true),
+		AllowUserRefund: boolPtrValue(true),
+	})
+	require.NoError(t, err)
+	require.False(t, updated.RefundEnabled)
+	require.False(t, updated.AllowUserRefund)
+}
+
 func TestUpdateProviderInstanceRejectsProtectedConfigChangesWhilePendingOrders(t *testing.T) {
 	t.Parallel()
 

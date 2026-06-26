@@ -1,0 +1,125 @@
+name: ThirdPay Image
+
+on:
+  push:
+    branches:
+      - codex/upstream-main-third-party-payment
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional ThirdPay image tag suffix, for example 2026.06.26 or v1.2.3'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_REPOSITORY: sub2api-thirdpay
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify ThirdPay backend integration
+        working-directory: backend
+        run: go test ./internal/payment/provider ./internal/service ./internal/handler
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify ThirdPay frontend integration
+        working-directory: frontend
+        run: |
+          pnpm run lint:check
+          pnpm run typecheck
+
+  build-and-push:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OWNER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER}/${IMAGE_REPOSITORY}"
+          SHORT_SHA="${GITHUB_SHA::12}"
+          BUILD_DATE="$(date -u +%Y%m%d%H%M%S)"
+          VERSION="${{ github.event.inputs.release_tag || '' }}"
+          VERSION="${VERSION#v}"
+
+          {
+            echo "image=${IMAGE}"
+            echo "version=${VERSION:-thirdpay-${SHORT_SHA}}"
+            echo "tags<<EOF"
+            echo "${IMAGE}:thirdpay-${SHORT_SHA}"
+            echo "${IMAGE}:thirdpay-${BUILD_DATE}"
+            echo "${IMAGE}:thirdpay-branch"
+            if [ -n "${VERSION}" ]; then
+              echo "${IMAGE}:thirdpay-${VERSION}"
+            fi
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push ThirdPay image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ github.event.head_commit.timestamp || '' }}
+          labels: |
+            org.opencontainers.image.title=Sub2API ThirdPay
+            org.opencontainers.image.description=Sub2API ThirdPay aggregation payment branch
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Print pull commands
+        run: |
+          echo "ThirdPay image pushed separately from the default/custom image series:"
+          echo "${{ steps.meta.outputs.tags }}"

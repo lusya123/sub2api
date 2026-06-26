@@ -1,4 +1,4 @@
-.PHONY: build build-backend build-frontend build-datamanagementd test test-backend test-frontend test-frontend-critical test-datamanagementd secret-scan
+.PHONY: build build-backend build-frontend build-datamanagementd docker-thirdpay test test-backend test-frontend test-frontend-critical test-datamanagementd secret-scan
 
 FRONTEND_CRITICAL_VITEST := \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
@@ -39,6 +39,15 @@ test-frontend-critical:
 
 test-datamanagementd:
 	@cd datamanagement && go test ./...
+
+docker-thirdpay:
+	@docker build \
+		--build-arg VERSION=$${VERSION:-thirdpay-local} \
+		--build-arg COMMIT=$$(git rev-parse --short=12 HEAD) \
+		--build-arg DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		-t sub2api-thirdpay:local \
+		-t ghcr.io/lusya123/sub2api-thirdpay:thirdpay-local \
+		.
 
 secret-scan:
 	@python3 tools/secret_scan.py
