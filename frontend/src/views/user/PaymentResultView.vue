@@ -107,6 +107,7 @@ import {
   readPaymentRecoverySnapshot,
 } from '@/components/payment/paymentFlow'
 import { usePaymentStore } from '@/stores/payment'
+import { useAuthStore } from '@/stores/auth'
 import { paymentAPI } from '@/api/payment'
 import type { PaymentOrder } from '@/types/payment'
 import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
@@ -117,6 +118,7 @@ const { t } = i18n
 const route = useRoute()
 const router = useRouter()
 const paymentStore = usePaymentStore()
+const authStore = useAuthStore()
 
 const order = ref<PaymentOrder | null>(null)
 const loading = ref(true)
@@ -136,6 +138,7 @@ const STATUS_REFRESH_INTERVAL_MS = 2000
 const STATUS_REFRESH_MAX_ATTEMPTS = 15
 
 let statusRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let lastProfileRefreshKey = ''
 const refreshAttempts = ref(0)
 
 /** 充值金额 = pay_amount / (1 + fee_rate/100)，fee_rate=0 时等于 pay_amount */
@@ -194,6 +197,7 @@ function setResolvedOrder(nextOrder: PaymentOrder | null): void {
   if (nextOrder?.currency) {
     currency.value = normalizePaymentCurrency(nextOrder.currency)
   }
+  refreshProfileForSuccessfulOrder(nextOrder)
 }
 
 function normalizeOrderStatus(status: string | null | undefined): string {
@@ -206,6 +210,30 @@ function isSuccessStatus(status: string | null | undefined): boolean {
 
 function isPendingStatus(status: string | null | undefined): boolean {
   return PENDING_STATUSES.has(normalizeOrderStatus(status))
+}
+
+function successfulOrderRefreshKey(nextOrder: PaymentOrder): string {
+  return [
+    nextOrder.id,
+    normalizeOrderStatus(nextOrder.status),
+    nextOrder.completed_at || nextOrder.paid_at || '',
+  ].join(':')
+}
+
+function refreshProfileForSuccessfulOrder(nextOrder: PaymentOrder | null): void {
+  if (!nextOrder || !isSuccessStatus(nextOrder.status) || !authStore.isAuthenticated) {
+    return
+  }
+
+  const refreshKey = successfulOrderRefreshKey(nextOrder)
+  if (refreshKey === lastProfileRefreshKey) {
+    return
+  }
+  lastProfileRefreshKey = refreshKey
+
+  authStore.refreshUser().catch((error: unknown) => {
+    console.error('Failed to refresh user after payment success:', error)
+  })
 }
 
 function readRouteQueryString(key: string): string {

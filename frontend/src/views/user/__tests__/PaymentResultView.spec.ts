@@ -10,6 +10,10 @@ const pollOrderStatus = vi.hoisted(() => vi.fn())
 const verifyOrder = vi.hoisted(() => vi.fn())
 const verifyOrderPublic = vi.hoisted(() => vi.fn())
 const resolveOrderPublicByResumeToken = vi.hoisted(() => vi.fn())
+const refreshUser = vi.hoisted(() => vi.fn())
+const authStoreState = vi.hoisted(() => ({
+  isAuthenticated: true,
+}))
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
@@ -33,6 +37,15 @@ vi.mock('vue-i18n', async () => {
 vi.mock('@/stores/payment', () => ({
   usePaymentStore: () => ({
     pollOrderStatus,
+  }),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    get isAuthenticated() {
+      return authStoreState.isAuthenticated
+    },
+    refreshUser,
   }),
 }))
 
@@ -91,6 +104,9 @@ describe('PaymentResultView', () => {
     verifyOrder.mockReset()
     verifyOrderPublic.mockReset()
     resolveOrderPublicByResumeToken.mockReset()
+    refreshUser.mockReset()
+    refreshUser.mockResolvedValue({})
+    authStoreState.isAuthenticated = true
     window.localStorage.clear()
   })
 
@@ -375,6 +391,28 @@ describe('PaymentResultView', () => {
     expect(verifyOrder).toHaveBeenCalledWith('auth-verify-123')
     expect(verifyOrderPublic).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('payment.result.success')
+  })
+
+  it('refreshes the authenticated user profile when the order is completed', async () => {
+    routeState.query = {
+      out_trade_no: 'auth-verify-123',
+      trade_status: 'TRADE_SUCCESS',
+    }
+    verifyOrder.mockResolvedValue({
+      data: orderFactory('COMPLETED'),
+    })
+
+    mount(PaymentResultView, {
+      global: {
+        stubs: {
+          OrderStatusBadge: true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(refreshUser).toHaveBeenCalledTimes(1)
   })
 
   it('does not use public out_trade_no verification for bare order numbers without legacy return markers', async () => {
