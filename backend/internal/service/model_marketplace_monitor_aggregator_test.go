@@ -51,6 +51,38 @@ func TestModelMarketplaceListUserViewSingleflightAndCache(t *testing.T) {
 	require.Equal(t, int64(2), repo.listEnabledCalls.Load())
 }
 
+func TestModelMarketplacePersistCheckResultsKeepsUserViewCacheWarm(t *testing.T) {
+	repo := &stubModelMarketplaceMonitorRepo{
+		monitors: []*ModelMarketplaceMonitor{{
+			ID:            1,
+			Name:          "test monitor",
+			Provider:      "openai",
+			Endpoint:      "https://example.com",
+			PrimaryModel:  "gpt-test",
+			Enabled:       true,
+			EffectiveRate: 1,
+		}},
+	}
+	svc := NewModelMarketplaceMonitorService(repo, nil, nil)
+
+	views, err := svc.ListUserView(context.Background())
+	require.NoError(t, err)
+	require.Len(t, views, 1)
+	require.Equal(t, int64(1), repo.listEnabledCalls.Load())
+
+	now := time.Now()
+	svc.persistCheckResults(context.Background(), repo.monitors[0], []*ModelMarketplaceCheckResult{{
+		Model:     "gpt-test",
+		Status:    ModelMarketplaceStatusOperational,
+		CheckedAt: now,
+	}})
+
+	views, err = svc.ListUserView(context.Background())
+	require.NoError(t, err)
+	require.Len(t, views, 1)
+	require.Equal(t, int64(1), repo.listEnabledCalls.Load())
+}
+
 type stubModelMarketplaceMonitorRepo struct {
 	monitors         []*ModelMarketplaceMonitor
 	listDelay        time.Duration

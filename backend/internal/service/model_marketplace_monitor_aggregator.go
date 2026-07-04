@@ -9,7 +9,7 @@ import (
 
 const (
 	modelMarketplaceUserViewCacheKey = "model_marketplace_user_view"
-	modelMarketplaceUserViewCacheTTL = 5 * time.Second
+	modelMarketplaceUserViewCacheTTL = 30 * time.Second
 )
 
 func (s *ModelMarketplaceMonitorService) ListUserView(ctx context.Context) ([]*ModelMarketplaceUserMonitorView, error) {

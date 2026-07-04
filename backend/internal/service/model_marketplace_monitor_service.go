@@ -296,7 +296,9 @@ func (s *ModelMarketplaceMonitorService) persistCheckResults(ctx context.Context
 	if err := s.repo.MarkChecked(ctx, m.ID, time.Now()); err != nil {
 		slog.Error("model_marketplace_monitor: mark checked failed", "monitor_id", m.ID, "error", err)
 	}
-	s.invalidateUserViewCache()
+	// Do not invalidate the public marketplace cache on every scheduled probe.
+	// Probe writes can happen frequently across many monitors; the short TTL
+	// keeps status fresh enough while avoiding a cold rebuild for each page hit.
 }
 
 func (s *ModelMarketplaceMonitorService) SetScheduler(sched ModelMarketplaceMonitorScheduler) {
