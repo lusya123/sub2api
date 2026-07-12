@@ -219,8 +219,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	security.AddLoginEmail(user.Email)
-	h.authService.ScheduleShopPasswordLoginSync(c.Request.Context(), user, req.Password, "sub2api_register")
-
 	h.respondWithTokenPair(c, user)
 }
 
@@ -332,7 +330,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
-	h.authService.ScheduleShopPasswordLoginSync(c.Request.Context(), user, req.Password, "sub2api_login")
 
 	h.loginDefense.Audit(attempt, security.LoginResultSuccess)
 	h.respondWithTokenPair(c, user)
