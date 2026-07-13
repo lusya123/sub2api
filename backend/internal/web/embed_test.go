@@ -435,6 +435,11 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		require.NoError(t, err)
 
 		apiPaths := []string{
+			"/.well-known/openid-configuration",
+			"/.well-known/jwks.json",
+			"/oauth2/authorize",
+			"/oauth2/userinfo",
+			"/internal/v1/users/1/lobe-config",
 			"/api",
 			"/api/v1/users",
 			"/v1/models",
@@ -788,6 +793,11 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		middleware := ServeEmbeddedFrontend()
 
 		apiPaths := []string{
+			"/.well-known/openid-configuration",
+			"/.well-known/jwks.json",
+			"/oauth2/authorize",
+			"/oauth2/userinfo",
+			"/internal/v1/users/1/lobe-config",
 			"/api",
 			"/api/users",
 			"/v1/models",

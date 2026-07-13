@@ -102,6 +102,18 @@ func TestSPAProtectBypassesTrustedTraffic(t *testing.T) {
 			path: "/api/v1/auth/login",
 		},
 		{
+			name: "oidc discovery path",
+			path: "/.well-known/openid-configuration",
+		},
+		{
+			name: "oidc authorization path",
+			path: "/oauth2/authorize",
+		},
+		{
+			name: "internal lobe config path",
+			path: "/internal/v1/users/1/lobe-config",
+		},
+		{
 			name: "static asset",
 			path: "/assets/index.js",
 		},

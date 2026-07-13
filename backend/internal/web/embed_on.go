@@ -360,7 +360,13 @@ func isEmbeddedFrontendMethod(method string) bool {
 
 func shouldBypassEmbeddedFrontend(path string) bool {
 	trimmed := strings.TrimSpace(path)
-	return trimmed == "/api" ||
+	return trimmed == "/.well-known" ||
+		strings.HasPrefix(trimmed, "/.well-known/") ||
+		trimmed == "/oauth2" ||
+		strings.HasPrefix(trimmed, "/oauth2/") ||
+		trimmed == "/internal" ||
+		strings.HasPrefix(trimmed, "/internal/") ||
+		trimmed == "/api" ||
 		strings.HasPrefix(trimmed, "/api/") ||
 		strings.HasPrefix(trimmed, "/v1/") ||
 		strings.HasPrefix(trimmed, "/v1beta/") ||

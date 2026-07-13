@@ -217,7 +217,13 @@ func hasSPAAPIKey(c *gin.Context) bool {
 
 func spaProtectBypassPath(path string) bool {
 	trimmed := strings.TrimSpace(path)
-	return trimmed == "/v1" ||
+	return trimmed == "/.well-known" ||
+		strings.HasPrefix(trimmed, "/.well-known/") ||
+		trimmed == "/oauth2" ||
+		strings.HasPrefix(trimmed, "/oauth2/") ||
+		trimmed == "/internal" ||
+		strings.HasPrefix(trimmed, "/internal/") ||
+		trimmed == "/v1" ||
 		strings.HasPrefix(trimmed, "/v1/") ||
 		trimmed == "/v1beta" ||
 		strings.HasPrefix(trimmed, "/v1beta/") ||
