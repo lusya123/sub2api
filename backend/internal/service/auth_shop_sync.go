@@ -21,6 +21,8 @@ type shopPasswordLoginSyncRecord struct {
 }
 
 var shopPasswordLoginSyncState sync.Map
+var shopPasswordLoginSyncBlockedHash sync.Map
+var shopPasswordSyncLocks sync.Map
 
 func (s *AuthService) syncShopPasswordReset(ctx context.Context, userID int64, email, newPassword string) error {
 	if s == nil || s.cfg == nil {
@@ -83,6 +85,36 @@ func (s *AuthService) syncShopPasswordReset(ctx context.Context, userID int64, e
 	return nil
 }
 
+// SyncShopPasswordChange applies a user-initiated Sub2API password change to the
+// matching Shop account before Sub2API commits the local password update.
+func (s *AuthService) SyncShopPasswordChange(ctx context.Context, userID int64, email, newPassword string) error {
+	lock := shopPasswordSyncLockForUser(userID)
+	lock.Lock()
+	defer lock.Unlock()
+	return s.syncShopPasswordReset(ctx, userID, email, newPassword)
+}
+
+func (s *AuthService) BlockShopPasswordLoginSyncHash(userID int64, passwordHash string) {
+	if userID <= 0 || strings.TrimSpace(passwordHash) == "" {
+		return
+	}
+	shopPasswordLoginSyncBlockedHash.Store(userID, passwordHash)
+}
+
+func (s *AuthService) UnblockShopPasswordLoginSyncHash(userID int64, passwordHash string) {
+	if userID <= 0 || strings.TrimSpace(passwordHash) == "" {
+		return
+	}
+	value, ok := shopPasswordLoginSyncBlockedHash.Load(userID)
+	if !ok {
+		return
+	}
+	blockedHash, ok := value.(string)
+	if !ok || blockedHash == passwordHash {
+		shopPasswordLoginSyncBlockedHash.Delete(userID)
+	}
+}
+
 // ScheduleShopPasswordLoginSync keeps Sub2API's native login flow local and fast,
 // while preparing the matching Shop account in the background for unified access.
 func (s *AuthService) ScheduleShopPasswordLoginSync(ctx context.Context, user *User, password string, source string) {
@@ -104,6 +136,17 @@ func (s *AuthService) ScheduleShopPasswordLoginSync(ctx context.Context, user *U
 	userID := user.ID
 	email := strings.TrimSpace(user.Email)
 	go func() {
+		lock := shopPasswordSyncLockForUser(userID)
+		lock.Lock()
+		defer lock.Unlock()
+		if isShopPasswordLoginSyncHashBlocked(userID, passwordHash) {
+			logger.LegacyPrintf("service.auth", "[Auth] Skip blocked Shop password login sync for user %d source=%s", userID, source)
+			return
+		}
+		if !s.shopPasswordLoginSyncStillCurrent(context.Background(), userID, passwordHash) {
+			logger.LegacyPrintf("service.auth", "[Auth] Skip stale Shop password login sync for user %d source=%s", userID, source)
+			return
+		}
 		if err := s.syncShopPasswordReset(context.Background(), userID, email, password); err != nil {
 			logger.LegacyPrintf("service.auth", "[Auth] Shop password login sync failed for user %d source=%s: %v", userID, source, err)
 			return
@@ -113,6 +156,41 @@ func (s *AuthService) ScheduleShopPasswordLoginSync(ctx context.Context, user *U
 			syncedAt:     time.Now(),
 		})
 	}()
+}
+
+func shopPasswordSyncLockForUser(userID int64) *sync.Mutex {
+	value, _ := shopPasswordSyncLocks.LoadOrStore(userID, &sync.Mutex{})
+	lock, ok := value.(*sync.Mutex)
+	if !ok {
+		shopPasswordSyncLocks.Delete(userID)
+		return shopPasswordSyncLockForUser(userID)
+	}
+	return lock
+}
+
+func isShopPasswordLoginSyncHashBlocked(userID int64, passwordHash string) bool {
+	value, ok := shopPasswordLoginSyncBlockedHash.Load(userID)
+	if !ok {
+		return false
+	}
+	blockedHash, ok := value.(string)
+	if !ok {
+		shopPasswordLoginSyncBlockedHash.Delete(userID)
+		return false
+	}
+	return blockedHash == passwordHash
+}
+
+func (s *AuthService) shopPasswordLoginSyncStillCurrent(ctx context.Context, userID int64, passwordHash string) bool {
+	if s == nil || s.userRepo == nil {
+		return true
+	}
+	latest, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		logger.LegacyPrintf("service.auth", "[Auth] Skip Shop password login sync for user %d: reload failed: %v", userID, err)
+		return false
+	}
+	return strings.TrimSpace(latest.PasswordHash) == passwordHash
 }
 
 func (s *AuthService) shopAccountSyncEnabled() bool {

@@ -404,6 +404,17 @@ func ProvideAPIKeyAuthCacheInvalidator(apiKeyService *APIKeyService) APIKeyAuthC
 	return apiKeyService
 }
 
+// ProvideUserService wires UserService with optional cross-system password sync.
+func ProvideUserService(userRepo UserRepository, settingRepo SettingRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCache BillingCache, authService *AuthService) *UserService {
+	svc := NewUserService(userRepo, settingRepo, authCacheInvalidator, billingCache)
+	if authService != nil {
+		svc.SetShopPasswordSync(authService.SyncShopPasswordChange)
+		svc.SetShopPasswordLoginSyncBlocker(authService.BlockShopPasswordLoginSyncHash)
+		svc.SetShopPasswordLoginSyncUnblocker(authService.UnblockShopPasswordLoginSyncHash)
+	}
+	return svc
+}
+
 // ProvideBackupService creates and starts BackupService
 func ProvideBackupService(
 	settingRepo SettingRepository,
@@ -504,7 +515,7 @@ var ProviderSet = wire.NewSet(
 	// Core services
 	NewAuthService,
 	NewOIDCIssuerService,
-	NewUserService,
+	ProvideUserService,
 	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	NewGroupService,

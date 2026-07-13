@@ -219,6 +219,9 @@ type UserService struct {
 	settingRepo          SettingRepository
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	billingCache         BillingCache
+	shopPasswordSync     func(ctx context.Context, userID int64, email, newPassword string) error
+	shopPasswordBlock    func(userID int64, passwordHash string)
+	shopPasswordUnblock  func(userID int64, passwordHash string)
 	lastActiveTouchL1    sync.Map
 	lastActiveTouchSF    singleflight.Group
 }
@@ -231,6 +234,31 @@ func NewUserService(userRepo UserRepository, settingRepo SettingRepository, auth
 		authCacheInvalidator: authCacheInvalidator,
 		billingCache:         billingCache,
 	}
+}
+
+// SetShopPasswordSync injects the optional Shop account password synchronizer.
+func (s *UserService) SetShopPasswordSync(syncFn func(ctx context.Context, userID int64, email, newPassword string) error) {
+	if s == nil {
+		return
+	}
+	s.shopPasswordSync = syncFn
+}
+
+// SetShopPasswordLoginSyncBlocker injects an optional stale login-sync blocker.
+func (s *UserService) SetShopPasswordLoginSyncBlocker(blockFn func(userID int64, passwordHash string)) {
+	if s == nil {
+		return
+	}
+	s.shopPasswordBlock = blockFn
+}
+
+// SetShopPasswordLoginSyncUnblocker releases stale login-sync blockers after
+// the password change has either committed or failed.
+func (s *UserService) SetShopPasswordLoginSyncUnblocker(unblockFn func(userID int64, passwordHash string)) {
+	if s == nil {
+		return
+	}
+	s.shopPasswordUnblock = unblockFn
 }
 
 // GetFirstAdmin 获取首个管理员用户（用于 Admin API Key 认证）
@@ -943,6 +971,20 @@ func (s *UserService) ChangePassword(ctx context.Context, userID int64, req Chan
 	// 验证当前密码
 	if !user.CheckPassword(req.CurrentPassword) {
 		return ErrPasswordIncorrect
+	}
+
+	oldPasswordHash := strings.TrimSpace(user.PasswordHash)
+	if s.shopPasswordBlock != nil {
+		s.shopPasswordBlock(user.ID, oldPasswordHash)
+	}
+	if s.shopPasswordUnblock != nil {
+		defer s.shopPasswordUnblock(user.ID, oldPasswordHash)
+	}
+
+	if s.shopPasswordSync != nil {
+		if err := s.shopPasswordSync(ctx, user.ID, user.Email, req.NewPassword); err != nil {
+			return ErrServiceUnavailable
+		}
 	}
 
 	if err := user.SetPassword(req.NewPassword); err != nil {

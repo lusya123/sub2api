@@ -195,3 +195,51 @@ func TestAdminService_UpdateUser_DoesNotReturnPartialSuccessFromEmailIdentityRes
 	require.Empty(t, repo.replaceCalls)
 	require.Empty(t, repo.ensureCalls)
 }
+
+func TestAdminService_UpdateUser_SamePasswordKeepsPasswordHash(t *testing.T) {
+	user := &User{
+		ID:          92,
+		Email:       "same-password@example.com",
+		Role:        RoleUser,
+		Status:      StatusActive,
+		Concurrency: 3,
+	}
+	require.NoError(t, user.SetPassword("current-password"))
+	originalHash := user.PasswordHash
+	repo := &emailSyncRepoStub{user: user}
+	svc := &adminServiceImpl{userRepo: repo}
+
+	updated, err := svc.UpdateUser(context.Background(), 92, &UpdateUserInput{
+		Password: "current-password",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.Equal(t, originalHash, updated.PasswordHash)
+	require.Equal(t, originalHash, repo.user.PasswordHash)
+	require.Len(t, repo.updated, 1)
+	require.Equal(t, originalHash, repo.updated[0].PasswordHash)
+}
+
+func TestAdminService_UpdateUser_DifferentPasswordUpdatesPasswordHash(t *testing.T) {
+	user := &User{
+		ID:          93,
+		Email:       "different-password@example.com",
+		Role:        RoleUser,
+		Status:      StatusActive,
+		Concurrency: 3,
+	}
+	require.NoError(t, user.SetPassword("current-password"))
+	originalHash := user.PasswordHash
+	repo := &emailSyncRepoStub{user: user}
+	svc := &adminServiceImpl{userRepo: repo}
+
+	updated, err := svc.UpdateUser(context.Background(), 93, &UpdateUserInput{
+		Password: "next-password",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotEqual(t, originalHash, updated.PasswordHash)
+	require.True(t, updated.CheckPassword("next-password"))
+}

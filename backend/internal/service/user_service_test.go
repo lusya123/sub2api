@@ -883,3 +883,96 @@ func TestGetProfile_HydratesAvatarFromRepository(t *testing.T) {
 	require.Equal(t, "https://cdn.example.com/profile.png", user.AvatarURL)
 	require.Equal(t, "remote_url", user.AvatarSource)
 }
+
+func TestChangePassword_SyncsShopBeforeLocalUpdate(t *testing.T) {
+	user := &User{
+		ID:           88,
+		Email:        "sync-password@example.com",
+		TokenVersion: 3,
+	}
+	require.NoError(t, user.SetPassword("old-password"))
+	repo := &mockUserRepo{getByIDUser: user}
+
+	var syncedUserID int64
+	var syncedEmail string
+	var syncedPassword string
+	var blockedUserID int64
+	var blockedHash string
+	var unblockedUserID int64
+	var unblockedHash string
+	var updated *User
+	repo.updateFn = func(_ context.Context, user *User) error {
+		clone := *user
+		updated = &clone
+		return nil
+	}
+
+	svc := NewUserService(repo, nil, nil, nil)
+	svc.SetShopPasswordLoginSyncBlocker(func(userID int64, passwordHash string) {
+		blockedUserID = userID
+		blockedHash = passwordHash
+	})
+	svc.SetShopPasswordLoginSyncUnblocker(func(userID int64, passwordHash string) {
+		unblockedUserID = userID
+		unblockedHash = passwordHash
+	})
+	svc.SetShopPasswordSync(func(_ context.Context, userID int64, email, newPassword string) error {
+		syncedUserID = userID
+		syncedEmail = email
+		syncedPassword = newPassword
+		require.Nil(t, updated, "local password should not be committed before shop sync returns")
+		return nil
+	})
+
+	err := svc.ChangePassword(context.Background(), 88, ChangePasswordRequest{
+		CurrentPassword: "old-password",
+		NewPassword:     "new-password",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(88), syncedUserID)
+	require.Equal(t, "sync-password@example.com", syncedEmail)
+	require.Equal(t, "new-password", syncedPassword)
+	require.Equal(t, int64(88), blockedUserID)
+	require.Equal(t, user.PasswordHash, blockedHash)
+	require.Equal(t, int64(88), unblockedUserID)
+	require.Equal(t, user.PasswordHash, unblockedHash)
+	require.NotNil(t, updated)
+	require.True(t, updated.CheckPassword("new-password"))
+	require.Equal(t, int64(4), updated.TokenVersion)
+}
+
+func TestChangePassword_DoesNotUpdateLocalPasswordWhenShopSyncFails(t *testing.T) {
+	user := &User{
+		ID:           89,
+		Email:        "sync-fail@example.com",
+		TokenVersion: 7,
+	}
+	require.NoError(t, user.SetPassword("old-password"))
+	originalHash := user.PasswordHash
+	repo := &mockUserRepo{getByIDUser: user}
+
+	var unblockedUserID int64
+	var unblockedHash string
+	svc := NewUserService(repo, nil, nil, nil)
+	svc.SetShopPasswordLoginSyncBlocker(func(int64, string) {})
+	svc.SetShopPasswordLoginSyncUnblocker(func(userID int64, passwordHash string) {
+		unblockedUserID = userID
+		unblockedHash = passwordHash
+	})
+	svc.SetShopPasswordSync(func(context.Context, int64, string, string) error {
+		return errors.New("shop unavailable")
+	})
+
+	err := svc.ChangePassword(context.Background(), 89, ChangePasswordRequest{
+		CurrentPassword: "old-password",
+		NewPassword:     "new-password",
+	})
+
+	require.ErrorIs(t, err, ErrServiceUnavailable)
+	require.Zero(t, repo.updateCalls)
+	require.Equal(t, originalHash, user.PasswordHash)
+	require.Equal(t, int64(7), user.TokenVersion)
+	require.Equal(t, int64(89), unblockedUserID)
+	require.Equal(t, originalHash, unblockedHash)
+}

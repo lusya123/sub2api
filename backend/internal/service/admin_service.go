@@ -772,7 +772,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if input.Email != "" {
 		user.Email = input.Email
 	}
-	if input.Password != "" {
+	if input.Password != "" && !user.CheckPassword(input.Password) {
 		if err := user.SetPassword(input.Password); err != nil {
 			return nil, err
 		}
