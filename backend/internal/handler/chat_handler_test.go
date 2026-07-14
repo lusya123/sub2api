@@ -16,7 +16,7 @@ func TestChatSignInURLUsesConfiguredChatURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("chatSignInURL returned error: %v", err)
 	}
-	want := "https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox"
+	want := "https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox&source=sub2api"
 	if got != want {
 		t.Fatalf("chatSignInURL = %q, want %q", got, want)
 	}
@@ -30,7 +30,7 @@ func TestChatSignInURLUsesSettingsChatURLBeforeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("chatSignInURL returned error: %v", err)
 	}
-	want := "https://settings.example.com/signin?callbackUrl=%2Fagent%2Finbox"
+	want := "https://settings.example.com/signin?callbackUrl=%2Fagent%2Finbox&source=sub2api"
 	if got != want {
 		t.Fatalf("chatSignInURL = %q, want %q", got, want)
 	}
@@ -44,7 +44,7 @@ func TestChatSignInURLFallsBackToOIDCRedirectOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("chatSignInURL returned error: %v", err)
 	}
-	want := "https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox"
+	want := "https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox&source=sub2api"
 	if got != want {
 		t.Fatalf("chatSignInURL = %q, want %q", got, want)
 	}
@@ -58,7 +58,7 @@ func TestChatSignInURLFallsBackToChatSubdomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("chatSignInURL returned error: %v", err)
 	}
-	want := "https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox"
+	want := "https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox&source=sub2api"
 	if got != want {
 		t.Fatalf("chatSignInURL = %q, want %q", got, want)
 	}
@@ -82,6 +82,9 @@ func TestChatSignInURLWithPreferenceUsesTopLevelCallback(t *testing.T) {
 	}
 	if embed := signInURL.Query().Get("embed"); embed != "" {
 		t.Fatalf("sign-in URL unexpectedly enables embed mode: %q", embed)
+	}
+	if source := signInURL.Query().Get("source"); source != "sub2api" {
+		t.Fatalf("sign-in source = %q, want %q", source, "sub2api")
 	}
 
 	callbackURL, err := url.Parse(signInURL.Query().Get("callbackUrl"))

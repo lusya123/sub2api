@@ -192,6 +192,7 @@ func (h *ChatHandler) chatSignInURLWithPreference(ctx context.Context, preferenc
 		return "", fmt.Errorf("invalid lobe chat url")
 	}
 	q := u.Query()
+	q.Set("source", "sub2api")
 	// Build the callback URL the user lands on after OIDC completes.
 	cb := url.URL{Path: "/agent/inbox"}
 	cbq := cb.Query()
