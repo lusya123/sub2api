@@ -1511,8 +1511,8 @@ func safeRawJSONArray(raw string) json.RawMessage {
 	return json.RawMessage("[]")
 }
 
-// GetFrameSrcOrigins returns deduplicated http(s) origins from home_content URL,
-// purchase subscription embed URLs, and all custom_menu_items URLs. Used by the router layer for CSP frame-src injection.
+// GetFrameSrcOrigins returns deduplicated http(s) origins used by iframe-backed pages.
+// The router injects these origins into CSP frame-src.
 func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, error) {
 	settings, err := s.GetPublicSettings(ctx)
 	if err != nil {
@@ -1538,6 +1538,13 @@ func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, erro
 	// redirect so admins can switch modes without requiring a CSP refresh boundary.
 	if settings.PurchaseSubscriptionEnabled {
 		addOrigin(settings.PurchaseSubscriptionEmbeddedURL)
+	}
+
+	if settings.ChatPageEnabled {
+		addOrigin(settings.ChatPageURL)
+	}
+	if settings.AgentPageEnabled {
+		addOrigin(settings.AgentPageURL)
 	}
 
 	// all custom menu items (including admin-only, since CSP must allow all iframes)

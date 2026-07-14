@@ -164,3 +164,37 @@ func TestSettingService_GetPublicSettings_FallsBackToConfigForWeChatOAuthCapabil
 	require.False(t, settings.WeChatOAuthMPEnabled)
 	require.False(t, settings.WeChatOAuthMobileEnabled)
 }
+
+func TestSettingService_GetFrameSrcOrigins_IncludesEnabledChatAndAgentPages(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyChatPageEnabled:  "true",
+			SettingKeyChatPageURL:      "https://lobe.example.com/chat",
+			SettingKeyAgentPageEnabled: "true",
+			SettingKeyAgentPageURL:     "https://agent.example.com/workspace",
+			SettingKeyHomeContent:      "https://lobe.example.com/home",
+		},
+	}, &config.Config{})
+
+	origins, err := svc.GetFrameSrcOrigins(context.Background())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{
+		"https://agent.example.com",
+		"https://lobe.example.com",
+	}, origins)
+}
+
+func TestSettingService_GetFrameSrcOrigins_ExcludesDisabledChatAndAgentPages(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyChatPageEnabled:  "false",
+			SettingKeyChatPageURL:      "https://lobe.example.com",
+			SettingKeyAgentPageEnabled: "false",
+			SettingKeyAgentPageURL:     "https://agent.example.com",
+		},
+	}, &config.Config{})
+
+	origins, err := svc.GetFrameSrcOrigins(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, origins)
+}
