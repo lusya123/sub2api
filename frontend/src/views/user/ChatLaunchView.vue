@@ -91,15 +91,15 @@
 
     <main class="use-token-stage">
       <iframe
-        v-for="m in visibleModes"
-        :key="m.key + '-' + frameKeys[m.key]"
-        :src="frameUrls[m.key] || 'about:blank'"
+        v-if="agentAppEnabled"
+        :key="'agent-' + agentFrameKey"
+        :src="agentFrameUrl || 'about:blank'"
         :class="[
           'use-token-frame',
-          mode === m.key && 'use-token-frame--visible'
+          mode === 'agent' && 'use-token-frame--visible'
         ]"
-        :title="m.label"
-        :aria-hidden="mode !== m.key"
+        :title="t('useToken.modes.agent')"
+        :aria-hidden="mode !== 'agent'"
         referrerpolicy="strict-origin-when-cross-origin"
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-presentation allow-clipboard-read allow-clipboard-write"
       />
@@ -174,6 +174,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
+import { navigateInCurrentTab } from '@/utils/navigation'
 import type { LobeProviderConfig } from '@/api/chat'
 import type { ApiKey } from '@/types'
 
@@ -214,8 +215,9 @@ const keysLoading = ref(false)
 const launchError = ref('')
 
 const mode = ref<ModeKey>('chat')
-const frameUrls = ref<Record<ModeKey, string>>({ chat: '', agent: '' })
-const frameKeys = ref<Record<ModeKey, number>>({ chat: 0, agent: 0 })
+const chatNavigationPending = ref(false)
+const agentFrameUrl = ref('')
+const agentFrameKey = ref(0)
 
 const overflowOpen = ref(false)
 const showAdvanced = ref(false)
@@ -239,7 +241,7 @@ const visibleModes = computed<ModeDescriptor[]>(() =>
     .map((m) => ({ ...m, label: t(`useToken.modes.${m.key}`) }))
 )
 
-const currentFrameUrl = computed(() => frameUrls.value[mode.value])
+const currentFrameUrl = computed(() => (mode.value === 'agent' ? agentFrameUrl.value : ''))
 const tooltipMessage = computed(() => {
   if (hoveredMode.value && hoveredMode.value !== mode.value) {
     return t(`useToken.explanations.${hoveredMode.value}`)
@@ -467,19 +469,23 @@ async function prepareAgentUrl(): Promise<string> {
   return bridge.toString()
 }
 
-async function prewarmChat() {
-  if (!chatAppEnabled.value || frameUrls.value.chat) return
+async function launchChatInCurrentTab() {
+  if (!chatAppEnabled.value || chatNavigationPending.value) return
+  chatNavigationPending.value = true
+  launchError.value = ''
   try {
-    frameUrls.value.chat = await prepareChatUrl()
+    const url = await prepareChatUrl()
+    navigateInCurrentTab(url)
   } catch {
-    if (mode.value === 'chat') launchError.value = t('chatLaunch.failed')
+    chatNavigationPending.value = false
+    launchError.value = t('chatLaunch.failed')
   }
 }
 
 async function prewarmAgent() {
-  if (!agentAppEnabled.value || frameUrls.value.agent) return
+  if (!agentAppEnabled.value || agentFrameUrl.value) return
   try {
-    frameUrls.value.agent = await prepareAgentUrl()
+    agentFrameUrl.value = await prepareAgentUrl()
   } catch {
     if (mode.value === 'agent') launchError.value = t('chatLaunch.agent.failed')
   }
@@ -494,8 +500,8 @@ async function switchTo(next: ModeKey) {
   await nextTick()
   updateSlider()
   if (next === 'chat') {
-    if (!frameUrls.value.chat) await prewarmChat()
-  } else if (!frameUrls.value.agent) {
+    await launchChatInCurrentTab()
+  } else if (!agentFrameUrl.value) {
     if (selectedProviderOption.value) {
       await prewarmAgent()
     }
@@ -504,19 +510,23 @@ async function switchTo(next: ModeKey) {
 
 async function refreshCurrent() {
   launchError.value = ''
+  if (mode.value === 'chat') {
+    await launchChatInCurrentTab()
+    return
+  }
   try {
-    const next = mode.value === 'chat' ? await prepareChatUrl() : await prepareAgentUrl()
-    frameUrls.value[mode.value] = next
-    frameKeys.value[mode.value] += 1
+    agentFrameUrl.value = await prepareAgentUrl()
+    agentFrameKey.value += 1
   } catch {
-    launchError.value = mode.value === 'chat' ? t('chatLaunch.failed') : t('chatLaunch.agent.failed')
+    launchError.value = t('chatLaunch.agent.failed')
   }
 }
 
 async function openCurrentInNewTab() {
   try {
-    const url = frameUrls.value[mode.value]
-      || (mode.value === 'chat' ? await prepareChatUrl() : await prepareAgentUrl())
+    const url = mode.value === 'chat'
+      ? await prepareChatUrl()
+      : agentFrameUrl.value || await prepareAgentUrl()
     window.open(url, '_blank', 'noopener,noreferrer')
   } catch {
     launchError.value = mode.value === 'chat' ? t('chatLaunch.failed') : t('chatLaunch.agent.failed')
@@ -558,12 +568,10 @@ watch(selectedAgentKey, () => {
 watch(showAdvanced, async (open) => {
   if (open) return
   if (advancedDirty.chat) {
-    frameUrls.value.chat = ''
     advancedDirty.chat = false
-    if (chatAppEnabled.value) await prewarmChat()
   }
   if (advancedDirty.agent) {
-    frameUrls.value.agent = ''
+    agentFrameUrl.value = ''
     advancedDirty.agent = false
     if (agentAppEnabled.value && selectedProviderOption.value) await prewarmAgent()
   }
@@ -585,6 +593,8 @@ onMounted(async () => {
   const stored = readStoredMode()
   if (stored && visibleModes.value.some((m) => m.key === stored)) {
     mode.value = stored
+  } else if (visibleModes.value.length > 0) {
+    mode.value = visibleModes.value[0].key
   }
 
   await Promise.allSettled([loadModels(), loadAgentKeys()])
@@ -592,8 +602,9 @@ onMounted(async () => {
   updateSlider()
   maybeShowFirstHint()
 
-  void prewarmChat()
-  if (agentAppEnabled.value) {
+  if (mode.value === 'chat') {
+    void launchChatInCurrentTab()
+  } else if (agentAppEnabled.value) {
     const ready = selectedProviderOption.value || selectRecommendedAgentModel()
     if (ready) void prewarmAgent()
   }
