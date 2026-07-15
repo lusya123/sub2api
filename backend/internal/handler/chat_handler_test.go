@@ -2,7 +2,11 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -102,5 +106,98 @@ func TestChatSignInURLWithPreferenceUsesTopLevelCallback(t *testing.T) {
 	}
 	if model := callbackURL.Query().Get("modelId"); model != "gpt-5.4-mini" {
 		t.Fatalf("callback model = %q, want %q", model, "gpt-5.4-mini")
+	}
+}
+
+func TestSyncLobeUserConfig(t *testing.T) {
+	t.Parallel()
+
+	var gotAuthorization string
+	var gotBody map[string]string
+	client := chatHTTPClientFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %q, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/internal/sync-user" {
+			t.Fatalf("path = %q, want /api/internal/sync-user", r.URL.Path)
+		}
+		if r.URL.Scheme != "https" || r.URL.Host != "chat.example.com" || r.URL.RawQuery != "" {
+			t.Fatalf("sync URL = %q, want https://chat.example.com/api/internal/sync-user", r.URL.String())
+		}
+		gotAuthorization = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		return &http.Response{
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			StatusCode: http.StatusOK,
+		}, nil
+	})
+
+	h := &ChatHandler{cfg: &config.Config{}, lobeSyncClient: client}
+	h.cfg.Lobe.InternalSharedSecret = "shared-secret"
+
+	err := h.syncLobeUserConfig(context.Background(), 2412, "https://chat.example.com/signin?source=sub2api")
+	if err != nil {
+		t.Fatalf("syncLobeUserConfig returned error: %v", err)
+	}
+	if gotAuthorization != "Bearer shared-secret" {
+		t.Fatalf("Authorization = %q, want Bearer shared-secret", gotAuthorization)
+	}
+	if gotBody["user_id"] != "2412" {
+		t.Fatalf("user_id = %q, want 2412", gotBody["user_id"])
+	}
+}
+
+func TestSyncLobeUserConfigDoesNotExposeResponseBody(t *testing.T) {
+	t.Parallel()
+
+	h := &ChatHandler{
+		cfg: &config.Config{},
+		lobeSyncClient: chatHTTPClientFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				Body:       io.NopCloser(strings.NewReader("SECRET_RESPONSE_BODY")),
+				StatusCode: http.StatusBadGateway,
+			}, nil
+		}),
+	}
+	h.cfg.Lobe.InternalSharedSecret = "shared-secret"
+
+	err := h.syncLobeUserConfig(context.Background(), 2412, "https://chat.example.com/signin")
+	if err == nil {
+		t.Fatal("syncLobeUserConfig returned nil error")
+	}
+	if strings.Contains(err.Error(), "SECRET_RESPONSE_BODY") {
+		t.Fatalf("error exposes response body: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTTP 502") {
+		t.Fatalf("error = %q, want HTTP 502", err.Error())
+	}
+}
+
+type chatHTTPClientFunc func(req *http.Request) (*http.Response, error)
+
+func (f chatHTTPClientFunc) Do(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestSyncLobeUserConfigSkipsWhenSecretIsMissing(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	h := &ChatHandler{
+		cfg: &config.Config{},
+		lobeSyncClient: chatHTTPClientFunc(func(*http.Request) (*http.Response, error) {
+			called = true
+			return nil, nil
+		}),
+	}
+
+	err := h.syncLobeUserConfig(context.Background(), 2412, "https://chat.example.com/signin")
+	if err != nil {
+		t.Fatalf("syncLobeUserConfig returned error: %v", err)
+	}
+	if called {
+		t.Fatal("HTTP client was called without a shared secret")
 	}
 }

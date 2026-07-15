@@ -1,11 +1,16 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -22,6 +27,11 @@ type ChatHandler struct {
 	userService       *service.UserService
 	settingSvc        *service.SettingService
 	lobeConfigService *service.LobeConfigService
+	lobeSyncClient    chatHTTPClient
+}
+
+type chatHTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 type ChatLaunchResponse struct {
@@ -40,6 +50,16 @@ func NewChatHandler(cfg *config.Config, authService *service.AuthService, userSe
 		userService:       userService,
 		settingSvc:        settingService,
 		lobeConfigService: lobeConfigService,
+		lobeSyncClient:    newLobeSyncHTTPClient(),
+	}
+}
+
+func newLobeSyncHTTPClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Timeout: 5 * time.Second,
 	}
 }
 
@@ -107,8 +127,56 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 		response.InternalError(c, err.Error())
 		return "", false
 	}
+	if err := h.syncLobeUserConfig(c.Request.Context(), subject.UserID, target); err != nil {
+		slog.Warn("lobe_user_config_sync_failed", "user_id", subject.UserID, "error", err)
+	}
 
 	return target, true
+}
+
+func (h *ChatHandler) syncLobeUserConfig(ctx context.Context, userID int64, chatSignInURL string) error {
+	if h == nil || h.cfg == nil || userID <= 0 {
+		return nil
+	}
+	secret := strings.TrimSpace(h.cfg.Lobe.InternalSharedSecret)
+	if secret == "" {
+		return nil
+	}
+
+	parsed, err := url.Parse(strings.TrimSpace(chatSignInURL))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("invalid lobe chat URL")
+	}
+	syncURL := (&url.URL{
+		Scheme: parsed.Scheme,
+		Host:   parsed.Host,
+		Path:   "/api/internal/sync-user",
+	}).String()
+	payload, err := json.Marshal(map[string]string{"user_id": strconvFormatInt(userID)})
+	if err != nil {
+		return fmt.Errorf("encode lobe user sync request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, syncURL, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("build lobe user sync request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+secret)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := h.lobeSyncClient
+	if client == nil {
+		client = newLobeSyncHTTPClient()
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request lobe user sync: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("lobe user sync returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (h *ChatHandler) chatPageSettings(ctx context.Context) (bool, string, error) {
