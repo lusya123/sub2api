@@ -459,7 +459,7 @@ func dedupeAndSortModelIDs(models []string) []string {
 	seen := make(map[string]struct{}, len(models))
 	result := make([]string, 0, len(models))
 	for _, model := range models {
-		model = strings.TrimSpace(model)
+		model = strings.TrimPrefix(strings.TrimSpace(model), "models/")
 		if model == "" {
 			continue
 		}
@@ -471,4 +471,100 @@ func dedupeAndSortModelIDs(models []string) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+// MergeUpstreamModelsIntoCredentials adds newly discovered upstream models as
+// identity mappings while preserving existing aliases and credential fields.
+// It does not mutate the input map. The returned added list is sorted.
+func MergeUpstreamModelsIntoCredentials(credentials map[string]any, models []string) (map[string]any, []string) {
+	modelIDs := dedupeAndSortModelIDs(models)
+	if len(modelIDs) == 0 {
+		return credentials, nil
+	}
+
+	mapping := make(map[string]any)
+	switch existing := credentials["model_mapping"].(type) {
+	case map[string]any:
+		for model, target := range existing {
+			mapping[model] = target
+		}
+	case map[string]string:
+		for model, target := range existing {
+			mapping[model] = target
+		}
+	}
+
+	added := make([]string, 0, len(modelIDs))
+	for _, modelID := range modelIDs {
+		if target, exists := mapping[modelID]; exists {
+			if targetString, ok := target.(string); ok && strings.TrimSpace(targetString) != "" {
+				continue
+			}
+		}
+		mapping[modelID] = modelID
+		added = append(added, modelID)
+	}
+	if len(added) == 0 {
+		return credentials, nil
+	}
+
+	merged := cloneCredentials(credentials)
+	merged["model_mapping"] = mapping
+	return merged, added
+}
+
+type accountModelMappingMerger interface {
+	MergeModelMapping(ctx context.Context, id int64, modelMapping map[string]string) error
+}
+
+// SyncUpstreamModelMapping fetches an API-key account's live model list and
+// persists any missing identity mappings. Existing aliases are left intact.
+func (s *AccountTestService) SyncUpstreamModelMapping(ctx context.Context, accountID int64) ([]string, []string, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, nil, newUpstreamModelSyncConfigError("Account repository is not configured", nil)
+	}
+
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load account for upstream model sync: %w", err)
+	}
+	if !supportsAutomaticUpstreamModelSync(account) {
+		return nil, nil, newUpstreamModelSyncUnsupportedError("Account does not support automatic upstream model sync", nil)
+	}
+
+	models, err := s.FetchUpstreamSupportedModels(ctx, account)
+	if err != nil {
+		return nil, nil, err
+	}
+	credentials, added := MergeUpstreamModelsIntoCredentials(account.Credentials, models)
+	if len(added) == 0 {
+		return models, nil, nil
+	}
+
+	var persistErr error
+	if merger, ok := any(s.accountRepo).(accountModelMappingMerger); ok {
+		identityMapping := make(map[string]string, len(added))
+		for _, modelID := range added {
+			identityMapping[modelID] = modelID
+		}
+		persistErr = merger.MergeModelMapping(ctx, account.ID, identityMapping)
+	} else {
+		persistErr = persistAccountCredentials(ctx, s.accountRepo, account, credentials)
+	}
+	if persistErr != nil {
+		return models, nil, fmt.Errorf("persist upstream model mapping: %w", persistErr)
+	}
+	return models, added, nil
+}
+
+func supportsAutomaticUpstreamModelSync(account *Account) bool {
+	if account == nil || account.Type != AccountTypeAPIKey {
+		return false
+	}
+	switch account.Platform {
+	case PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity:
+		return true
+	default:
+		return false
+	}
 }

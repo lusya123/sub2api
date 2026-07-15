@@ -419,6 +419,51 @@ func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, cre
 	return nil
 }
 
+// MergeModelMapping atomically adds model mappings without overwriting
+// credentials or aliases that may have been updated concurrently.
+func (r *accountRepository) MergeModelMapping(ctx context.Context, id int64, modelMapping map[string]string) error {
+	if len(modelMapping) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(modelMapping)
+	if err != nil {
+		return err
+	}
+
+	client := clientFromContext(ctx, r.client)
+	result, err := client.ExecContext(ctx, `
+		UPDATE accounts
+		SET credentials = jsonb_set(
+			COALESCE(credentials, '{}'::jsonb),
+			'{model_mapping}'::text[],
+			$1::jsonb || CASE
+				WHEN jsonb_typeof(COALESCE(credentials, '{}'::jsonb)->'model_mapping') = 'object'
+					THEN COALESCE(credentials, '{}'::jsonb)->'model_mapping'
+				ELSE '{}'::jsonb
+			END,
+			true
+		),
+		updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+	`, string(payload), id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return service.ErrAccountNotFound
+	}
+
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue model mapping merge failed: account=%d err=%v", id, err)
+	}
+	r.syncSchedulerAccountSnapshot(ctx, id)
+	return nil
+}
+
 func (r *accountRepository) Delete(ctx context.Context, id int64) error {
 	groupIDs, err := r.loadAccountGroupIDs(ctx, id)
 	if err != nil {

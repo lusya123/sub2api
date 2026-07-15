@@ -224,3 +224,183 @@ func TestFetchUpstreamSupportedModelsDoesNotExposeUpstreamBody(t *testing.T) {
 	require.NotContains(t, syncErr.SafeMessage(), "SECRET_TOKEN")
 	require.Contains(t, syncErr.SafeMessage(), "HTTP 502")
 }
+
+func TestMergeUpstreamModelsIntoCredentialsPreservesAliases(t *testing.T) {
+	t.Parallel()
+
+	originalMapping := map[string]any{
+		"claude-alias":      "claude-sonnet-4-6",
+		"claude-sonnet-4-6": "custom-upstream-model",
+		"glm-5":             nil,
+	}
+	original := map[string]any{
+		"api_key":       "secret",
+		"model_mapping": originalMapping,
+	}
+
+	merged, added := MergeUpstreamModelsIntoCredentials(original, []string{
+		" claude-sonnet-4-6 ",
+		"models/claude-sonnet-4-6-thinking",
+		"claude-sonnet-4-6-thinking",
+		"glm-5",
+		"",
+	})
+
+	require.Equal(t, []string{"claude-sonnet-4-6-thinking", "glm-5"}, added)
+	require.Equal(t, "secret", merged["api_key"])
+	require.Equal(t, map[string]any{
+		"claude-alias":               "claude-sonnet-4-6",
+		"claude-sonnet-4-6":          "custom-upstream-model",
+		"claude-sonnet-4-6-thinking": "claude-sonnet-4-6-thinking",
+		"glm-5":                      "glm-5",
+	}, merged["model_mapping"])
+
+	// The caller may still be using the account snapshot concurrently.
+	require.Equal(t, map[string]any{
+		"claude-alias":      "claude-sonnet-4-6",
+		"claude-sonnet-4-6": "custom-upstream-model",
+		"glm-5":             nil,
+	}, originalMapping)
+}
+
+func TestMergeUpstreamModelsIntoCredentialsNoopWhenAllModelsExist(t *testing.T) {
+	t.Parallel()
+
+	original := map[string]any{
+		"model_mapping": map[string]string{
+			"claude-sonnet-4-6": "custom-target",
+		},
+	}
+
+	merged, added := MergeUpstreamModelsIntoCredentials(original, []string{"claude-sonnet-4-6"})
+
+	require.Empty(t, added)
+	require.Equal(t, original, merged)
+}
+
+type upstreamModelsAccountRepo struct {
+	AccountRepository
+	account            *Account
+	getErr             error
+	updateErr          error
+	updatedID          int64
+	updatedCredentials map[string]any
+	mergedModelMapping map[string]string
+}
+
+func (r *upstreamModelsAccountRepo) GetByID(context.Context, int64) (*Account, error) {
+	return r.account, r.getErr
+}
+
+func (r *upstreamModelsAccountRepo) UpdateCredentials(_ context.Context, id int64, credentials map[string]any) error {
+	r.updatedID = id
+	r.updatedCredentials = cloneCredentials(credentials)
+	return r.updateErr
+}
+
+func (r *upstreamModelsAccountRepo) MergeModelMapping(_ context.Context, id int64, modelMapping map[string]string) error {
+	r.updatedID = id
+	r.mergedModelMapping = make(map[string]string, len(modelMapping))
+	for model, target := range modelMapping {
+		r.mergedModelMapping[model] = target
+	}
+	return r.updateErr
+}
+
+func TestSyncUpstreamModelMappingPersistsOnlyMissingModels(t *testing.T) {
+	t.Parallel()
+
+	repo := &upstreamModelsAccountRepo{account: &Account{
+		ID:       2412,
+		Platform: PlatformAnthropic,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":  "anthropic-key",
+			"base_url": "https://anthropic.example.com",
+			"model_mapping": map[string]any{
+				"claude-alias":    "claude-sonnet-4-6",
+				"claude-opus-4-6": "claude-opus-4-6",
+			},
+		},
+	}}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(`{"data":[
+			{"id":"claude-opus-4-6"},
+			{"id":"claude-opus-4-6-thinking"},
+			{"id":"glm-5"}
+		]}`)),
+	}}
+	svc := &AccountTestService{
+		accountRepo:  repo,
+		httpUpstream: upstream,
+		cfg:          upstreamModelSyncTestConfig(),
+	}
+
+	models, added, err := svc.SyncUpstreamModelMapping(context.Background(), 2412)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-opus-4-6", "claude-opus-4-6-thinking", "glm-5"}, models)
+	require.Equal(t, []string{"claude-opus-4-6-thinking", "glm-5"}, added)
+	require.Equal(t, int64(2412), repo.updatedID)
+	require.Equal(t, map[string]string{
+		"claude-opus-4-6-thinking": "claude-opus-4-6-thinking",
+		"glm-5":                    "glm-5",
+	}, repo.mergedModelMapping)
+	require.Nil(t, repo.updatedCredentials)
+	require.Equal(t, "https://anthropic.example.com/v1/models", upstream.lastReq.URL.String())
+}
+
+func TestSyncUpstreamModelMappingSkipsPersistenceWhenUnchanged(t *testing.T) {
+	t.Parallel()
+
+	repo := &upstreamModelsAccountRepo{account: &Account{
+		ID:       2413,
+		Platform: PlatformAnthropic,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":       "anthropic-key",
+			"base_url":      "https://anthropic.example.com",
+			"model_mapping": map[string]any{"claude-opus-4-6": "claude-opus-4-6"},
+		},
+	}}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"claude-opus-4-6"}]}`)),
+	}}
+	svc := &AccountTestService{
+		accountRepo:  repo,
+		httpUpstream: upstream,
+		cfg:          upstreamModelSyncTestConfig(),
+	}
+
+	models, added, err := svc.SyncUpstreamModelMapping(context.Background(), 2413)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-opus-4-6"}, models)
+	require.Empty(t, added)
+	require.Zero(t, repo.updatedID)
+	require.Nil(t, repo.updatedCredentials)
+	require.Nil(t, repo.mergedModelMapping)
+}
+
+func TestSyncUpstreamModelMappingRejectsUnsupportedAccount(t *testing.T) {
+	t.Parallel()
+
+	repo := &upstreamModelsAccountRepo{account: &Account{
+		ID:       10,
+		Platform: PlatformAnthropic,
+		Type:     AccountTypeOAuth,
+	}}
+	svc := &AccountTestService{accountRepo: repo}
+
+	_, _, err := svc.SyncUpstreamModelMapping(context.Background(), 10)
+
+	require.Error(t, err)
+	var syncErr *UpstreamModelSyncError
+	require.True(t, errors.As(err, &syncErr))
+	require.Equal(t, UpstreamModelSyncErrorUnsupported, syncErr.Kind)
+	require.Zero(t, repo.updatedID)
+}

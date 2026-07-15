@@ -869,6 +869,34 @@ func (s *AccountRepoSuite) TestUpdateExtra_MergesFields() {
 	s.Require().Equal("2", got.Extra["b"])
 }
 
+func (s *AccountRepoSuite) TestMergeModelMapping_PreservesCredentialsAndAliases() {
+	account := mustCreateAccount(s.T(), s.client, &service.Account{
+		Name:     "merge-model-mapping",
+		Platform: service.PlatformAnthropic,
+		Type:     service.AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "secret",
+			"model_mapping": map[string]any{
+				"existing": "custom-target",
+			},
+		},
+	})
+
+	err := s.repo.MergeModelMapping(s.ctx, account.ID, map[string]string{
+		"existing":  "existing",
+		"new-model": "new-model",
+	})
+	s.Require().NoError(err)
+
+	updated, err := s.repo.GetByID(s.ctx, account.ID)
+	s.Require().NoError(err)
+	s.Require().Equal("secret", updated.Credentials["api_key"])
+	s.Require().Equal(map[string]any{
+		"existing":  "custom-target",
+		"new-model": "new-model",
+	}, updated.Credentials["model_mapping"])
+}
+
 func (s *AccountRepoSuite) TestUpdateExtra_EmptyUpdates() {
 	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-extra-empty"})
 	s.Require().NoError(s.repo.UpdateExtra(s.ctx, account.ID, map[string]any{}))

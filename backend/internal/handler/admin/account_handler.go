@@ -585,6 +585,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	// OpenAI APIKey 账号创建后异步探测上游 /v1/responses 能力。
 	// 探测失败不影响账号创建响应。
 	h.scheduleOpenAIResponsesProbe(createdAccount)
+	h.scheduleUpstreamModelsProbe(createdAccount)
 	response.Success(c, result.Data)
 }
 
@@ -649,6 +650,7 @@ func (h *AccountHandler) Update(c *gin.Context) {
 	// 异步执行，探测失败不影响账号更新响应。
 	if len(req.Credentials) > 0 {
 		h.scheduleOpenAIResponsesProbe(account)
+		h.scheduleUpstreamModelsProbe(account)
 	}
 
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
@@ -675,6 +677,37 @@ func (h *AccountHandler) scheduleOpenAIResponsesProbe(account *service.Account) 
 			}
 		}()
 		h.accountTestService.ProbeOpenAIAPIKeyResponsesSupport(context.Background(), accountID)
+	}()
+}
+
+// scheduleUpstreamModelsProbe asynchronously merges live upstream models into
+// an API-key account's model mapping. Existing aliases remain authoritative.
+func (h *AccountHandler) scheduleUpstreamModelsProbe(account *service.Account) {
+	if account == nil || account.Type != service.AccountTypeAPIKey || h.accountTestService == nil {
+		return
+	}
+	switch account.Platform {
+	case service.PlatformAnthropic, service.PlatformOpenAI, service.PlatformGemini, service.PlatformAntigravity:
+	default:
+		return
+	}
+
+	accountID := account.ID
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("upstream_models_probe_panic", "account_id", accountID, "recover", r)
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		models, added, err := h.accountTestService.SyncUpstreamModelMapping(ctx, accountID)
+		if err != nil {
+			slog.Warn("upstream_models_probe_failed", "account_id", accountID, "error", err)
+			return
+		}
+		slog.Info("upstream_models_probe_done", "account_id", accountID, "models", len(models), "added", len(added))
 	}()
 }
 
@@ -1380,6 +1413,7 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 			}
 			// OpenAI APIKey 账号异步探测 /v1/responses 能力。
 			h.scheduleOpenAIResponsesProbe(account)
+			h.scheduleUpstreamModelsProbe(account)
 			success++
 			results = append(results, gin.H{
 				"name":    item.Name,
