@@ -39,6 +39,7 @@ var apiPathGuardAdminFrontendPrefixes = []string{
 	"/admin/operations",
 	"/admin/globe",
 	"/admin/audit-logs",
+	"/admin/security-audit-logs",
 	"/admin/model-marketplace",
 	"/admin/model-health",
 	"/admin/users",

@@ -320,6 +320,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import GlobeStage from '@/components/globe/GlobeStage.vue'
 import { useGlobeStream } from '@/composables/useGlobeStream'
+import { sanitizeUrl } from '@/utils/url'
 
 // Live globe data feed for the homepage section. Same SSE stream the
 // /globe page uses — data is shared, the visualisation is shared.
@@ -337,15 +338,10 @@ let globeObserver: IntersectionObserver | null = null
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
-const siteName = computed(
-  () => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API'
-)
-const siteLogo = computed(
-  () => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || ''
-)
-const docUrl = computed(
-  () => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''
-)
+// Site settings - directly from appStore (already initialized from injected config)
+const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
+const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
+const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 
 const isHomeContentUrl = computed(() => {

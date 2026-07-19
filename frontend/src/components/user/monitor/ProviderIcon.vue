@@ -8,7 +8,7 @@ import type { Provider } from '@/api/admin/channelMonitor'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 
 // Mirrors New API's getChannelTypeIcon mapping, translated from channel type
-// names to Sub2API's stable provider keys.
+// names to Sub2API's stable ModelIcon keys.
 const PROVIDER_ICON_KEYS: Record<string, string> = {
   openai: 'openai',
   openai_max: 'openai',
@@ -25,6 +25,7 @@ const PROVIDER_ICON_KEYS: Record<string, string> = {
   azure: 'azure',
   vertex_ai: 'gemini',
   xai: 'xai',
+  grok: 'grok',
   mistral: 'mistral',
   cohere: 'cohere',
   openrouter: 'openrouter',
@@ -62,14 +63,14 @@ const PROVIDER_ICON_KEYS: Record<string, string> = {
   submodel: 'openai',
   doubao_video: 'doubao',
   sora: 'openai',
-  replicate: 'replicate',
+  replicate: 'replicate'
 }
 
 const props = withDefaults(defineProps<{
   provider: Provider | string
   size?: number
 }>(), {
-  size: 20,
+  size: 20
 })
 
 const iconKey = computed(() => PROVIDER_ICON_KEYS[String(props.provider)] || String(props.provider || ''))

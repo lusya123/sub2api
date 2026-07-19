@@ -23,6 +23,7 @@ export const OPERATOR_ADMIN_PATHS = new Set([
 
 export const SUPER_ADMIN_ROUTE_PATHS = new Set([
   '/admin/audit-logs',
+  '/admin/security-audit-logs',
   '/admin/model-marketplace',
   '/admin/groups',
   '/admin/channels/pricing',

@@ -26,14 +26,17 @@ describe('admin access policy', () => {
   it('marks super admin routes from the shared policy', () => {
     const routes: RouteRecordRaw[] = [
       { path: '/admin/users', component: {} },
-      { path: '/admin/settings', component: {} }
+      { path: '/admin/settings', component: {} },
+      { path: '/admin/security-audit-logs', component: {} }
     ]
 
     applyAdminAccessPolicy(routes)
 
     expect(routes[0].meta?.requiresSuperAdmin).toBeUndefined()
     expect(routes[1].meta?.requiresSuperAdmin).toBe(true)
+    expect(routes[2].meta?.requiresSuperAdmin).toBe(true)
     expect(isSuperAdminRoutePath('/admin/settings')).toBe(true)
+    expect(isSuperAdminRoutePath('/admin/security-audit-logs')).toBe(true)
   })
 
   it('resolves admin fallback destinations consistently', () => {

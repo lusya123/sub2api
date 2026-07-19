@@ -109,7 +109,7 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 		return "", false
 	}
 
-	token, err := h.authSvc.GenerateToken(user)
+	token, err := h.authSvc.GenerateToken(c.Request.Context(), user)
 	if err != nil {
 		response.InternalError(c, "Failed to create chat session")
 		return "", false

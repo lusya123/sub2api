@@ -10,9 +10,9 @@ const stylePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../sty
 const styleSource = readFileSync(stylePath, 'utf8')
 const routerPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../router/index.ts')
 const routerSource = readFileSync(routerPath, 'utf8')
-const zhLocalePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../i18n/locales/zh.ts')
+const zhLocalePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../i18n/locales/zh/custom.ts')
 const zhLocaleSource = readFileSync(zhLocalePath, 'utf8')
-const enLocalePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../i18n/locales/en.ts')
+const enLocalePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../i18n/locales/en/custom.ts')
 const enLocaleSource = readFileSync(enLocalePath, 'utf8')
 
 describe('AppSidebar custom SVG styles', () => {
@@ -22,6 +22,29 @@ describe('AppSidebar custom SVG styles', () => {
     expect(componentSource).toContain('display: block;')
     expect(componentSource).not.toContain('stroke: currentColor;')
     expect(componentSource).not.toContain('fill: none;')
+  })
+})
+
+describe('AppSidebar scroll position persistence', () => {
+  it('binds a template ref to the sidebar nav element', () => {
+    expect(componentSource).toContain('ref="sidebarNavRef"')
+    expect(componentSource).toContain('sidebar-nav')
+  })
+
+  it('declares sidebarNavRef in script setup', () => {
+    expect(componentSource).toContain("const sidebarNavRef = ref<HTMLElement | null>(null)")
+  })
+
+  it('saves scroll position on beforeUnmount', () => {
+    expect(componentSource).toContain('onBeforeUnmount')
+    expect(componentSource).toContain('appStore.sidebarScrollTop')
+    expect(componentSource).toContain('sidebarNavRef.value.scrollTop')
+  })
+
+  it('restores scroll position on mount', () => {
+    expect(componentSource).toContain('onMounted')
+    expect(componentSource).toContain('appStore.sidebarScrollTop')
+    expect(componentSource).toContain('nextTick')
   })
 })
 
@@ -44,9 +67,9 @@ describe('AppSidebar client install entry', () => {
     expect(routerSource).toContain("path: '/client-install'")
     expect(routerSource).toContain("name: 'ClientInstall'")
     expect(routerSource).toContain("titleKey: 'clientInstallPage.title'")
-    expect(zhLocaleSource).toContain("clientInstall: '一键部署'")
-    expect(zhLocaleSource).toContain("title: '一键部署'")
-    expect(enLocaleSource).toContain("clientInstall: 'One-Click Deploy'")
-    expect(enLocaleSource).toContain("title: 'One-Click Deploy'")
+    expect(zhLocaleSource).toContain('"clientInstall": "一键部署"')
+    expect(zhLocaleSource).toContain('"title": "一键部署"')
+    expect(enLocaleSource).toContain('"clientInstall": "One-Click Deploy"')
+    expect(enLocaleSource).toContain('"title": "One-Click Deploy"')
   })
 })

@@ -191,7 +191,7 @@ func (s *OIDCIssuerService) ExchangeCode(ctx context.Context, code, clientID, cl
 		return nil, ErrUserNotActive
 	}
 
-	accessToken, err := s.auth.GenerateToken(user)
+	accessToken, err := s.auth.GenerateToken(ctx, user)
 	if err != nil {
 		return nil, err
 	}

@@ -143,6 +143,38 @@ func TestSettingHandler_PreloadLogoCacheWarmsPublicLogo(t *testing.T) {
 	require.Equal(t, 1, repo.calls)
 }
 
+func TestSettingHandler_PreloadLogoCacheTreatsEmptyLogoAsNoopSuccess(t *testing.T) {
+	InvalidateLogoCache()
+	t.Cleanup(InvalidateLogoCache)
+
+	repo := &settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeySiteLogo: "  ",
+		},
+	}
+	svc := service.NewSettingService(repo, &config.Config{})
+
+	require.True(t, preloadLogoCacheOnce(context.Background(), svc))
+	require.Nil(t, logoCache.Load())
+	require.Equal(t, 1, repo.calls)
+}
+
+func TestSettingHandler_PreloadLogoCacheRejectsInvalidNonEmptyLogo(t *testing.T) {
+	InvalidateLogoCache()
+	t.Cleanup(InvalidateLogoCache)
+
+	repo := &settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeySiteLogo: "not-an-inline-image",
+		},
+	}
+	svc := service.NewSettingService(repo, &config.Config{})
+
+	require.False(t, preloadLogoCacheOnce(context.Background(), svc))
+	require.Nil(t, logoCache.Load())
+	require.Equal(t, 1, repo.calls)
+}
+
 func (s *settingHandlerPublicRepoStub) Get(ctx context.Context, key string) (*service.Setting, error) {
 	panic("unexpected Get call")
 }

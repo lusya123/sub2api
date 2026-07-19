@@ -128,12 +128,12 @@ func applyVirtualCacheToUsageJSON(usage map[string]any, readRatio float64) bool 
 // applyVirtualCacheToOpenAIUsage rewrites OpenAI-style usage with virtual cache tokens.
 //
 // OpenAI usage semantics differ from Claude:
-//   - input_tokens includes cached read tokens
+//   - input_tokens is the total including cache-read and cache-creation tokens
 //   - cache_read lives under input_tokens_details.cached_tokens
 //
 // To preserve the OpenAI invariant, we store:
 //
-//	input_tokens = virtual_input_tokens + virtual_cache_read_tokens
+//	input_tokens = virtual_input_tokens + virtual_cache_read_tokens + virtual_cache_creation_tokens
 //
 // while separately exposing cache_read / cache_creation for billing and usage logs.
 func applyVirtualCacheToOpenAIUsage(usage *OpenAIUsage, readRatio float64) bool {
@@ -145,7 +145,7 @@ func applyVirtualCacheToOpenAIUsage(usage *OpenAIUsage, readRatio float64) bool 
 	}
 
 	vc := calculateVirtualCache(usage.InputTokens, readRatio)
-	usage.InputTokens = vc.InputTokens + vc.CacheReadInputTokens
+	usage.InputTokens = vc.InputTokens + vc.CacheReadInputTokens + vc.CacheCreationInputTokens
 	usage.CacheReadInputTokens = vc.CacheReadInputTokens
 	usage.CacheCreationInputTokens = vc.CacheCreationInputTokens
 	return true

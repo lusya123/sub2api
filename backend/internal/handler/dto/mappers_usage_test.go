@@ -103,8 +103,7 @@ func TestUsageLogFromService_IncludesServiceTierForUserAndAdmin(t *testing.T) {
 	require.Equal(t, serviceTier, *userDTO.ServiceTier)
 	require.NotNil(t, userDTO.InboundEndpoint)
 	require.Equal(t, inboundEndpoint, *userDTO.InboundEndpoint)
-	require.NotNil(t, userDTO.UpstreamEndpoint)
-	require.Equal(t, upstreamEndpoint, *userDTO.UpstreamEndpoint)
+	require.Nil(t, userDTO.UpstreamEndpoint)
 	require.NotNil(t, adminDTO.ServiceTier)
 	require.Equal(t, serviceTier, *adminDTO.ServiceTier)
 	require.NotNil(t, adminDTO.InboundEndpoint)
@@ -154,6 +153,8 @@ func TestUsageLogFromService_HidesBillingInternalsFromUserJSON(t *testing.T) {
 		TotalCost:         0.5,
 		ActualCost:        0.8,
 		RateMultiplier:    1.6,
+		ImageInputCost:    0.05,
+		ImageOutputCost:   0.06,
 		ShowCostBreakdown: boolPtr(false),
 	}
 
@@ -166,6 +167,8 @@ func TestUsageLogFromService_HidesBillingInternalsFromUserJSON(t *testing.T) {
 	requireJSONFieldAbsent(t, userJSON, "cache_read_cost")
 	requireJSONFieldAbsent(t, userJSON, "total_cost")
 	requireJSONFieldAbsent(t, userJSON, "rate_multiplier")
+	requireJSONFieldAbsent(t, userJSON, "image_input_cost")
+	requireJSONFieldAbsent(t, userJSON, "image_output_cost")
 
 	adminJSON, err := json.Marshal(UsageLogFromServiceAdmin(log))
 	require.NoError(t, err)
@@ -175,6 +178,8 @@ func TestUsageLogFromService_HidesBillingInternalsFromUserJSON(t *testing.T) {
 	require.Contains(t, string(adminJSON), `"cache_read_cost":0.4`)
 	require.Contains(t, string(adminJSON), `"total_cost":0.5`)
 	require.Contains(t, string(adminJSON), `"rate_multiplier":1.6`)
+	require.Contains(t, string(adminJSON), `"image_input_cost":0.05`)
+	require.Contains(t, string(adminJSON), `"image_output_cost":0.06`)
 }
 
 func TestUsageLogFromService_ExposesCostBreakdownWhenGroupAllows(t *testing.T) {
@@ -189,7 +194,11 @@ func TestUsageLogFromService_ExposesCostBreakdownWhenGroupAllows(t *testing.T) {
 		OutputCost:        0.02,
 		CacheCreationCost: 0.03,
 		CacheReadCost:     0.04,
+		TotalCost:         0.1,
 		ActualCost:        0.2,
+		RateMultiplier:    2,
+		ImageInputCost:    0.05,
+		ImageOutputCost:   0.06,
 		ShowCostBreakdown: boolPtr(true),
 	}
 
@@ -199,7 +208,10 @@ func TestUsageLogFromService_ExposesCostBreakdownWhenGroupAllows(t *testing.T) {
 	require.Contains(t, string(userJSON), `"output_cost":0.02`)
 	require.Contains(t, string(userJSON), `"cache_creation_cost":0.03`)
 	require.Contains(t, string(userJSON), `"cache_read_cost":0.04`)
-	require.NotContains(t, string(userJSON), "total_cost")
+	require.Contains(t, string(userJSON), `"total_cost":0.1`)
+	require.Contains(t, string(userJSON), `"rate_multiplier":2`)
+	require.Contains(t, string(userJSON), `"image_input_cost":0.05`)
+	require.Contains(t, string(userJSON), `"image_output_cost":0.06`)
 	require.NotContains(t, string(userJSON), `"actual_rate_multiplier"`)
 	require.Contains(t, string(userJSON), `"show_cost_breakdown":true`)
 }
@@ -223,6 +235,34 @@ func TestUsageLogFromService_UsesSnapshotOverCurrentGroupSetting(t *testing.T) {
 	require.Contains(t, string(userJSON), `"show_cost_breakdown":false`)
 	requireJSONFieldAbsent(t, userJSON, "input_cost")
 	requireJSONFieldAbsent(t, userJSON, "output_cost")
+}
+
+func TestUsageLogFromService_KeepsUserIPWithoutAdminCostFields(t *testing.T) {
+	t.Parallel()
+
+	ipAddress := "203.0.113.10"
+	accountRateMultiplier := 1.5
+	accountStatsCost := 0.21
+	log := &service.UsageLog{
+		RequestID:             "req_user_visible_ip",
+		Model:                 "gpt-5.4",
+		ActualCost:            0.08,
+		IPAddress:             &ipAddress,
+		AccountRateMultiplier: &accountRateMultiplier,
+		AccountStatsCost:      &accountStatsCost,
+		ShowCostBreakdown:     boolPtr(false),
+	}
+
+	userDTO := UsageLogFromService(log)
+	require.Equal(t, 0.08, userDTO.ActualCost)
+	require.NotNil(t, userDTO.IPAddress)
+	require.Equal(t, ipAddress, *userDTO.IPAddress)
+
+	userJSON, err := json.Marshal(userDTO)
+	require.NoError(t, err)
+	require.NotContains(t, string(userJSON), "account_rate_multiplier")
+	require.NotContains(t, string(userJSON), "account_stats_cost")
+	requireJSONFieldAbsent(t, userJSON, "input_cost")
 }
 
 func TestUsageLogFromService_FallsBackToLegacyModelWhenRequestedModelMissing(t *testing.T) {

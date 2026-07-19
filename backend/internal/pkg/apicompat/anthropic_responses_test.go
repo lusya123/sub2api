@@ -718,7 +718,7 @@ func TestStreamingToolCallDoneWithoutDeltaEmitsArguments(t *testing.T) {
 	assert.Equal(t, "content_block_stop", events[1].Type)
 }
 
-func TestStreamingReadToolDropsEmptyPages(t *testing.T) {
+func TestStreamingReadToolStreamsDeltas(t *testing.T) {
 	state := NewResponsesEventToAnthropicState()
 
 	ResponsesEventToAnthropicEvents(&ResponsesStreamEvent{
@@ -739,18 +739,17 @@ func TestStreamingReadToolDropsEmptyPages(t *testing.T) {
 		OutputIndex: 0,
 		Delta:       `{"file_path":"/tmp/demo.py","limit":2000,"offset":0,"pages":""}`,
 	}, state)
-	assert.Len(t, events, 0)
+	require.Len(t, events, 1, "Read tool deltas must be streamed like any other tool")
+	assert.Equal(t, "content_block_delta", events[0].Type)
+	assert.Equal(t, "input_json_delta", events[0].Delta.Type)
 
 	events = ResponsesEventToAnthropicEvents(&ResponsesStreamEvent{
 		Type:        "response.function_call_arguments.done",
 		OutputIndex: 0,
 		Arguments:   `{"file_path":"/tmp/demo.py","limit":2000,"offset":0,"pages":""}`,
 	}, state)
-	require.Len(t, events, 2)
-	assert.Equal(t, "content_block_delta", events[0].Type)
-	assert.Equal(t, "input_json_delta", events[0].Delta.Type)
-	assert.JSONEq(t, `{"file_path":"/tmp/demo.py","limit":2000,"offset":0}`, events[0].Delta.PartialJSON)
-	assert.Equal(t, "content_block_stop", events[1].Type)
+	require.Len(t, events, 1, "after streaming deltas, .done should just close the block")
+	assert.Equal(t, "content_block_stop", events[0].Type)
 }
 
 func TestStreamingReasoning(t *testing.T) {
@@ -925,11 +924,18 @@ func TestAnthropicEventToResponsesEvents_TextOutputSurvivesDoneAndCompleted(t *t
 		Index:        &index,
 		ContentBlock: &AnthropicContentBlock{Type: "text"},
 	}, state)
-	require.Len(t, events, 1)
+	require.Len(t, events, 2)
 	assert.Equal(t, "response.output_item.added", events[0].Type)
 	sse, err := ResponsesEventToSSE(events[0])
 	require.NoError(t, err)
 	assert.Contains(t, sse, `"output_index":0`)
+	assert.Equal(t, "response.content_part.added", events[1].Type)
+	assert.Equal(t, 0, events[1].OutputIndex)
+	assert.Equal(t, 0, events[1].ContentIndex)
+	assert.Equal(t, events[0].Item.ID, events[1].ItemID)
+	require.NotNil(t, events[1].Part)
+	assert.Equal(t, "output_text", events[1].Part.Type)
+	assert.Empty(t, events[1].Part.Text)
 
 	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
 		Type:  "content_block_delta",
@@ -951,9 +957,16 @@ func TestAnthropicEventToResponsesEvents_TextOutputSurvivesDoneAndCompleted(t *t
 	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
 		Type: "content_block_stop",
 	}, state)
-	require.Len(t, events, 1)
+	require.Len(t, events, 2)
 	assert.Equal(t, "response.output_text.done", events[0].Type)
 	assert.Equal(t, "Hello world", events[0].Text)
+	assert.Equal(t, "response.content_part.done", events[1].Type)
+	assert.Equal(t, events[0].ItemID, events[1].ItemID)
+	assert.Equal(t, 0, events[1].OutputIndex)
+	assert.Equal(t, 0, events[1].ContentIndex)
+	require.NotNil(t, events[1].Part)
+	assert.Equal(t, "output_text", events[1].Part.Type)
+	assert.Equal(t, "Hello world", events[1].Part.Text)
 
 	events = AnthropicEventToResponsesEvents(&AnthropicStreamEvent{
 		Type:  "message_delta",

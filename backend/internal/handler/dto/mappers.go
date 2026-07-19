@@ -19,6 +19,7 @@ func UserFromServiceShallow(u *service.User) *User {
 		Username:                   u.Username,
 		Role:                       u.Role,
 		Balance:                    u.Balance,
+		FrozenBalance:              u.FrozenBalance,
 		Concurrency:                u.Concurrency,
 		Status:                     u.Status,
 		AllowedGroups:              u.AllowedGroups,
@@ -80,31 +81,33 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		return nil
 	}
 	out := &APIKey{
-		ID:            k.ID,
-		UserID:        k.UserID,
-		Key:           k.Key,
-		Name:          k.Name,
-		GroupID:       k.GroupID,
-		Status:        k.Status,
-		IPWhitelist:   k.IPWhitelist,
-		IPBlacklist:   k.IPBlacklist,
-		LastUsedAt:    k.LastUsedAt,
-		Quota:         k.Quota,
-		QuotaUsed:     k.QuotaUsed,
-		ExpiresAt:     k.ExpiresAt,
-		CreatedAt:     k.CreatedAt,
-		UpdatedAt:     k.UpdatedAt,
-		RateLimit5h:   k.RateLimit5h,
-		RateLimit1d:   k.RateLimit1d,
-		RateLimit7d:   k.RateLimit7d,
-		Usage5h:       k.EffectiveUsage5h(),
-		Usage1d:       k.EffectiveUsage1d(),
-		Usage7d:       k.EffectiveUsage7d(),
-		Window5hStart: k.Window5hStart,
-		Window1dStart: k.Window1dStart,
-		Window7dStart: k.Window7dStart,
-		User:          UserFromServiceShallow(k.User),
-		Group:         GroupFromServiceShallow(k.Group),
+		ID:                 k.ID,
+		UserID:             k.UserID,
+		Key:                k.Key,
+		Name:               k.Name,
+		GroupID:            k.GroupID,
+		Status:             k.Status,
+		IPWhitelist:        k.IPWhitelist,
+		IPBlacklist:        k.IPBlacklist,
+		LastUsedAt:         k.LastUsedAt,
+		LastUsedIP:         k.LastUsedIP,
+		Quota:              k.Quota,
+		QuotaUsed:          k.QuotaUsed,
+		ExpiresAt:          k.ExpiresAt,
+		CreatedAt:          k.CreatedAt,
+		UpdatedAt:          k.UpdatedAt,
+		CurrentConcurrency: k.CurrentConcurrency,
+		RateLimit5h:        k.RateLimit5h,
+		RateLimit1d:        k.RateLimit1d,
+		RateLimit7d:        k.RateLimit7d,
+		Usage5h:            k.EffectiveUsage5h(),
+		Usage1d:            k.EffectiveUsage1d(),
+		Usage7d:            k.EffectiveUsage7d(),
+		Window5hStart:      k.Window5hStart,
+		Window1dStart:      k.Window1dStart,
+		Window7dStart:      k.Window7dStart,
+		User:               UserFromServiceShallow(k.User),
+		Group:              GroupFromServiceShallow(k.Group),
 	}
 	if k.Window5hStart != nil && !service.IsWindowExpired(k.Window5hStart, service.RateLimitWindow5h) {
 		t := k.Window5hStart.Add(service.RateLimitWindow5h)
@@ -180,11 +183,24 @@ func groupFromServiceBase(g *service.Group) Group {
 		WeeklyLimitUSD:                  g.WeeklyLimitUSD,
 		MonthlyLimitUSD:                 g.MonthlyLimitUSD,
 		AllowImageGeneration:            g.AllowImageGeneration,
+		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
 		ImageRateIndependent:            g.ImageRateIndependent,
 		ImageRateMultiplier:             g.ImageRateMultiplier,
+		BatchImageDiscountMultiplier:    g.BatchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:        g.BatchImageHoldMultiplier,
+		VideoRateIndependent:            g.VideoRateIndependent,
+		VideoRateMultiplier:             g.VideoRateMultiplier,
+		PeakRateEnabled:                 g.PeakRateEnabled,
+		PeakStart:                       g.PeakStart,
+		PeakEnd:                         g.PeakEnd,
+		PeakRateMultiplier:              g.PeakRateMultiplier,
 		ImagePrice1K:                    g.ImagePrice1K,
 		ImagePrice2K:                    g.ImagePrice2K,
 		ImagePrice4K:                    g.ImagePrice4K,
+		VideoPrice480P:                  g.VideoPrice480P,
+		VideoPrice720P:                  g.VideoPrice720P,
+		VideoPrice1080P:                 g.VideoPrice1080P,
+		WebSearchPricePerCall:           g.WebSearchPricePerCall,
 		ClaudeCodeOnly:                  g.ClaudeCodeOnly,
 		FallbackGroupID:                 g.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: g.FallbackGroupIDOnInvalidRequest,
@@ -235,6 +251,8 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		SessionWindowEnd:        a.SessionWindowEnd,
 		SessionWindowStatus:     a.SessionWindowStatus,
 		GroupIDs:                a.GroupIDs,
+		ParentAccountID:         a.ParentAccountID,
+		QuotaDimension:          a.QuotaDimension,
 	}
 
 	// 提取 5h 窗口费用控制和会话数量控制配置（仅 Anthropic OAuth/SetupToken 账号有效）
@@ -574,7 +592,7 @@ func AccountSummaryFromService(a *service.Account) *AccountSummary {
 }
 
 func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
-	// 普通用户 DTO：严禁包含管理员字段（例如 account_rate_multiplier、ip_address、account）。
+	// 普通用户 DTO：严禁包含管理员字段（例如 account_rate_multiplier、account、upstream_model）。
 	requestType := l.EffectiveRequestType()
 	stream, openAIWSMode := service.ApplyLegacyRequestFields(requestType, l.Stream, l.OpenAIWSMode)
 	requestedModel := l.RequestedModel
@@ -583,53 +601,58 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 	}
 	showCostBreakdown := resolveUsageLogShowCostBreakdown(l)
 	return UsageLog{
-		ID:                    l.ID,
-		UserID:                l.UserID,
-		APIKeyID:              l.APIKeyID,
-		AccountID:             l.AccountID,
-		RequestID:             l.RequestID,
-		Model:                 requestedModel,
-		ServiceTier:           l.ServiceTier,
-		ReasoningEffort:       l.ReasoningEffort,
-		InboundEndpoint:       l.InboundEndpoint,
-		UpstreamEndpoint:      l.UpstreamEndpoint,
-		GroupID:               l.GroupID,
-		SubscriptionID:        l.SubscriptionID,
-		InputTokens:           l.InputTokens,
-		OutputTokens:          l.OutputTokens,
-		CacheCreationTokens:   l.CacheCreationTokens,
-		CacheReadTokens:       l.CacheReadTokens,
-		CacheCreation5mTokens: l.CacheCreation5mTokens,
-		CacheCreation1hTokens: l.CacheCreation1hTokens,
-		ShowCostBreakdown:     showCostBreakdown,
-		InputCost:             optionalUserUsageCost(showCostBreakdown, l.InputCost),
-		OutputCost:            optionalUserUsageCost(showCostBreakdown, l.OutputCost),
-		CacheCreationCost:     optionalUserUsageCost(showCostBreakdown, l.CacheCreationCost),
-		CacheReadCost:         optionalUserUsageCost(showCostBreakdown, l.CacheReadCost),
-		ActualCost:            l.ActualCost,
-		BillingType:           l.BillingType,
-		RequestType:           requestType.String(),
-		Stream:                stream,
-		OpenAIWSMode:          openAIWSMode,
-		DurationMs:            l.DurationMs,
-		FirstTokenMs:          l.FirstTokenMs,
-		ImageCount:            l.ImageCount,
-		ImageSize:             l.ImageSize,
-		ImageInputSize:        l.ImageInputSize,
-		ImageOutputSize:       l.ImageOutputSize,
-		ImageOutputTokens:     l.ImageOutputTokens,
-		ImageOutputCost:       l.ImageOutputCost,
-		ImageSizeSource:       l.ImageSizeSource,
-		ImageSizeBreakdown:    l.ImageSizeBreakdown,
-		MediaType:             l.MediaType,
-		UserAgent:             l.UserAgent,
-		CacheTTLOverridden:    l.CacheTTLOverridden,
-		BillingMode:           l.BillingMode,
-		CreatedAt:             l.CreatedAt,
-		User:                  UserFromServiceShallow(l.User),
-		APIKey:                APIKeyFromService(l.APIKey),
-		Group:                 GroupFromServiceShallow(l.Group),
-		Subscription:          UserSubscriptionFromService(l.Subscription),
+		ID:                        l.ID,
+		UserID:                    l.UserID,
+		APIKeyID:                  l.APIKeyID,
+		AccountID:                 l.AccountID,
+		RequestID:                 l.RequestID,
+		Model:                     requestedModel,
+		ServiceTier:               l.ServiceTier,
+		ReasoningEffort:           l.ReasoningEffort,
+		InboundEndpoint:           l.InboundEndpoint,
+		GroupID:                   l.GroupID,
+		SubscriptionID:            l.SubscriptionID,
+		InputTokens:               l.InputTokens,
+		OutputTokens:              l.OutputTokens,
+		CacheCreationTokens:       l.CacheCreationTokens,
+		CacheReadTokens:           l.CacheReadTokens,
+		CacheCreation5mTokens:     l.CacheCreation5mTokens,
+		CacheCreation1hTokens:     l.CacheCreation1hTokens,
+		ShowCostBreakdown:         showCostBreakdown,
+		InputCost:                 optionalUserUsageCost(showCostBreakdown, l.InputCost),
+		OutputCost:                optionalUserUsageCost(showCostBreakdown, l.OutputCost),
+		CacheCreationCost:         optionalUserUsageCost(showCostBreakdown, l.CacheCreationCost),
+		CacheReadCost:             optionalUserUsageCost(showCostBreakdown, l.CacheReadCost),
+		TotalCost:                 optionalUserUsageCost(showCostBreakdown, l.TotalCost),
+		ActualCost:                l.ActualCost,
+		RateMultiplier:            optionalUserUsageCost(showCostBreakdown, l.RateMultiplier),
+		LongContextBillingApplied: l.LongContextBillingApplied,
+		BillingType:               l.BillingType,
+		RequestType:               requestType.String(),
+		Stream:                    stream,
+		OpenAIWSMode:              openAIWSMode,
+		DurationMs:                l.DurationMs,
+		FirstTokenMs:              l.FirstTokenMs,
+		ImageCount:                l.ImageCount,
+		ImageSize:                 l.ImageSize,
+		ImageInputSize:            l.ImageInputSize,
+		ImageOutputSize:           l.ImageOutputSize,
+		ImageInputTokens:          l.ImageInputTokens,
+		ImageInputCost:            optionalUserUsageCost(showCostBreakdown, l.ImageInputCost),
+		ImageOutputTokens:         l.ImageOutputTokens,
+		ImageOutputCost:           optionalUserUsageCost(showCostBreakdown, l.ImageOutputCost),
+		ImageSizeSource:           l.ImageSizeSource,
+		ImageSizeBreakdown:        l.ImageSizeBreakdown,
+		MediaType:                 l.MediaType,
+		UserAgent:                 l.UserAgent,
+		IPAddress:                 l.IPAddress,
+		CacheTTLOverridden:        l.CacheTTLOverridden,
+		BillingMode:               l.BillingMode,
+		CreatedAt:                 l.CreatedAt,
+		User:                      UserFromServiceShallow(l.User),
+		APIKey:                    APIKeyFromService(l.APIKey),
+		Group:                     GroupFromServiceShallow(l.Group),
+		Subscription:              UserSubscriptionFromService(l.Subscription),
 	}
 }
 
@@ -657,7 +680,7 @@ func resolveUsageLogShowCostBreakdown(l *service.UsageLog) bool {
 }
 
 // UsageLogFromService converts a service UsageLog to DTO for regular users.
-// It excludes Account details and IP address - users should not see these.
+// It excludes admin-only account/upstream internals while keeping user billing and request metadata.
 func UsageLogFromService(l *service.UsageLog) *UsageLog {
 	if l == nil {
 		return nil
@@ -672,6 +695,8 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	if l == nil {
 		return nil
 	}
+	usageLog := usageLogFromServiceUser(l)
+	usageLog.UpstreamEndpoint = l.UpstreamEndpoint
 	return &AdminUsageLog{
 		InputCost:             l.InputCost,
 		OutputCost:            l.OutputCost,
@@ -679,7 +704,9 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 		CacheReadCost:         l.CacheReadCost,
 		TotalCost:             l.TotalCost,
 		RateMultiplier:        l.RateMultiplier,
-		UsageLog:              usageLogFromServiceUser(l),
+		ImageInputCost:        l.ImageInputCost,
+		ImageOutputCost:       l.ImageOutputCost,
+		UsageLog:              usageLog,
 		UpstreamModel:         l.UpstreamModel,
 		ChannelID:             l.ChannelID,
 		ModelMappingChain:     l.ModelMappingChain,
@@ -706,6 +733,37 @@ func UsageStatsFromService(stats *service.UsageStats) *UsageStats {
 		TotalTokens:              stats.TotalTokens,
 		TotalActualCost:          stats.TotalActualCost,
 		AverageDurationMs:        stats.AverageDurationMs,
+	}
+}
+
+// UsageStatsFromAggregate converts the filtered usage aggregate returned by
+// the shared usage-stats package to the regular-user DTO. Keep the mapper
+// explicit so account/upstream/standard-cost fields added to the aggregate do
+// not accidentally become part of the user API contract.
+func UsageStatsFromAggregate(stats *usagestats.UsageStats) *UsageStats {
+	if stats == nil {
+		return nil
+	}
+	endpoints := make([]UsageEndpointStat, 0, len(stats.Endpoints))
+	for _, endpoint := range stats.Endpoints {
+		endpoints = append(endpoints, UsageEndpointStat{
+			Endpoint:    endpoint.Endpoint,
+			Requests:    endpoint.Requests,
+			TotalTokens: endpoint.TotalTokens,
+			ActualCost:  endpoint.ActualCost,
+		})
+	}
+	return &UsageStats{
+		TotalRequests:            stats.TotalRequests,
+		TotalInputTokens:         stats.TotalInputTokens,
+		TotalOutputTokens:        stats.TotalOutputTokens,
+		TotalCacheTokens:         stats.TotalCacheTokens,
+		TotalCacheCreationTokens: stats.TotalCacheCreationTokens,
+		TotalCacheReadTokens:     stats.TotalCacheReadTokens,
+		TotalTokens:              stats.TotalTokens,
+		TotalActualCost:          stats.TotalActualCost,
+		AverageDurationMs:        stats.AverageDurationMs,
+		Endpoints:                endpoints,
 	}
 }
 
@@ -773,6 +831,24 @@ func UserModelStatsFromService(stats []usagestats.ModelStat) []UserModelStat {
 			CacheReadTokens:     s.CacheReadTokens,
 			TotalTokens:         s.TotalTokens,
 			ActualCost:          s.ActualCost,
+		})
+	}
+	return out
+}
+
+func UserGroupStatsFromService(stats []usagestats.GroupStat) []UserGroupStat {
+	if len(stats) == 0 {
+		return []UserGroupStat{}
+	}
+	out := make([]UserGroupStat, 0, len(stats))
+	for i := range stats {
+		s := stats[i]
+		out = append(out, UserGroupStat{
+			GroupID:     s.GroupID,
+			GroupName:   s.GroupName,
+			Requests:    s.Requests,
+			TotalTokens: s.TotalTokens,
+			ActualCost:  s.ActualCost,
 		})
 	}
 	return out
@@ -868,6 +944,7 @@ func userSubscriptionFromServiceBase(sub *service.UserSubscription) UserSubscrip
 		MonthlyUsageUSD:    sub.MonthlyUsageUSD,
 		CreatedAt:          sub.CreatedAt,
 		UpdatedAt:          sub.UpdatedAt,
+		RevokedAt:          sub.DeletedAt,
 		User:               UserFromServiceShallow(sub.User),
 		Group:              GroupFromServiceShallow(sub.Group),
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -142,6 +143,8 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		BackendModeEnabled:               settings.BackendModeEnabled,
 		PaymentEnabled:                   settings.PaymentEnabled,
 		Version:                          h.version,
+		ServerTimezone:                   timezone.Name(),
+		ServerUTCOffset:                  timezone.UTCOffset(),
 		BalanceLowNotifyEnabled:          settings.BalanceLowNotifyEnabled,
 		AccountQuotaNotifyEnabled:        settings.AccountQuotaNotifyEnabled,
 		BalanceLowNotifyThreshold:        settings.BalanceLowNotifyThreshold,
@@ -215,13 +218,12 @@ func preloadLogoCacheOnce(ctx context.Context, settingService *service.SettingSe
 		log.Printf("[logo] preload GetPublicSettings failed: %v", err)
 		return false
 	}
+	if strings.TrimSpace(settings.SiteLogo) == "" {
+		return true
+	}
 	cached, ok := buildLogoCacheEntry(settings.SiteLogo)
 	if !ok {
-		if strings.TrimSpace(settings.SiteLogo) == "" {
-			log.Printf("[logo] preload settings.SiteLogo is empty")
-		} else {
-			log.Printf("[logo] preload decode failed, SiteLogo prefix: %q", logoValuePrefix(settings.SiteLogo))
-		}
+		log.Printf("[logo] preload decode failed, SiteLogo prefix: %q", logoValuePrefix(settings.SiteLogo))
 		return false
 	}
 	logoCache.Store(cached)

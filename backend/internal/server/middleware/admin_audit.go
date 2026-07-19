@@ -343,6 +343,8 @@ func auditModuleChineseName(module string) string {
 		return "系统设置"
 	case "audit-logs":
 		return "操作审计"
+	case "security-audit-logs":
+		return "安全审计"
 	default:
 		return module
 	}
@@ -431,7 +433,7 @@ func redactAuditValue(v any) any {
 
 func isSensitiveAuditKey(key string) bool {
 	k := strings.ToLower(strings.TrimSpace(key))
-	sensitive := []string{"password", "token", "secret", "credential", "authorization", "cookie", "api_key", "apikey", "refresh", "access_token", "client_secret", "key"}
+	sensitive := []string{"password", "token", "secret", "credential", "authorization", "cookie", "api_key", "apikey", "refresh", "access_token", "client_secret", "totp", "otp", "key"}
 	for _, s := range sensitive {
 		if strings.Contains(k, s) {
 			return true
