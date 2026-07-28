@@ -462,10 +462,10 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "non supported family", model: "qwen-max", expectNilPricing: true},
 		{name: "glm-5 exact", model: "glm-5", expectedInput: 1.0e-6},
 		{name: "glm uppercase normalized", model: "GLM-5", expectedInput: 1.0e-6},
-		{name: "glm unknown variant fallback to glm-5", model: "glm-4.6", expectedInput: 1.0e-6},
+		{name: "glm known upstream model wins before generic fallback", model: "glm-4.6", expectedInput: 0.6e-6},
 		{name: "minimax m2.5 standard", model: "minimax-m2.5", expectedInput: 0.3e-6},
 		{name: "minimax m2.5 highspeed exact", model: "minimax-m2.5-highspeed", expectedInput: 0.6e-6},
-		{name: "minimax unknown fallback to standard", model: "minimax-m3", expectedInput: 0.3e-6},
+		{name: "minimax m3 uses its official family price", model: "minimax-m3", expectedInput: 0.6e-6},
 		// 计费安全：未知 highspeed 衍生型号必须走高速价（避免少收 50%）
 		{name: "minimax highspeed suffix variant uses highspeed price", model: "minimax-m2.5-highspeed-2026", expectedInput: 0.6e-6},
 		{name: "minimax m3 highspeed uses highspeed price", model: "minimax-m3-highspeed", expectedInput: 0.6e-6},

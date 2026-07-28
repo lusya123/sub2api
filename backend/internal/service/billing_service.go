@@ -267,31 +267,6 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:     false,
 	}
 
-	// GLM-5 official fallback pricing.
-	s.fallbackPrices["glm-5"] = &ModelPricing{
-		InputPricePerToken:         1.0e-6, // $1 per MTok
-		OutputPricePerToken:        3.2e-6, // $3.2 per MTok
-		CacheCreationPricePerToken: 0,
-		CacheReadPricePerToken:     0.2e-6, // $0.2 per MTok
-		SupportsCacheBreakdown:     false,
-	}
-
-	// MiniMax M2.5 standard and highspeed fallback pricing.
-	s.fallbackPrices["minimax-m2.5"] = &ModelPricing{
-		InputPricePerToken:         0.3e-6,   // $0.3 per MTok
-		OutputPricePerToken:        1.2e-6,   // $1.2 per MTok
-		CacheCreationPricePerToken: 0.375e-6, // $0.375 per MTok
-		CacheReadPricePerToken:     0.03e-6,  // $0.03 per MTok
-		SupportsCacheBreakdown:     false,
-	}
-	s.fallbackPrices["minimax-m2.5-highspeed"] = &ModelPricing{
-		InputPricePerToken:         0.6e-6,   // $0.6 per MTok
-		OutputPricePerToken:        2.4e-6,   // $2.4 per MTok
-		CacheCreationPricePerToken: 0.375e-6, // same as standard
-		CacheReadPricePerToken:     0.03e-6,  // same as standard
-		SupportsCacheBreakdown:     false,
-	}
-
 	// OpenAI GPT-5.4（业务指定价格）
 	s.fallbackPrices["gpt-5.4"] = &ModelPricing{
 		InputPricePerToken:             2.5e-6,  // $2.5 per MTok
@@ -549,10 +524,18 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown: false,
 	}
 	s.fallbackPrices["minimax-m2.5"] = &ModelPricing{
-		InputPricePerToken:     0.30e-6,
-		OutputPricePerToken:    1.20e-6,
-		CacheReadPricePerToken: 0.03e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:         0.30e-6,
+		OutputPricePerToken:        1.20e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.03e-6,
+		SupportsCacheBreakdown:     false,
+	}
+	s.fallbackPrices["minimax-m2.5-highspeed"] = &ModelPricing{
+		InputPricePerToken:         0.60e-6,
+		OutputPricePerToken:        2.40e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.03e-6,
+		SupportsCacheBreakdown:     false,
 	}
 	s.fallbackPrices["minimax-m2.1"] = &ModelPricing{
 		InputPricePerToken:     0.30e-6,
@@ -643,16 +626,6 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
 		return s.fallbackPrices["gemini-3.1-pro"]
 	}
-	if strings.Contains(modelLower, "glm") {
-		return s.fallbackPrices["glm-5"]
-	}
-	if strings.Contains(modelLower, "minimax") {
-		if strings.Contains(modelLower, "highspeed") {
-			return s.fallbackPrices["minimax-m2.5-highspeed"]
-		}
-		return s.fallbackPrices["minimax-m2.5"]
-	}
-
 	// DeepSeek V4 系列：仅匹配已知 V4 Pro/Flash 与官方兼容别名
 	// （deepseek-chat / deepseek-reasoner → V4 Flash），未知 deepseek-* 型号不回退，避免误计价。
 	if strings.Contains(modelLower, "deepseek-v4-flash") {
@@ -738,6 +711,9 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 	if strings.Contains(modelLower, "minimax-m2.7") || strings.Contains(modelLower, "minimax-m2-7") {
 		return s.fallbackPrices["minimax-m2.7"]
+	}
+	if strings.Contains(modelLower, "minimax-m2.5-highspeed") || strings.Contains(modelLower, "minimax-m2-5-highspeed") {
+		return s.fallbackPrices["minimax-m2.5-highspeed"]
 	}
 	if strings.Contains(modelLower, "minimax-m2.5") || strings.Contains(modelLower, "minimax-m2-5") {
 		return s.fallbackPrices["minimax-m2.5"]

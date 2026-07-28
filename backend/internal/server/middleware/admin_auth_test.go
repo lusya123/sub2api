@@ -87,7 +87,7 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 		admin.Role = service.RoleOperator
 		defer func() { admin.Role = service.RoleAdmin }()
 
-		token, err := authService.GenerateToken(&service.User{
+		token, err := authService.GenerateToken(context.Background(), &service.User{
 			ID:           admin.ID,
 			Email:        admin.Email,
 			Role:         service.RoleOperator,
