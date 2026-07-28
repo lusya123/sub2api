@@ -30,6 +30,9 @@ const messages: Record<string, string> = {
   'clientInstallPage.selectKeyDescription': 'Pick a key to generate commands',
   'clientInstallPage.searchPlaceholder': 'Search key',
   'clientInstallPage.panelDescription': 'Current group: {group}',
+  'clientInstallPage.loadErrorTitle': 'Could not load deployment settings',
+  'clientInstallPage.loadErrorDescription': 'Please try again',
+  'clientInstallPage.retry': 'Retry',
 }
 
 vi.mock('vue-i18n', async () => {
@@ -151,5 +154,43 @@ describe('ClientInstallView', () => {
     await onlyKeyButton.trigger('click')
 
     expect(wrapper.get('[data-testid="install-panel"]').exists()).toBe(true)
+  })
+
+  it('shows an explicit retryable error instead of an empty-key state when loading fails', async () => {
+    list.mockRejectedValueOnce(new Error('keys unavailable')).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 200,
+      pages: 0,
+    })
+    getPublicSettings.mockResolvedValue({ api_base_url: 'https://example.com/v1' })
+
+    const wrapper = mount(ClientInstallView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          EmptyState: {
+            props: ['title', 'description'],
+            template: '<div data-testid="empty-state">{{ title }}</div>',
+          },
+          SearchInput: true,
+          GroupBadge: true,
+          ClientInstallPanel: true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('Could not load deployment settings')
+    expect(wrapper.get('[role="alert"]').text()).toContain('keys unavailable')
+    expect(wrapper.find('[data-testid="empty-state"]').exists()).toBe(false)
+
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="empty-state"]').text()).toContain('No keys')
   })
 })

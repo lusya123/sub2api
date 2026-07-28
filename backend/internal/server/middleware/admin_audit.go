@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -23,8 +22,24 @@ func AdminAuditMiddleware(auditService *service.AdminAuditService) gin.HandlerFu
 		}
 
 		start := time.Now()
-		bodyRaw := readAndRestoreRequestBody(c)
+		// Capture only bytes that downstream middleware/handlers actually read.
+		// This middleware runs before authentication so it can record rejected
+		// attempts; eagerly reading the body here would let an unauthenticated
+		// request force a large/slow body read before its credential is checked.
+		var bodyCapture *boundedAuditBodyCapture
+		routeKey := strings.ToUpper(c.Request.Method) + " " + auditRouteTemplate(c)
+		if c.Request != nil && c.Request.Body != nil && !shouldOmitAuditBody(routeKey) {
+			bodyCapture = &boundedAuditBodyCapture{
+				ReadCloser: c.Request.Body,
+				remaining:  maxAuditBodyBytes,
+			}
+			c.Request.Body = bodyCapture
+		}
 		c.Next()
+		var bodyRaw []byte
+		if bodyCapture != nil {
+			bodyRaw = bodyCapture.Bytes()
+		}
 
 		subject, _ := GetAuthSubjectFromContext(c)
 		role, _ := GetUserRoleFromContext(c)
@@ -40,45 +55,77 @@ func AdminAuditMiddleware(auditService *service.AdminAuditService) gin.HandlerFu
 	}
 }
 
-func readAndRestoreRequestBody(c *gin.Context) []byte {
-	if c == nil || c.Request == nil || c.Request.Body == nil {
+type boundedAuditBodyCapture struct {
+	io.ReadCloser
+	data      []byte
+	remaining int
+}
+
+func (r *boundedAuditBodyCapture) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if n > 0 && r.remaining > 0 {
+		captureN := n
+		if captureN > r.remaining {
+			captureN = r.remaining
+		}
+		r.data = append(r.data, p[:captureN]...)
+		r.remaining -= captureN
+	}
+	return n, err
+}
+
+func (r *boundedAuditBodyCapture) Bytes() []byte {
+	if r == nil || len(r.data) == 0 {
 		return nil
 	}
-	raw, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.Request.Body = io.NopCloser(bytes.NewReader(nil))
-		return nil
+	return append([]byte(nil), r.data...)
+}
+
+func auditRouteTemplate(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
 	}
-	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
-	if len(raw) > maxAuditBodyBytes {
-		return raw[:maxAuditBodyBytes]
+	if route := c.FullPath(); route != "" {
+		return route
 	}
-	return raw
+	path := c.Request.URL.Path
+	if strings.HasPrefix(path, "/api/v1/admin") {
+		return "/api/v1/admin/*unmatched"
+	}
+	return path
 }
 
 func buildAuditInput(c *gin.Context, actorID int64, actorEmail, actorRole string, bodyRaw []byte, status int, duration time.Duration) *service.AdminAuditLogInput {
 	method := strings.ToUpper(c.Request.Method)
-	route := c.FullPath()
-	if route == "" {
-		route = c.Request.URL.Path
-	}
+	route := auditRouteTemplate(c)
 	module, action, actionType := classifyAdminAction(method, route)
 	targetType, targetID := classifyAdminTarget(route, c)
 	queryJSON := mustMarshalAuditJSON(redactAuditValue(queryParamsToMap(c)))
 	bodyJSON := "{}"
-	if len(bodyRaw) > 0 {
+	if shouldOmitAuditBody(method + " " + route) {
+		bodyJSON = mustMarshalAuditJSON(map[string]any{"_omitted": "credential-bearing body"})
+	} else if len(bodyRaw) > 0 {
 		bodyJSON = mustMarshalAuditJSON(redactAuditBody(bodyRaw))
 	}
 	summary := buildAuditSummary(method, route, module, action, targetType, targetID, bodyJSON, status)
+	authMethod := c.GetString("auth_method")
+	if authMethod == "" && actorID > 0 {
+		authMethod = service.AuditAuthMethodJWT
+	}
 
 	return &service.AdminAuditLogInput{
-		CreatedAt:       time.Now().UTC(),
-		ActorUserID:     actorID,
-		ActorEmail:      actorEmail,
-		ActorRole:       actorRole,
-		Method:          method,
-		RouteTemplate:   route,
-		Path:            c.Request.URL.Path,
+		CreatedAt:        time.Now().UTC(),
+		ActorUserID:      actorID,
+		ActorEmail:       actorEmail,
+		ActorRole:        actorRole,
+		AuthMethod:       authMethod,
+		CredentialMasked: MaskedRequestCredential(c),
+		Method:           method,
+		RouteTemplate:    route,
+		// Persist the matched route template instead of the raw URL path. Some
+		// admin endpoints carry credentials or redeem codes in path parameters;
+		// storing the concrete path would bypass body/query redaction.
+		Path:            route,
 		Module:          module,
 		Action:          action,
 		ActionType:      actionType,
@@ -156,6 +203,7 @@ func buildAuditSummary(method, route, module, action, targetType string, targetI
 			"创建用户",
 			"邮箱=" + auditMapString(body, "email"),
 			"用户名=" + auditMapString(body, "username"),
+			"角色=" + auditMapString(body, "role"),
 			"初始余额=" + auditAnyString(body["balance"]),
 			"并发=" + auditAnyString(body["concurrency"]),
 			"可用分组=" + auditAnyString(body["allowed_groups"]),
@@ -306,6 +354,9 @@ func auditChangedFieldSummary(body map[string]any) string {
 	if v := auditMapString(body, "status"); v != "" {
 		parts = append(parts, "状态="+v)
 	}
+	if v := auditMapString(body, "role"); v != "" {
+		parts = append(parts, "角色="+v)
+	}
 	if v := auditAnyString(body["balance"]); v != "" {
 		parts = append(parts, "余额="+v)
 	}
@@ -433,6 +484,9 @@ func redactAuditValue(v any) any {
 
 func isSensitiveAuditKey(key string) bool {
 	k := strings.ToLower(strings.TrimSpace(key))
+	if k == "code" {
+		return true
+	}
 	sensitive := []string{"password", "token", "secret", "credential", "authorization", "cookie", "api_key", "apikey", "refresh", "access_token", "client_secret", "totp", "otp", "key"}
 	for _, s := range sensitive {
 		if strings.Contains(k, s) {

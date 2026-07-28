@@ -426,29 +426,67 @@ function mergeSnapshotModules(target: OperationSnapshot, partial: OperationSnaps
 
 function normalizeSnapshot(input: OperationSnapshot): OperationSnapshot {
   const emptyChurnValue = emptyChurn()
+  const inputLists = input?.lists
+  const inputDistribution = input?.distribution
+  const inputPyramid = input?.pyramid
+  const inputFinancial = input?.financial
+  const inputProductMatrix = input?.product_matrix
   return {
     ...emptySnapshot(),
     ...input,
     core: { ...emptyCore(), ...(input?.core || {}) },
-    trend: input?.trend || [],
-    funnel: input?.funnel || [],
-    funnel_previous: input?.funnel_previous || [],
+    trend: arrayOrEmpty(input?.trend),
+    funnel: arrayOrEmpty(input?.funnel),
+    funnel_previous: arrayOrEmpty(input?.funnel_previous),
     trial_funnel: { ...emptyTrialFunnel(), ...(input?.trial_funnel || {}) },
-    cohorts: input?.cohorts || [],
-    lists: { ...emptyLists(), ...(input?.lists || {}) },
-    distribution: { ...emptyDistribution(), ...(input?.distribution || {}) },
+    cohorts: arrayOrEmpty(input?.cohorts),
+    lists: {
+      ...emptyLists(),
+      ...(inputLists || {}),
+      high_spending: arrayOrEmpty(inputLists?.high_spending),
+      silent_high_value: arrayOrEmpty(inputLists?.silent_high_value),
+      benefit_idle: arrayOrEmpty(inputLists?.benefit_idle),
+      expiring_soon: arrayOrEmpty(inputLists?.expiring_soon),
+      new_inactive: arrayOrEmpty(inputLists?.new_inactive)
+    },
+    distribution: {
+      ...emptyDistribution(),
+      ...(inputDistribution || {}),
+      groups: arrayOrEmpty(inputDistribution?.groups),
+      models: arrayOrEmpty(inputDistribution?.models),
+      api_keys: arrayOrEmpty(inputDistribution?.api_keys),
+      promos: arrayOrEmpty(inputDistribution?.promos),
+      redeem_types: arrayOrEmpty(inputDistribution?.redeem_types)
+    },
     churn: {
       ...emptyChurnValue,
       ...(input?.churn || {}),
       waterfall: { ...emptyChurnValue.waterfall, ...(input?.churn?.waterfall || {}) },
-      history: input?.churn?.history || []
+      history: arrayOrEmpty(input?.churn?.history)
     },
     baselines: { ...emptyBaselines(), ...(input?.baselines || {}) },
-    pyramid: { ...emptyPyramid(), ...(input?.pyramid || {}) },
-    financial: { ...emptyFinancial(), ...(input?.financial || {}) },
-    product_matrix: { ...emptyProductMatrix(), ...(input?.product_matrix || {}) },
-    advice: input?.advice || []
+    pyramid: {
+      ...emptyPyramid(),
+      ...(inputPyramid || {}),
+      levels: arrayOrEmpty(inputPyramid?.levels)
+    },
+    financial: {
+      ...emptyFinancial(),
+      ...(inputFinancial || {}),
+      arpu_history: arrayOrEmpty(inputFinancial?.arpu_history)
+    },
+    product_matrix: {
+      ...emptyProductMatrix(),
+      ...(inputProductMatrix || {}),
+      plans: arrayOrEmpty(inputProductMatrix?.plans),
+      models: arrayOrEmpty(inputProductMatrix?.models)
+    },
+    advice: arrayOrEmpty(input?.advice)
   }
+}
+
+function arrayOrEmpty<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : []
 }
 
 function emptySnapshot(): OperationSnapshot {

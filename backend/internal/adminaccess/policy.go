@@ -16,6 +16,9 @@ func OperatorRouteAllowed(method, fullPath, rawPath string) bool {
 	if path == "/api/v1/admin/compliance" || strings.HasPrefix(path, "/api/v1/admin/compliance/") {
 		return method == "GET" || method == "POST"
 	}
+	if path == "/api/v1/admin/auth-fastpath/metrics" {
+		return method == "GET"
+	}
 
 	if strings.HasPrefix(path, "/api/v1/admin/dashboard") {
 		if method == "GET" {

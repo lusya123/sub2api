@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 type batchImageSQLExecutor interface {
@@ -91,7 +92,10 @@ func (r *batchImageRepository) ListBatchImageJobsForOwner(ctx context.Context, u
 	if filter.ExcludeDeleted {
 		query += " AND user_deleted_at IS NULL"
 	}
-	if filter.Status != "" {
+	if len(filter.Statuses) > 0 {
+		query += " AND status = ANY($" + strconv.Itoa(len(args)+1) + ")"
+		args = append(args, pq.Array(filter.Statuses))
+	} else if filter.Status != "" {
 		query += " AND status = $" + strconv.Itoa(len(args)+1)
 		args = append(args, filter.Status)
 	}

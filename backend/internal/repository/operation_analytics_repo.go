@@ -27,15 +27,7 @@ func (r *operationAnalyticsRepository) GetOperationAnalyticsSnapshot(ctx context
 	}
 	modules := operationAnalyticsModuleSet(filter.Modules)
 
-	snapshot := &service.OperationAnalyticsSnapshot{
-		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
-		StartTime:      filter.StartTime.UTC().Format(time.RFC3339),
-		EndTime:        filter.EndTime.UTC().Format(time.RFC3339),
-		Granularity:    filter.Granularity,
-		Timezone:       filter.Timezone,
-		RevenueNote:    "运营口径：收入以 usage_logs.actual_cost 的消耗收入为准；余额/订阅兑换和后台分配只作为权益转化记录，不等同真实支付流水。",
-		ModuleStatuses: make(map[string]string, len(modules)),
-	}
+	snapshot := newOperationAnalyticsSnapshot(filter, len(modules))
 
 	if modules["core"] {
 		if filter.AllData {
@@ -116,6 +108,50 @@ func (r *operationAnalyticsRepository) GetOperationAnalyticsSnapshot(ctx context
 		snapshot.ModuleStatuses = nil
 	}
 	return snapshot, nil
+}
+
+func newOperationAnalyticsSnapshot(filter service.OperationAnalyticsFilter, moduleCount int) *service.OperationAnalyticsSnapshot {
+	return &service.OperationAnalyticsSnapshot{
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		StartTime:   filter.StartTime.UTC().Format(time.RFC3339),
+		EndTime:     filter.EndTime.UTC().Format(time.RFC3339),
+		Granularity: filter.Granularity,
+		Timezone:    filter.Timezone,
+		RevenueNote: "运营口径：收入以 usage_logs.actual_cost 的消耗收入为准；余额/订阅兑换和后台分配只作为权益转化记录，不等同真实支付流水。",
+		Trend:       make([]service.OperationTrendPoint, 0),
+		Funnel:      make([]service.OperationFunnelStep, 0),
+		FunnelPrev:  make([]service.OperationFunnelStep, 0),
+		Cohorts:     make([]service.OperationRetentionCohort, 0),
+		Lists: service.OperationUserLists{
+			HighSpending:    make([]service.OperationUserListItem, 0),
+			SilentHighValue: make([]service.OperationUserListItem, 0),
+			BenefitIdle:     make([]service.OperationUserListItem, 0),
+			ExpiringSoon:    make([]service.OperationUserListItem, 0),
+			NewInactive:     make([]service.OperationUserListItem, 0),
+		},
+		Distribution: service.OperationDistributionSnapshot{
+			Groups:      make([]service.OperationDistributionItem, 0),
+			Models:      make([]service.OperationDistributionItem, 0),
+			APIKeys:     make([]service.OperationDistributionItem, 0),
+			Promos:      make([]service.OperationDistributionItem, 0),
+			RedeemTypes: make([]service.OperationDistributionItem, 0),
+		},
+		Churn: service.OperationChurnSnapshot{
+			History: make([]service.OperationChurnHistoryPoint, 0),
+		},
+		Pyramid: service.OperationUserPyramid{
+			Levels: make([]service.OperationPyramidLevel, 0),
+		},
+		Financial: service.OperationFinancialCockpit{
+			ArpuHistory: make([]service.OperationArpuPoint, 0),
+		},
+		ProductMatrix: service.OperationProductMatrix{
+			Plans:  make([]service.OperationPlanMatrix, 0),
+			Models: make([]service.OperationModelHealth, 0),
+		},
+		ModuleStatuses: make(map[string]string, moduleCount),
+		Advice:         make([]service.OperationAdvice, 0),
+	}
 }
 
 func operationAnalyticsModuleSet(modules []string) map[string]bool {

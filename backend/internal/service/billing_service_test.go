@@ -130,7 +130,7 @@ func TestGetModelPricing_FallbackWarnLoggedOncePerModel(t *testing.T) {
 	svc := newTestBillingService()
 	buf := captureStdLog(t)
 
-	// glm-5.2 不在 LiteLLM,经 strings.Contains 命中 glm-5 兜底价 → 触发 fallback warn。
+	// glm-5.2 使用官方硬编码兜底价，仍应只记录一次 fallback warn。
 	for i := 0; i < 5; i++ {
 		pricing, err := svc.GetModelPricing("glm-5.2")
 		require.NoError(t, err)
@@ -158,17 +158,16 @@ func TestGetModelPricing_FallbackWarnPerModelNotGlobal(t *testing.T) {
 	require.Equal(t, 0, strings.Count(out, "model: GLM-5.2"), out) // 大写经 ToLower 归一,不应单独成行
 }
 
-// 回归:glm-5.2 仍解析到 glm-5 兜底价(计费金额不变,防止日志改动掩盖未来计费回归)。
-func TestGetModelPricing_GLM52FallsBackToGLM5Price(t *testing.T) {
+func TestGetModelPricing_GLM52UsesOfficialPrice(t *testing.T) {
 	svc := newTestBillingService()
 
 	got, err := svc.GetModelPricing("glm-5.2")
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
-	// glm-5 base：Input 1e-6 / Output 3.2e-6(见 TestGetFallbackPricing_FamilyMatching)。
-	require.InDelta(t, 1e-6, got.InputPricePerToken, 1e-12)
-	require.InDelta(t, 3.2e-6, got.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 1.4e-6, got.InputPricePerToken, 1e-12)
+	require.InDelta(t, 4.4e-6, got.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 0.26e-6, got.CacheReadPricePerToken, 1e-12)
 }
 
 func TestGetModelPricing_UnknownClaudeModelFallsBackToSonnet(t *testing.T) {
@@ -436,21 +435,28 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 
 	floatPtr := func(v float64) *float64 { return &v }
 
-	// expectedOutput / expectedCacheRead 为 nil 时跳过该字段断言（保持与原有用例兼容）。
+	// 可选期望值为 nil 时跳过对应字段断言（保持与原有用例兼容）。
 	tests := []struct {
-		name              string
-		model             string
-		expectedInput     float64
-		expectedOutput    *float64
-		expectedCacheRead *float64
-		expectNilPricing  bool
+		name                string
+		model               string
+		expectedInput       float64
+		expectedOutput      *float64
+		expectedCacheCreate *float64
+		expectedCacheRead   *float64
+		expectNilPricing    bool
 	}{
 		{name: "empty model", model: "   ", expectNilPricing: true},
 		{name: "claude opus 4.6", model: "claude-opus-4.6-20260201", expectedInput: 5e-6},
 		{name: "claude opus 4.5 alt separator", model: "claude-opus-4-5-20260101", expectedInput: 5e-6},
 		{name: "claude generic model fallback sonnet", model: "claude-foo-bar", expectedInput: 3e-6},
 		{name: "gemini explicit fallback", model: "gemini-3-1-pro", expectedInput: 2e-6},
+		{name: "gemini high explicit alias", model: "gemini-3.1-pro-high", expectedInput: 2e-6},
+		{name: "gemini low explicit alias", model: "gemini-3.1-pro-low", expectedInput: 2e-6},
+		{name: "gemini preview explicit alias", model: "gemini-3.1-pro-preview", expectedInput: 2e-6},
+		{name: "gemini preview customtools explicit alias", model: "gemini-3.1-pro-preview-customtools", expectedInput: 2e-6},
 		{name: "gemini unknown no fallback", model: "gemini-2.0-pro", expectNilPricing: true},
+		{name: "gemini image suffix no text fallback", model: "gemini-3.1-pro-image", expectNilPricing: true},
+		{name: "embedded gemini substring no fallback", model: "not-gemini-3.1-pro-wrapper", expectNilPricing: true},
 		{name: "openai gpt5.4", model: "gpt-5.4", expectedInput: 2.5e-6},
 		{name: "openai gpt5.4 mini", model: "gpt-5.4-mini", expectedInput: 7.5e-7},
 		{name: "openai gpt5.3 codex", model: "gpt-5.3-codex", expectedInput: 1.5e-6},
@@ -462,13 +468,14 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "non supported family", model: "qwen-max", expectNilPricing: true},
 		{name: "glm-5 exact", model: "glm-5", expectedInput: 1.0e-6},
 		{name: "glm uppercase normalized", model: "GLM-5", expectedInput: 1.0e-6},
-		{name: "glm unknown variant fallback to glm-5", model: "glm-4.6", expectedInput: 1.0e-6},
+		{name: "glm known upstream model wins before generic fallback", model: "glm-4.6", expectedInput: 0.6e-6},
 		{name: "minimax m2.5 standard", model: "minimax-m2.5", expectedInput: 0.3e-6},
 		{name: "minimax m2.5 highspeed exact", model: "minimax-m2.5-highspeed", expectedInput: 0.6e-6},
-		{name: "minimax unknown fallback to standard", model: "minimax-m3", expectedInput: 0.3e-6},
-		// 计费安全：未知 highspeed 衍生型号必须走高速价（避免少收 50%）
-		{name: "minimax highspeed suffix variant uses highspeed price", model: "minimax-m2.5-highspeed-2026", expectedInput: 0.6e-6},
-		{name: "minimax m3 highspeed uses highspeed price", model: "minimax-m3-highspeed", expectedInput: 0.6e-6},
+		{name: "minimax m3 permanent discount", model: "minimax-m3", expectedInput: 0.3e-6},
+		{name: "minimax highspeed numeric release suffix", model: "minimax-m2.5-highspeed-2026", expectedInput: 0.6e-6},
+		{name: "minimax unsupported m3 highspeed fails closed", model: "minimax-m3-highspeed", expectNilPricing: true},
+		{name: "minimax unknown model fails closed", model: "minimax-future", expectNilPricing: true},
+		{name: "minimax unknown highspeed model fails closed", model: "minimax-future-highspeed", expectNilPricing: true},
 		{
 			name:              "deepseek v4 pro",
 			model:             "deepseek-v4-pro",
@@ -499,6 +506,27 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		},
 
 		// ---- 智谱 GLM（z.ai USD 口径）----
+		{
+			name:              "glm 5.2 flagship",
+			model:             "glm-5.2",
+			expectedInput:     1.4e-6,
+			expectedOutput:    floatPtr(4.4e-6),
+			expectedCacheRead: floatPtr(0.26e-6),
+		},
+		{
+			name:              "glm 5.2 provider-qualified",
+			model:             "z-ai/glm-5.2",
+			expectedInput:     1.4e-6,
+			expectedOutput:    floatPtr(4.4e-6),
+			expectedCacheRead: floatPtr(0.26e-6),
+		},
+		{
+			name:              "glm 5.2 numeric release suffix",
+			model:             "glm-5.2-20260719",
+			expectedInput:     1.4e-6,
+			expectedOutput:    floatPtr(4.4e-6),
+			expectedCacheRead: floatPtr(0.26e-6),
+		},
 		{
 			name:              "glm 5.1 flagship",
 			model:             "glm-5.1",
@@ -597,6 +625,47 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 			expectedOutput:    floatPtr(1.1e-6),
 			expectedCacheRead: floatPtr(0.03e-6),
 		},
+		{
+			name:              "glm 5v turbo vision",
+			model:             "glm-5v-turbo",
+			expectedInput:     1.2e-6,
+			expectedOutput:    floatPtr(4e-6),
+			expectedCacheRead: floatPtr(0.24e-6),
+		},
+		{
+			name:              "glm 4.6v vision",
+			model:             "glm-4.6v",
+			expectedInput:     0.3e-6,
+			expectedOutput:    floatPtr(0.9e-6),
+			expectedCacheRead: floatPtr(0.05e-6),
+		},
+		{
+			name:              "glm 4.6v flashx vision",
+			model:             "glm-4.6v-flashx",
+			expectedInput:     0.04e-6,
+			expectedOutput:    floatPtr(0.4e-6),
+			expectedCacheRead: floatPtr(0.004e-6),
+		},
+		{
+			name:              "glm 4.5v vision",
+			model:             "glm-4.5v",
+			expectedInput:     0.6e-6,
+			expectedOutput:    floatPtr(1.8e-6),
+			expectedCacheRead: floatPtr(0.11e-6),
+		},
+		{
+			name:              "glm 4.6v flash free",
+			model:             "glm-4.6v-flash",
+			expectedInput:     0,
+			expectedOutput:    floatPtr(0),
+			expectedCacheRead: floatPtr(0),
+		},
+		{
+			name:           "glm ocr",
+			model:          "glm-ocr",
+			expectedInput:  0.03e-6,
+			expectedOutput: floatPtr(0.03e-6),
+		},
 
 		// ---- 月之暗面 Kimi ----
 		{
@@ -652,46 +721,76 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 
 		// ---- MiniMax M 系列 ----
 		{
-			name:              "minimax m3",
-			model:             "minimax-m3",
-			expectedInput:     0.60e-6,
-			expectedOutput:    floatPtr(2.40e-6),
-			expectedCacheRead: floatPtr(0.12e-6),
+			name:                "minimax m3 discounted base tier",
+			model:               "minimax-m3",
+			expectedInput:       0.30e-6,
+			expectedOutput:      floatPtr(1.20e-6),
+			expectedCacheCreate: floatPtr(0.30e-6),
+			expectedCacheRead:   floatPtr(0.06e-6),
 		},
 		{
-			name:              "minimax m3 long ctx boundary keep standard tier",
-			model:             "minimax-m3-long", // 仍按 standard tier (≤512K)
-			expectedInput:     0.60e-6,
-			expectedOutput:    floatPtr(2.40e-6),
-			expectedCacheRead: floatPtr(0.12e-6),
+			name:                "minimax m3 provider-qualified",
+			model:               "minimax/minimax-m3",
+			expectedInput:       0.30e-6,
+			expectedOutput:      floatPtr(1.20e-6),
+			expectedCacheCreate: floatPtr(0.30e-6),
+			expectedCacheRead:   floatPtr(0.06e-6),
 		},
 		{
-			name:              "minimax m2.7",
-			model:             "minimax-m2.7",
-			expectedInput:     0.30e-6,
-			expectedOutput:    floatPtr(1.20e-6),
-			expectedCacheRead: floatPtr(0.06e-6),
+			name:                "minimax m2.7",
+			model:               "minimax-m2.7",
+			expectedInput:       0.30e-6,
+			expectedOutput:      floatPtr(1.20e-6),
+			expectedCacheCreate: floatPtr(0.375e-6),
+			expectedCacheRead:   floatPtr(0.06e-6),
 		},
 		{
-			name:              "minimax m2.7 highspeed",
-			model:             "minimax-m2.7-highspeed",
-			expectedInput:     0.60e-6,
-			expectedOutput:    floatPtr(2.40e-6),
-			expectedCacheRead: floatPtr(0.06e-6),
+			name:                "minimax m2.7 highspeed",
+			model:               "minimax-m2.7-highspeed",
+			expectedInput:       0.60e-6,
+			expectedOutput:      floatPtr(2.40e-6),
+			expectedCacheCreate: floatPtr(0.375e-6),
+			expectedCacheRead:   floatPtr(0.06e-6),
 		},
 		{
-			name:              "minimax m2.5",
-			model:             "minimax-m2.5",
-			expectedInput:     0.30e-6,
-			expectedOutput:    floatPtr(1.20e-6),
-			expectedCacheRead: floatPtr(0.03e-6),
+			name:                "minimax m2.5",
+			model:               "minimax-m2.5",
+			expectedInput:       0.30e-6,
+			expectedOutput:      floatPtr(1.20e-6),
+			expectedCacheCreate: floatPtr(0.375e-6),
+			expectedCacheRead:   floatPtr(0.03e-6),
 		},
 		{
-			name:              "minimax m2 legacy",
-			model:             "minimax-m2",
-			expectedInput:     0.30e-6,
-			expectedOutput:    floatPtr(1.20e-6),
-			expectedCacheRead: floatPtr(0.03e-6),
+			name:                "minimax m2.5 highspeed",
+			model:               "minimax-m2.5-highspeed",
+			expectedInput:       0.60e-6,
+			expectedOutput:      floatPtr(2.40e-6),
+			expectedCacheCreate: floatPtr(0.375e-6),
+			expectedCacheRead:   floatPtr(0.03e-6),
+		},
+		{
+			name:                "minimax m2.1 highspeed",
+			model:               "minimax-m2.1-highspeed",
+			expectedInput:       0.60e-6,
+			expectedOutput:      floatPtr(2.40e-6),
+			expectedCacheCreate: floatPtr(0.375e-6),
+			expectedCacheRead:   floatPtr(0.03e-6),
+		},
+		{
+			name:                "minimax m2 legacy",
+			model:               "minimax-m2",
+			expectedInput:       0.30e-6,
+			expectedOutput:      floatPtr(1.20e-6),
+			expectedCacheCreate: floatPtr(0.375e-6),
+			expectedCacheRead:   floatPtr(0.03e-6),
+		},
+		{
+			name:                "minimax m2 stable alias",
+			model:               "minimax-m2-stable",
+			expectedInput:       0.30e-6,
+			expectedOutput:      floatPtr(1.20e-6),
+			expectedCacheCreate: floatPtr(0.375e-6),
+			expectedCacheRead:   floatPtr(0.03e-6),
 		},
 
 		// ---- 火山方舟 豆包 Embedding（多模态向量化）----
@@ -712,17 +811,22 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		// doubao-pro / doubao-embedding（纯文本）不在白名单，不回退；仅 doubao-embedding-vision 显式命中。
 		{name: "doubao unknown no fallback", model: "doubao-pro", expectNilPricing: true},
 		{name: "doubao text embedding no fallback", model: "doubao-embedding-text-240515", expectNilPricing: true},
+		{name: "embedded doubao substring no fallback", model: "not-doubao-embedding-vision-wrapper", expectNilPricing: true},
 		{name: "hunyuan unknown no fallback", model: "hunyuan-t1", expectNilPricing: true},
 		{name: "moonshot v1 not covered", model: "moonshot-v1-8k", expectNilPricing: true},
-		// kimi-k2-0905 / kimi-k2-0711 官方未公布独立价，走 kimi-k2 隐性回退（接受）——
-		// 如未来官方公布独立价，需在 getFallbackPricing 加显式分支。
-		{
-			name:              "kimi k2-0905-preview implicit fallback to k2",
-			model:             "kimi-k2-0905-preview",
-			expectedInput:     0.56e-6,
-			expectedOutput:    floatPtr(2.24e-6),
-			expectedCacheRead: floatPtr(0.14e-6),
-		},
+		{name: "embedded deepseek pro substring no fallback", model: "not-deepseek-v4-pro-wrapper", expectNilPricing: true},
+		{name: "unknown deepseek version no fallback", model: "deepseek-v4-ultra", expectNilPricing: true},
+		{name: "unknown glm version fails closed", model: "glm-5.3", expectNilPricing: true},
+		{name: "unknown glm vision fails closed", model: "glm-6v-turbo", expectNilPricing: true},
+		{name: "glm image is not text fallback", model: "glm-image", expectNilPricing: true},
+		{name: "embedded glm substring fails closed", model: "not-glm-5.2-wrapper", expectNilPricing: true},
+		{name: "unknown minimax version fails closed", model: "minimax-m4", expectNilPricing: true},
+		{name: "embedded minimax substring fails closed", model: "not-minimax-m2.7-wrapper", expectNilPricing: true},
+		{name: "kimi k2.7 unknown no fallback", model: "kimi-k2.7", expectNilPricing: true},
+		{name: "kimi k2.50 does not match k2.5", model: "kimi-k2.50", expectNilPricing: true},
+		{name: "embedded kimi substring no fallback", model: "not-kimi-k2.6-wrapper", expectNilPricing: true},
+		{name: "kimi k2-0905 unpriced no fallback", model: "kimi-k2-0905-preview", expectNilPricing: true},
+		{name: "kimi k2-0711 unpriced no fallback", model: "kimi-k2-0711", expectNilPricing: true},
 	}
 
 	for _, tt := range tests {
@@ -737,6 +841,10 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 			if tt.expectedOutput != nil {
 				require.InDelta(t, *tt.expectedOutput, pricing.OutputPricePerToken, 1e-12,
 					"OutputPricePerToken mismatch for %s", tt.model)
+			}
+			if tt.expectedCacheCreate != nil {
+				require.InDelta(t, *tt.expectedCacheCreate, pricing.CacheCreationPricePerToken, 1e-14,
+					"CacheCreationPricePerToken mismatch for %s", tt.model)
 			}
 			if tt.expectedCacheRead != nil {
 				require.InDelta(t, *tt.expectedCacheRead, pricing.CacheReadPricePerToken, 1e-14,
@@ -785,7 +893,7 @@ func TestCalculateCost_MiniMaxM25_StandardVsHighspeed(t *testing.T) {
 	require.InDelta(t, 0.03, std.CacheReadCost, 1e-10)
 	require.InDelta(t, 0.30+1.20+0.375+0.03, std.TotalCost, 1e-10) // $1.905
 
-	// 高速版：input $0.6, output $2.4，缓存价同标准
+	// 高速版：PayGo 官方 input $0.6、output $2.4；缓存价同标准。
 	hs, err := svc.CalculateCost("minimax-m2.5-highspeed", tokens, 1.0)
 	require.NoError(t, err)
 	require.InDelta(t, 0.60, hs.InputCost, 1e-10)
@@ -793,9 +901,58 @@ func TestCalculateCost_MiniMaxM25_StandardVsHighspeed(t *testing.T) {
 	require.InDelta(t, 0.375, hs.CacheCreationCost, 1e-10)
 	require.InDelta(t, 0.03, hs.CacheReadCost, 1e-10)
 
-	// 高速版 input/output 严格是标准版的 2 倍
+	// 高速版 input/output 均严格为标准版的 2 倍。
 	require.InDelta(t, std.InputCost*2, hs.InputCost, 1e-10)
 	require.InDelta(t, std.OutputCost*2, hs.OutputCost, 1e-10)
+}
+
+func TestCalculateCost_MiniMaxM3OfficialContextTiers(t *testing.T) {
+	svc := newTestBillingService()
+
+	pricing, err := svc.GetModelPricing("minimax-m3")
+	require.NoError(t, err)
+	require.Equal(t, miniMaxM3LongContextInputThreshold, pricing.LongContextInputThreshold)
+	require.InDelta(t, miniMaxM3LongContextMultiplier, pricing.LongContextInputMultiplier, 1e-12)
+	require.InDelta(t, miniMaxM3LongContextMultiplier, pricing.LongContextOutputMultiplier, 1e-12)
+
+	// The provider defines input tokens as uncached + cache-write + cache-read.
+	// Exactly 512K remains in the discounted base tier.
+	baseTokens := UsageTokens{
+		InputTokens:         256000,
+		CacheCreationTokens: 128000,
+		CacheReadTokens:     128000,
+		OutputTokens:        1000000,
+	}
+	base, err := svc.CalculateCost("minimax-m3", baseTokens, 1)
+	require.NoError(t, err)
+	require.False(t, base.LongContextBillingApplied)
+	require.InDelta(t, 256000*0.30e-6, base.InputCost, 1e-12)
+	require.InDelta(t, 128000*0.30e-6, base.CacheCreationCost, 1e-12)
+	require.InDelta(t, 128000*0.06e-6, base.CacheReadCost, 1e-12)
+	require.InDelta(t, 1.20, base.OutputCost, 1e-12)
+
+	// One token above 512K switches the entire request to the published upper
+	// tier, including cache read/write and output.
+	longTokens := baseTokens
+	longTokens.InputTokens++
+	longCost, err := svc.CalculateCost("minimax-m3", longTokens, 1)
+	require.NoError(t, err)
+	require.True(t, longCost.LongContextBillingApplied)
+	require.InDelta(t, 256001*0.60e-6, longCost.InputCost, 1e-12)
+	require.InDelta(t, 128000*0.60e-6, longCost.CacheCreationCost, 1e-12)
+	require.InDelta(t, 128000*0.12e-6, longCost.CacheReadCost, 1e-12)
+	require.InDelta(t, 2.40, longCost.OutputCost, 1e-12)
+}
+
+func TestCalculateCost_MiniMaxM3PriorityIsOnePointFiveTimesEachContextTier(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: miniMaxM3LongContextInputThreshold + 1, OutputTokens: 1000000}
+
+	cost, err := svc.CalculateCostWithServiceTier("minimax-m3", tokens, 1, "priority")
+	require.NoError(t, err)
+	require.True(t, cost.LongContextBillingApplied)
+	require.InDelta(t, float64(tokens.InputTokens)*0.90e-6, cost.InputCost, 1e-12)
+	require.InDelta(t, 3.60, cost.OutputCost, 1e-12)
 }
 
 func TestCalculateCost_GLMMinimax_RateMultiplierApplied(t *testing.T) {

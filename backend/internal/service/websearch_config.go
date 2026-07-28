@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -69,11 +71,18 @@ const sfKeyWebSearchConfig = "web_search_emulation_config"
 
 type cachedWebSearchEmulationConfig struct {
 	config    *WebSearchEmulationConfig
+	err       error
 	expiresAt int64 // unix nano
 }
 
 var webSearchEmulationCache atomic.Value // *cachedWebSearchEmulationConfig
 var webSearchEmulationSF singleflight.Group
+
+// webSearchEmulationCacheMu serializes config saves and protects cache stores
+// against an older in-flight DB load. DB reads intentionally happen outside
+// the lock; the generation check prevents their stale result from winning.
+var webSearchEmulationCacheMu sync.Mutex
+var webSearchEmulationCacheGeneration uint64
 
 const (
 	webSearchEmulationCacheTTL  = 60 * time.Second
@@ -84,8 +93,8 @@ const (
 // GetWebSearchEmulationConfig returns the configuration with in-process cache + singleflight.
 func (s *SettingService) GetWebSearchEmulationConfig(ctx context.Context) (*WebSearchEmulationConfig, error) {
 	if cached := webSearchEmulationCache.Load(); cached != nil {
-		if c, ok := cached.(*cachedWebSearchEmulationConfig); ok && time.Now().UnixNano() < c.expiresAt {
-			return c.config, nil
+		if c, ok := cached.(*cachedWebSearchEmulationConfig); ok && c != nil && time.Now().UnixNano() < c.expiresAt {
+			return c.config, c.err
 		}
 	}
 	result, err, _ := webSearchEmulationSF.Do(sfKeyWebSearchConfig, func() (any, error) {
@@ -101,23 +110,49 @@ func (s *SettingService) GetWebSearchEmulationConfig(ctx context.Context) (*WebS
 }
 
 func (s *SettingService) loadWebSearchConfigFromDB() (*WebSearchEmulationConfig, error) {
+	webSearchEmulationCacheMu.Lock()
+	generation := webSearchEmulationCacheGeneration
+	webSearchEmulationCacheMu.Unlock()
+
 	dbCtx, cancel := context.WithTimeout(context.Background(), webSearchEmulationDBTimeout)
 	defer cancel()
 
 	raw, err := s.settingRepo.GetValue(dbCtx, SettingKeyWebSearchEmulationConfig)
 	if err != nil {
-		webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
-			config:    &WebSearchEmulationConfig{},
-			expiresAt: time.Now().Add(webSearchEmulationErrorTTL).UnixNano(),
-		})
+		if errors.Is(err, ErrSettingNotFound) {
+			cfg := &WebSearchEmulationConfig{}
+			storeWebSearchEmulationCacheIfCurrent(generation, cfg, nil, webSearchEmulationCacheTTL)
+			return cfg, nil
+		}
+		storeWebSearchEmulationCacheIfCurrent(
+			generation,
+			&WebSearchEmulationConfig{},
+			err,
+			webSearchEmulationErrorTTL,
+		)
 		return &WebSearchEmulationConfig{}, err
 	}
 	cfg := parseWebSearchConfigJSON(raw)
+	storeWebSearchEmulationCacheIfCurrent(generation, cfg, nil, webSearchEmulationCacheTTL)
+	return cfg, nil
+}
+
+func storeWebSearchEmulationCacheIfCurrent(
+	generation uint64,
+	cfg *WebSearchEmulationConfig,
+	cacheErr error,
+	ttl time.Duration,
+) {
+	webSearchEmulationCacheMu.Lock()
+	defer webSearchEmulationCacheMu.Unlock()
+	if generation != webSearchEmulationCacheGeneration {
+		return
+	}
 	webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
 		config:    cfg,
-		expiresAt: time.Now().Add(webSearchEmulationCacheTTL).UnixNano(),
+		err:       cacheErr,
+		expiresAt: time.Now().Add(ttl).UnixNano(),
 	})
-	return cfg, nil
 }
 
 func parseWebSearchConfigJSON(raw string) *WebSearchEmulationConfig {
@@ -138,42 +173,93 @@ func (s *SettingService) SaveWebSearchEmulationConfig(ctx context.Context, cfg *
 	if err := validateWebSearchConfig(cfg); err != nil {
 		return infraerrors.BadRequest("INVALID_WEB_SEARCH_CONFIG", err.Error())
 	}
-	s.mergeExistingAPIKeys(ctx, cfg)
 
-	// After merge, validate all enabled providers have API keys
-	if cfg.Enabled {
-		for _, p := range cfg.Providers {
-			if p.APIKey == "" {
-				return infraerrors.BadRequest("MISSING_API_KEY",
-					fmt.Sprintf("provider %s has no API key configured", p.Type))
+	// Serialize the read-merge-write sequence. Besides preventing concurrent
+	// saves from losing updates, the generation bump makes older in-flight
+	// loads skip their cache store after this save commits.
+	var savedGeneration uint64
+	var savedConfig *WebSearchEmulationConfig
+	webSearchEmulationCacheMu.Lock()
+	err := func() error {
+		if err := s.mergeExistingAPIKeys(ctx, cfg); err != nil {
+			return err
+		}
+
+		// After merge, validate all enabled providers have API keys
+		if cfg.Enabled {
+			for _, p := range cfg.Providers {
+				if p.APIKey == "" {
+					return infraerrors.BadRequest("MISSING_API_KEY",
+						fmt.Sprintf("provider %s has no API key configured", p.Type))
+				}
 			}
 		}
-	}
 
-	data, err := json.Marshal(cfg)
+		data, err := json.Marshal(cfg)
+		if err != nil {
+			return fmt.Errorf("websearch: marshal config: %w", err)
+		}
+		if err := s.settingRepo.Set(ctx, SettingKeyWebSearchEmulationConfig, string(data)); err != nil {
+			return fmt.Errorf("websearch: save config: %w", err)
+		}
+
+		savedConfig = cloneWebSearchEmulationConfig(cfg)
+		webSearchEmulationCacheGeneration++
+		savedGeneration = webSearchEmulationCacheGeneration
+		webSearchEmulationSF.Forget(sfKeyWebSearchConfig)
+		webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
+			config:    savedConfig,
+			expiresAt: time.Now().Add(webSearchEmulationCacheTTL).UnixNano(),
+		})
+		return nil
+	}()
+	webSearchEmulationCacheMu.Unlock()
 	if err != nil {
-		return fmt.Errorf("websearch: marshal config: %w", err)
+		return err
 	}
-	if err := s.settingRepo.Set(ctx, SettingKeyWebSearchEmulationConfig, string(data)); err != nil {
-		return fmt.Errorf("websearch: save config: %w", err)
-	}
-	// Invalidate: forget singleflight first, then store new value
-	webSearchEmulationSF.Forget(sfKeyWebSearchConfig)
-	webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
-		config:    cfg,
-		expiresAt: time.Now().Add(webSearchEmulationCacheTTL).UnixNano(),
-	})
 
 	// Hot-reload: rebuild the global Manager with new config
-	s.rebuildWebSearchManager(ctx)
+	s.rebuildWebSearchManagerSnapshot(ctx, savedGeneration, savedConfig)
 	return nil
 }
 
+func cloneWebSearchEmulationConfig(cfg *WebSearchEmulationConfig) *WebSearchEmulationConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloneInt64 := func(value *int64) *int64 {
+		if value == nil {
+			return nil
+		}
+		cloned := *value
+		return &cloned
+	}
+	out := *cfg
+	out.Providers = make([]WebSearchProviderConfig, len(cfg.Providers))
+	for i, provider := range cfg.Providers {
+		out.Providers[i] = provider
+		out.Providers[i].QuotaLimit = cloneInt64(provider.QuotaLimit)
+		out.Providers[i].SubscribedAt = cloneInt64(provider.SubscribedAt)
+		out.Providers[i].ProxyID = cloneInt64(provider.ProxyID)
+		out.Providers[i].ExpiresAt = cloneInt64(provider.ExpiresAt)
+	}
+	return &out
+}
+
 // mergeExistingAPIKeys preserves API keys from the current config when incoming value is empty.
-func (s *SettingService) mergeExistingAPIKeys(ctx context.Context, cfg *WebSearchEmulationConfig) {
-	existing, _ := s.getWebSearchEmulationConfigRaw(ctx)
-	if existing == nil || cfg == nil {
-		return
+func (s *SettingService) mergeExistingAPIKeys(ctx context.Context, cfg *WebSearchEmulationConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	existing, err := s.getWebSearchEmulationConfigRaw(ctx)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return nil
+		}
+		return fmt.Errorf("websearch: load existing config before save: %w", err)
+	}
+	if existing == nil {
+		return nil
 	}
 	existingByType := make(map[string]string, len(existing.Providers))
 	for _, p := range existing.Providers {
@@ -188,6 +274,7 @@ func (s *SettingService) mergeExistingAPIKeys(ctx context.Context, cfg *WebSearc
 			}
 		}
 	}
+	return nil
 }
 
 func (s *SettingService) getWebSearchEmulationConfigRaw(ctx context.Context) (*WebSearchEmulationConfig, error) {
@@ -220,12 +307,41 @@ func (s *SettingService) rebuildWebSearchManager(ctx context.Context) {
 	if s.webSearchManagerBuilder == nil {
 		return
 	}
+	webSearchEmulationCacheMu.Lock()
+	generation := webSearchEmulationCacheGeneration
+	webSearchEmulationCacheMu.Unlock()
 	cfg, err := s.GetWebSearchEmulationConfig(ctx)
 	if err != nil {
-		SetWebSearchManager(nil)
+		webSearchEmulationCacheMu.Lock()
+		if generation == webSearchEmulationCacheGeneration {
+			SetWebSearchManager(nil)
+		}
+		webSearchEmulationCacheMu.Unlock()
+		return
+	}
+	s.rebuildWebSearchManagerSnapshot(ctx, generation, cloneWebSearchEmulationConfig(cfg))
+}
+
+func (s *SettingService) rebuildWebSearchManagerSnapshot(
+	ctx context.Context,
+	generation uint64,
+	cfg *WebSearchEmulationConfig,
+) {
+	if s.webSearchManagerBuilder == nil {
 		return
 	}
 	proxyURLs := s.resolveProviderProxyURLs(ctx, cfg)
+
+	// Proxy resolution can be slow and runs outside the commit lock. The final
+	// generation check prevents an older save from installing its manager after
+	// a newer save. Holding the lock through builder invocation also means a
+	// newer save waits if the older builder has already begun; it will then
+	// persist and build last.
+	webSearchEmulationCacheMu.Lock()
+	defer webSearchEmulationCacheMu.Unlock()
+	if generation != webSearchEmulationCacheGeneration || s.webSearchManagerBuilder == nil {
+		return
+	}
 	s.webSearchManagerBuilder(cfg, proxyURLs)
 }
 

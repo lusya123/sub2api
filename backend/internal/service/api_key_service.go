@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -36,6 +38,12 @@ var (
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
 	ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key 额度已用完")
+	ErrInvalidAPIKeyQuota   = infraerrors.BadRequest("INVALID_API_KEY_QUOTA", "api key quota must be a finite non-negative number")
+	ErrInvalidRateLimit5h   = infraerrors.BadRequest("INVALID_API_KEY_RATE_LIMIT_5H", "api key 5-hour rate limit must be a finite non-negative number")
+	ErrInvalidRateLimit1d   = infraerrors.BadRequest("INVALID_API_KEY_RATE_LIMIT_1D", "api key daily rate limit must be a finite non-negative number")
+	ErrInvalidRateLimit7d   = infraerrors.BadRequest("INVALID_API_KEY_RATE_LIMIT_7D", "api key 7-day rate limit must be a finite non-negative number")
+	ErrInvalidAPIKeyExpiry  = infraerrors.BadRequest("INVALID_API_KEY_EXPIRES_IN_DAYS", "api key expires_in_days must be between 1 and 3650")
+	ErrInvalidAPIKeyName    = infraerrors.BadRequest("INVALID_API_KEY_NAME", "api key name must contain between 1 and 100 characters")
 
 	// Rate limit errors
 	ErrAPIKeyRateLimit5hExceeded = infraerrors.TooManyRequests("API_KEY_RATE_5H_EXCEEDED", "api key 5小时限额已用完")
@@ -45,6 +53,7 @@ var (
 
 const (
 	MaxAPIKeyCredentialBytes     = 128
+	MaxAPIKeyNameRunes           = 100
 	defaultAuthLookupConcurrency = 64
 	defaultNegativeAuthCacheSize = 16384
 	apiKeyMaxErrorsPerHour       = 20
@@ -357,6 +366,59 @@ func (s *APIKeyService) ValidateCustomKey(key string) error {
 	return nil
 }
 
+func invalidAPIKeyLimit(value float64) bool {
+	return value < 0 || math.IsNaN(value) || math.IsInf(value, 0)
+}
+
+func normalizeAPIKeyName(name string) (string, error) {
+	if name == "" || utf8.RuneCountInString(name) > MaxAPIKeyNameRunes {
+		return "", ErrInvalidAPIKeyName
+	}
+	// Keep the existing storage representation for compatibility, but validate
+	// the encoded value before it reaches Ent so validation failures remain a
+	// typed client error instead of surfacing as HTTP 500.
+	encoded := html.EscapeString(name)
+	if utf8.RuneCountInString(encoded) > MaxAPIKeyNameRunes {
+		return "", ErrInvalidAPIKeyName
+	}
+	return encoded, nil
+}
+
+func validateCreateAPIKeyLimits(req CreateAPIKeyRequest) error {
+	if req.ExpiresInDays != nil && (*req.ExpiresInDays < 1 || *req.ExpiresInDays > 3650) {
+		return ErrInvalidAPIKeyExpiry
+	}
+	if invalidAPIKeyLimit(req.Quota) {
+		return ErrInvalidAPIKeyQuota
+	}
+	if invalidAPIKeyLimit(req.RateLimit5h) {
+		return ErrInvalidRateLimit5h
+	}
+	if invalidAPIKeyLimit(req.RateLimit1d) {
+		return ErrInvalidRateLimit1d
+	}
+	if invalidAPIKeyLimit(req.RateLimit7d) {
+		return ErrInvalidRateLimit7d
+	}
+	return nil
+}
+
+func validateUpdateAPIKeyLimits(req UpdateAPIKeyRequest) error {
+	if req.Quota != nil && invalidAPIKeyLimit(*req.Quota) {
+		return ErrInvalidAPIKeyQuota
+	}
+	if req.RateLimit5h != nil && invalidAPIKeyLimit(*req.RateLimit5h) {
+		return ErrInvalidRateLimit5h
+	}
+	if req.RateLimit1d != nil && invalidAPIKeyLimit(*req.RateLimit1d) {
+		return ErrInvalidRateLimit1d
+	}
+	if req.RateLimit7d != nil && invalidAPIKeyLimit(*req.RateLimit7d) {
+		return ErrInvalidRateLimit7d
+	}
+	return nil
+}
+
 // checkAPIKeyRateLimit 检查用户创建自定义Key的错误次数是否超限
 func (s *APIKeyService) checkAPIKeyRateLimit(ctx context.Context, userID int64) error {
 	if s.cache == nil {
@@ -400,6 +462,14 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 
 // Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
+	if err := validateCreateAPIKeyLimits(req); err != nil {
+		return nil, err
+	}
+	name, err := normalizeAPIKeyName(req.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	// 验证用户存在
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -472,7 +542,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	apiKey := &APIKey{
 		UserID:      userID,
 		Key:         key,
-		Name:        html.EscapeString(req.Name),
+		Name:        name,
 		Type:        APIKeyTypeUser,
 		GroupID:     req.GroupID,
 		Status:      StatusActive,
@@ -755,6 +825,18 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 
 // Update 更新API Key
 func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req UpdateAPIKeyRequest) (*APIKey, error) {
+	if err := validateUpdateAPIKeyLimits(req); err != nil {
+		return nil, err
+	}
+	var normalizedName *string
+	if req.Name != nil {
+		name, err := normalizeAPIKeyName(*req.Name)
+		if err != nil {
+			return nil, err
+		}
+		normalizedName = &name
+	}
+
 	apiKey, err := s.apiKeyRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get api key: %w", err)
@@ -780,8 +862,8 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	}
 
 	// 更新字段
-	if req.Name != nil {
-		apiKey.Name = html.EscapeString(*req.Name)
+	if normalizedName != nil {
+		apiKey.Name = *normalizedName
 	}
 
 	if req.GroupID != nil {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -459,6 +460,51 @@ func TestBatchImagePublicService_List(t *testing.T) {
 	require.Len(t, got.Data, 1)
 	require.Equal(t, "visible-1", got.Data[0].ID)
 	require.False(t, got.HasMore)
+}
+
+func TestBatchImagePublicService_ListQueuedIncludesEveryQueuedInternalState(t *testing.T) {
+	ctx := context.Background()
+	svc, repo, _, _, _ := newTestBatchImagePublicService(true)
+	owner := testBatchImageOwner()
+	now := time.Now()
+
+	for i, status := range []string{
+		BatchImageJobStatusCreated,
+		BatchImageJobStatusUploading,
+		BatchImageJobStatusSubmitted,
+		BatchImageJobStatusRunning,
+	} {
+		batchID := fmt.Sprintf("status-%d", i)
+		apiKeyID := owner.APIKeyID
+		repo.jobs[batchID] = &BatchImageJob{
+			BatchID:   batchID,
+			UserID:    owner.UserID,
+			APIKeyID:  &apiKeyID,
+			Status:    status,
+			Provider:  BatchImageProviderVertex,
+			Model:     "gemini-3.1-flash-lite-image",
+			ItemCount: 1,
+			CreatedAt: now.Add(time.Duration(i) * time.Second),
+		}
+	}
+
+	got, err := svc.List(ctx, owner, BatchImageJobsQuery{Status: "queued", Limit: 20})
+	require.NoError(t, err)
+	require.Len(t, got.Data, 3)
+	for _, batch := range got.Data {
+		require.Equal(t, "queued", batch.Status)
+		require.NotEqual(t, "status-3", batch.ID)
+	}
+}
+
+func TestBatchImagePublicService_ListRejectsUnknownStatus(t *testing.T) {
+	svc, _, _, _, _ := newTestBatchImagePublicService(true)
+
+	got, err := svc.List(context.Background(), testBatchImageOwner(), BatchImageJobsQuery{Status: "not-a-real-status"})
+
+	require.Nil(t, got)
+	require.ErrorIs(t, err, ErrBatchImageInvalidStatus)
+	require.True(t, infraerrors.IsBadRequest(err))
 }
 
 func TestBatchImagePublicService_ListModels(t *testing.T) {

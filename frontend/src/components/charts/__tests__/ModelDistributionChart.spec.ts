@@ -127,11 +127,13 @@ describe('ModelDistributionChart', () => {
     expect(label).toBe('model-b: $1.40 (87.5%)')
   })
 
-  it('can hide account cost for user usage stats without account_cost', () => {
+  it('hides account and standard cost for user usage stats that omit both fields', () => {
+    const userModelStats = modelStats.map(({ cost: _adminOnlyCost, ...model }) => model)
     const wrapper = mount(ModelDistributionChart, {
       props: {
-        modelStats,
+        modelStats: userModelStats,
         showAccountCost: false,
+        showStandardCost: false,
       },
       global: {
         stubs: {
@@ -141,8 +143,9 @@ describe('ModelDistributionChart', () => {
     })
 
     expect(wrapper.text()).not.toContain('Account Cost')
-    expect(wrapper.findAll('thead th')).toHaveLength(5)
-    expect(wrapper.findAll('tbody tr')[0].findAll('td')).toHaveLength(5)
+    expect(wrapper.text()).not.toContain('Standard')
+    expect(wrapper.findAll('thead th')).toHaveLength(4)
+    expect(wrapper.findAll('tbody tr')[0].findAll('td')).toHaveLength(4)
   })
 
   it('renders Others in the spending ranking table and uses a dedicated chart color', async () => {

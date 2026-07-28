@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+const adminAPIKeyHashRecordVersion = "sha256-v1"
 
 // IsRegistrationEnabled 检查是否开放注册
 func (s *SettingService) IsRegistrationEnabled(ctx context.Context) bool {
@@ -194,11 +198,25 @@ func (s *SettingService) IsSessionBindingEnabled(ctx context.Context) bool {
 // 开启时账号/代理导出、备份创建/下载、S3 配置修改、提升管理员等操作
 // 要求当前会话在有效期内完成过 TOTP step-up 验证。
 func (s *SettingService) IsStepUpEnabled(ctx context.Context) bool {
+	enabled, err := s.GetStepUpEnabled(ctx)
+	return err == nil && enabled
+}
+
+// GetStepUpEnabled returns the persisted step-up switch without collapsing a
+// storage outage into "disabled". Security gates must use this error-aware
+// form so a database failure cannot silently disable step-up protection.
+func (s *SettingService) GetStepUpEnabled(ctx context.Context) (bool, error) {
+	if s == nil || s.settingRepo == nil {
+		return false, errors.New("step-up setting repository is unavailable")
+	}
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyStepUpEnabled)
 	if err != nil {
-		return false // 默认关闭
+		if errors.Is(err, ErrSettingNotFound) {
+			return false, nil // 未配置时默认关闭
+		}
+		return false, err
 	}
-	return value == "true"
+	return value == "true", nil
 }
 
 // defaultAuditLogRetentionDays 审计日志默认保留天数。
@@ -437,8 +455,9 @@ func (s *SettingService) GenerateAdminAPIKey(ctx context.Context) (string, error
 
 	key := AdminAPIKeyPrefix + hex.EncodeToString(bytes)
 
-	// 存储到 settings 表
-	if err := s.settingRepo.Set(ctx, SettingKeyAdminAPIKey, key); err != nil {
+	// Only a one-way digest plus the already-disclosed display prefix/suffix is
+	// persisted. The raw root credential is returned once to the caller.
+	if err := s.settingRepo.Set(ctx, SettingKeyAdminAPIKey, encodeAdminAPIKeyRecord(key)); err != nil {
 		return "", fmt.Errorf("save admin api key: %w", err)
 	}
 
@@ -448,29 +467,91 @@ func (s *SettingService) GenerateAdminAPIKey(ctx context.Context) (string, error
 // GetAdminAPIKeyStatus 获取管理员 API Key 状态
 // 返回脱敏的 key、是否存在、错误
 func (s *SettingService) GetAdminAPIKeyStatus(ctx context.Context) (maskedKey string, exists bool, err error) {
-	key, err := s.settingRepo.GetValue(ctx, SettingKeyAdminAPIKey)
+	stored, err := s.settingRepo.GetValue(ctx, SettingKeyAdminAPIKey)
 	if err != nil {
 		if errors.Is(err, ErrSettingNotFound) {
 			return "", false, nil
 		}
 		return "", false, err
 	}
-	if key == "" {
+	if stored == "" {
 		return "", false, nil
 	}
+	if _, prefix, suffix, ok := decodeAdminAPIKeyRecord(stored); ok {
+		return prefix + "..." + suffix, true, nil
+	}
+	if strings.HasPrefix(stored, adminAPIKeyHashRecordVersion+"$") {
+		return "", false, errors.New("stored admin API key digest is malformed")
+	}
 
-	// 脱敏：显示前 10 位和后 4 位
-	if len(key) > 14 {
-		maskedKey = key[:10] + "..." + key[len(key)-4:]
+	// Legacy plaintext records remain readable long enough to rotate/migrate.
+	if len(stored) > 14 {
+		maskedKey = stored[:10] + "..." + stored[len(stored)-4:]
 	} else {
-		maskedKey = key
+		maskedKey = stored
 	}
 
 	return maskedKey, true, nil
 }
 
-// GetAdminAPIKey 获取完整的管理员 API Key（仅供内部验证使用）
-// 如果未配置返回空字符串和 nil 错误，只有数据库错误时才返回 error
+// ValidateAdminAPIKey validates a presented root key against its one-way
+// digest. A matching legacy plaintext record is migrated in place.
+func (s *SettingService) ValidateAdminAPIKey(ctx context.Context, candidate string) (bool, error) {
+	stored, err := s.settingRepo.GetValue(ctx, SettingKeyAdminAPIKey)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	if stored == "" || candidate == "" {
+		return false, nil
+	}
+
+	if expectedDigest, _, _, ok := decodeAdminAPIKeyRecord(stored); ok {
+		actualDigest := sha256.Sum256([]byte(candidate))
+		return subtle.ConstantTimeCompare(actualDigest[:], expectedDigest) == 1, nil
+	}
+	if strings.HasPrefix(stored, adminAPIKeyHashRecordVersion+"$") {
+		return false, errors.New("stored admin API key digest is malformed")
+	}
+
+	valid := subtle.ConstantTimeCompare([]byte(candidate), []byte(stored)) == 1
+	if valid {
+		if err := s.settingRepo.Set(ctx, SettingKeyAdminAPIKey, encodeAdminAPIKeyRecord(candidate)); err != nil {
+			slog.Warn("validated legacy admin API key but failed to migrate plaintext storage", "error", err)
+		}
+	}
+	return valid, nil
+}
+
+func encodeAdminAPIKeyRecord(key string) string {
+	digest := sha256.Sum256([]byte(key))
+	prefix, suffix := key, ""
+	if len(key) > 10 {
+		prefix = key[:10]
+	}
+	if len(key) > 4 {
+		suffix = key[len(key)-4:]
+	}
+	return strings.Join([]string{adminAPIKeyHashRecordVersion, hex.EncodeToString(digest[:]), prefix, suffix}, "$")
+}
+
+func decodeAdminAPIKeyRecord(stored string) (digest []byte, prefix, suffix string, ok bool) {
+	parts := strings.Split(stored, "$")
+	if len(parts) != 4 || parts[0] != adminAPIKeyHashRecordVersion || parts[2] == "" {
+		return nil, "", "", false
+	}
+	decoded, err := hex.DecodeString(parts[1])
+	if err != nil || len(decoded) != sha256.Size {
+		return nil, "", "", false
+	}
+	return decoded, parts[2], parts[3], true
+}
+
+// GetAdminAPIKey returns the stored representation for compatibility with
+// internal maintenance callers. New authentication code must use
+// ValidateAdminAPIKey; hashed records cannot recover the original key.
 func (s *SettingService) GetAdminAPIKey(ctx context.Context) (string, error) {
 	key, err := s.settingRepo.GetValue(ctx, SettingKeyAdminAPIKey)
 	if err != nil {

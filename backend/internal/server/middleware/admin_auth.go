@@ -2,7 +2,6 @@
 package middleware
 
 import (
-	"crypto/subtle"
 	"errors"
 	"strings"
 
@@ -124,14 +123,14 @@ func validateAdminAPIKey(
 	settingService *service.SettingService,
 	userService *service.UserService,
 ) bool {
-	storedKey, err := settingService.GetAdminAPIKey(c.Request.Context())
+	valid, err := settingService.ValidateAdminAPIKey(c.Request.Context(), key)
 	if err != nil {
 		AbortWithError(c, 500, "INTERNAL_ERROR", "Internal server error")
 		return false
 	}
 
 	// 未配置或不匹配，统一返回相同错误（避免信息泄露）
-	if storedKey == "" || subtle.ConstantTimeCompare([]byte(key), []byte(storedKey)) != 1 {
+	if !valid {
 		AbortWithError(c, 401, "INVALID_ADMIN_KEY", "Invalid admin API key")
 		return false
 	}
@@ -199,12 +198,10 @@ func validateJWTForAdmin(
 		return false
 	}
 
-	// 本地运营角色也允许进入后台；具体能力继续由权限守卫限制。
-	if !user.CanAccessAdmin() {
-		AbortWithError(c, 403, "FORBIDDEN", "Admin access required")
-		return false
-	}
-
+	// Record the validated database identity before role authorization. The
+	// outer admin activity middleware runs after this function unwinds; keeping
+	// the identity in context lets it attribute a valid regular user's denied
+	// admin access instead of persisting actor_user_id=0.
 	c.Set(string(ContextKeyUser), AuthSubject{
 		UserID:      user.ID,
 		Concurrency: user.Concurrency,
@@ -215,6 +212,12 @@ func validateJWTForAdmin(
 	c.Set(ContextKeyAuthEmail, user.Email)
 	c.Set(ContextKeySessionID, claims.SessionID)
 	c.Set("auth_method", "jwt")
+
+	// 本地运营角色也允许进入后台；具体能力继续由权限守卫限制。
+	if !user.CanAccessAdmin() {
+		AbortWithError(c, 403, "FORBIDDEN", "Admin access required")
+		return false
+	}
 
 	return true
 }

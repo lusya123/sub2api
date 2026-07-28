@@ -148,6 +148,14 @@ var auditActionOverrides = map[string]string{
 // 这类 body 的凭证内嵌在普通字符串值里，键级脱敏无法覆盖，整体不入库。
 var auditBodyOmittedRoutes = map[string]struct{}{
 	"POST /api/v1/admin/accounts/import/codex-session":        {},
+	"POST /api/v1/admin/accounts/exchange-code":               {},
+	"POST /api/v1/admin/accounts/exchange-setup-token-code":   {},
+	"POST /api/v1/admin/accounts/cookie-auth":                 {},
+	"POST /api/v1/admin/accounts/setup-token-cookie-auth":     {},
+	"POST /api/v1/admin/openai/exchange-code":                 {},
+	"POST /api/v1/admin/gemini/oauth/exchange-code":           {},
+	"POST /api/v1/admin/antigravity/oauth/exchange-code":      {},
+	"POST /api/v1/admin/grok/oauth/exchange-code":             {},
 	"PUT /api/v1/admin/prompt-audit/config":                   {},
 	"POST /api/v1/admin/prompt-audit/endpoints/probe":         {},
 	"DELETE /api/v1/admin/prompt-audit/events/:id":            {},
@@ -187,7 +195,7 @@ func NewAuditLogMiddleware(auditService *service.AuditLogService) AuditLogMiddle
 		// 只读取脱敏解析上限内的字节，超出部分与已读部分拼接回填，
 		// 避免大体积导入请求被完整复制进内存两次。
 		var bodyRedacted string
-		if _, omit := auditBodyOmittedRoutes[routeKey]; omit {
+		if shouldOmitAuditBody(routeKey) {
 			bodyRedacted = "<credential-bearing body omitted>"
 		} else if c.Request.Body != nil && c.Request.Method != "GET" {
 			orig := c.Request.Body
@@ -291,6 +299,11 @@ func NewAuditLogMiddleware(auditService *service.AuditLogService) AuditLogMiddle
 
 		auditService.Record(entry)
 	})
+}
+
+func shouldOmitAuditBody(routeKey string) bool {
+	_, omit := auditBodyOmittedRoutes[routeKey]
+	return omit
 }
 
 // restoredBody 把审计中间件按上限读出的前缀与未读完的原始 body 拼接回填，

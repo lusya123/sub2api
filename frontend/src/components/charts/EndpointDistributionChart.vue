@@ -118,6 +118,7 @@
                   <UserBreakdownSubTable
                     :items="breakdownItems"
                     :loading="breakdownLoading"
+                    :show-standard-cost="showStandardCost"
                   />
                 </td>
               </tr>

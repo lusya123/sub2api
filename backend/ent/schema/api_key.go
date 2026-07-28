@@ -39,7 +39,10 @@ func (APIKey) Fields() []ent.Field {
 			NotEmpty().
 			Unique(),
 		field.String("name").
-			MaxLen(100).
+			// API key names are user-facing text. PostgreSQL varchar(100) counts
+			// characters, so use the rune-aware validator as well; MaxLen counts
+			// UTF-8 bytes and incorrectly rejects valid CJK names at 34 characters.
+			MaxRuneLen(100).
 			NotEmpty(),
 		field.String("type").
 			MaxLen(16).

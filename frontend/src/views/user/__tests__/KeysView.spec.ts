@@ -14,6 +14,7 @@ const {
   showError,
   showSuccess,
   copyToClipboard,
+  refreshBatchImageAccess,
   isCurrentStep,
   nextStep,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
   showError: vi.fn(),
   showSuccess: vi.fn(),
   copyToClipboard: vi.fn(),
+  refreshBatchImageAccess: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
 }))
@@ -92,6 +94,12 @@ vi.mock('@/stores/onboarding', () => ({
 vi.mock('@/composables/useClipboard', () => ({
   useClipboard: () => ({
     copyToClipboard,
+  }),
+}))
+
+vi.mock('@/composables/useBatchImageAccess', () => ({
+  useBatchImageAccess: () => ({
+    refreshBatchImageAccess,
   }),
 }))
 
@@ -268,6 +276,7 @@ describe('user KeysView column settings', () => {
     showError.mockReset()
     showSuccess.mockReset()
     copyToClipboard.mockReset()
+    refreshBatchImageAccess.mockReset()
     isCurrentStep.mockReset()
     nextStep.mockReset()
 
@@ -283,11 +292,13 @@ describe('user KeysView column settings', () => {
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
     isCurrentStep.mockReturnValue(false)
+    refreshBatchImageAccess.mockResolvedValue(false)
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {
     const wrapper = await mountView()
 
+    expect(refreshBatchImageAccess).toHaveBeenCalledTimes(1)
     expect(visibleColumnKeys(wrapper)).toEqual([
       'name',
       'key',

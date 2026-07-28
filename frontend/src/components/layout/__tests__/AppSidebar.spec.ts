@@ -73,3 +73,15 @@ describe('AppSidebar client install entry', () => {
     expect(enLocaleSource).toContain('"title": "One-Click Deploy"')
   })
 })
+
+describe('AppSidebar audit entries', () => {
+  it('uses distinct operation and security audit labels', () => {
+    expect(componentSource).toContain("path: '/admin/audit-logs', label: t('nav.operationAuditLogs')")
+    expect(componentSource).toContain("path: '/admin/security-audit-logs', label: t('nav.securityAuditLogs')")
+    expect(componentSource).not.toContain("path: '/admin/security-audit-logs', label: t('admin.audit.title')")
+    expect(zhLocaleSource).toContain('"operationAuditLogs": "操作审计日志"')
+    expect(zhLocaleSource).toContain('"securityAuditLogs": "安全审计日志"')
+    expect(enLocaleSource).toContain('"operationAuditLogs": "Operation Audit Logs"')
+    expect(enLocaleSource).toContain('"securityAuditLogs": "Security Audit Logs"')
+  })
+})

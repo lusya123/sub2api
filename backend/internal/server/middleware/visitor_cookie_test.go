@@ -123,6 +123,65 @@ func TestVisitorCookieIssueRateLimitUsesFingerprintKey(t *testing.T) {
 	require.Len(t, keys, 2)
 }
 
+func TestVisitorCookieRateLimitsRepairMissingTTLAndReturnRetryAfter(t *testing.T) {
+	t.Setenv("DEFENSE_VISITOR_COOKIE_PER_MINUTE", "2")
+	t.Setenv("DEFENSE_VISITOR_COOKIE_ISSUE_PER_MIN", "2")
+
+	tests := []struct {
+		name    string
+		pattern string
+		call    func(*VisitorCookieManager, context.Context) (bool, time.Duration)
+	}{
+		{
+			name:    "cookie reuse",
+			pattern: "vck:*",
+			call: func(mgr *VisitorCookieManager, ctx context.Context) (bool, time.Duration) {
+				return mgr.AllowCookieRequestWithRetry(ctx, "signed-cookie-value")
+			},
+		},
+		{
+			name:    "cookie issue",
+			pattern: "vci:*",
+			call: func(mgr *VisitorCookieManager, ctx context.Context) (bool, time.Duration) {
+				return mgr.AllowIssueRequestWithRetry(ctx, "browser-fingerprint")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rdb, cleanup := newDefenseTestRedis(t)
+			defer cleanup()
+			mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
+			ctx := context.Background()
+
+			allowed, retryAfter := tt.call(mgr, ctx)
+			require.True(t, allowed)
+			require.Zero(t, retryAfter)
+
+			keys, err := rdb.Keys(ctx, tt.pattern).Result()
+			require.NoError(t, err)
+			require.Len(t, keys, 1)
+			persisted, err := rdb.Persist(ctx, keys[0]).Result()
+			require.NoError(t, err)
+			require.True(t, persisted)
+
+			allowed, retryAfter = tt.call(mgr, ctx)
+			require.True(t, allowed)
+			require.Zero(t, retryAfter)
+			ttl, err := rdb.PTTL(ctx, keys[0]).Result()
+			require.NoError(t, err)
+			require.Greater(t, ttl, time.Duration(0))
+			require.LessOrEqual(t, ttl, time.Minute)
+
+			allowed, retryAfter = tt.call(mgr, ctx)
+			require.False(t, allowed)
+			require.Greater(t, retryAfter, time.Duration(0))
+			require.LessOrEqual(t, retryAfter, time.Minute)
+		})
+	}
+}
+
 func TestGlobalRateLimiterVisitorCookieBypassesFrontendGlobalAndLimitsReuse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
@@ -137,7 +196,7 @@ func TestGlobalRateLimiterVisitorCookieBypassesFrontendGlobalAndLimitsReuse(t *t
 	mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
 	value, _ := mgr.IssueCookie()
 	router := gin.New()
-	router.Use(NewGlobalRateLimiter(rdb, mgr).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb, mgr).Middleware())
 	router.GET("/dashboard", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -154,6 +213,7 @@ func TestGlobalRateLimiterVisitorCookieBypassesFrontendGlobalAndLimitsReuse(t *t
 	})
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Contains(t, rec.Body.String(), "rate limited (visitor cookie)")
+	requirePositiveRetryAfterHeader(t, rec, 60)
 }
 
 func TestGlobalRateLimiterVisitorCookieGlobalLimitAcrossCookies(t *testing.T) {
@@ -169,7 +229,7 @@ func TestGlobalRateLimiterVisitorCookieGlobalLimitAcrossCookies(t *testing.T) {
 
 	mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
 	router := gin.New()
-	router.Use(NewGlobalRateLimiter(rdb, mgr).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb, mgr).Middleware())
 	router.GET("/dashboard", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -188,6 +248,7 @@ func TestGlobalRateLimiterVisitorCookieGlobalLimitAcrossCookies(t *testing.T) {
 	})
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Contains(t, rec.Body.String(), "rate limited (visitor cookie global)")
+	requirePositiveRetryAfterHeader(t, rec, 1)
 }
 
 func TestGlobalRateLimiterForgedVisitorCookieFallsBackToFrontendGlobal(t *testing.T) {
@@ -201,7 +262,7 @@ func TestGlobalRateLimiterForgedVisitorCookieFallsBackToFrontendGlobal(t *testin
 
 	mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
 	router := gin.New()
-	router.Use(NewGlobalRateLimiter(rdb, mgr).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb, mgr).Middleware())
 	router.GET("/dashboard", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -217,6 +278,15 @@ func TestGlobalRateLimiterForgedVisitorCookieFallsBackToFrontendGlobal(t *testin
 	})
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Contains(t, rec.Body.String(), "rate limited (frontend global)")
+	requirePositiveRetryAfterHeader(t, rec, 1)
+}
+
+func requirePositiveRetryAfterHeader(t *testing.T, rec interface{ Header() http.Header }, max int) {
+	t.Helper()
+	retryAfter, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+	require.NoError(t, err)
+	require.Greater(t, retryAfter, 0)
+	require.LessOrEqual(t, retryAfter, max)
 }
 
 func TestPoWVisitorCookieLetsBlockedFirstVisitRefreshThrough(t *testing.T) {
@@ -231,7 +301,7 @@ func TestPoWVisitorCookieLetsBlockedFirstVisitRefreshThrough(t *testing.T) {
 	mgr := NewVisitorCookieManagerWithSecret(rdb, "visitor-test-secret")
 	router := gin.New()
 	router.Use(VisitorCookieIssuerMiddleware(mgr))
-	router.Use(NewGlobalRateLimiter(rdb, mgr).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb, mgr).Middleware())
 	router.GET("/dashboard", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})

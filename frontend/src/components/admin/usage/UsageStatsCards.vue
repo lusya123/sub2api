@@ -72,7 +72,7 @@
             <span class="text-orange-500">{{ t('usage.accountCost') }} ${{ totalAccountCost.toFixed(4) }}</span>
             <span> · </span>
           </template>
-          <span>
+          <span v-if="showStandardCost && stats?.total_cost != null">
             {{ t('usage.standardCost') }}
             <span :class="{ 'line-through': strikeStandardCost }">${{ (stats?.total_cost || 0).toFixed(4) }}</span>
           </span>
@@ -98,9 +98,11 @@ import Icon from '@/components/icons/Icon.vue'
 const props = withDefaults(defineProps<{
   stats: (AdminUsageStatsResponse | UsageStatsResponse) | null
   showAccountCost?: boolean
+  showStandardCost?: boolean
   strikeStandardCost?: boolean
 }>(), {
   showAccountCost: true,
+  showStandardCost: true,
   strikeStandardCost: false,
 })
 
@@ -111,6 +113,7 @@ const totalAccountCost = computed(() => {
   return stats?.total_account_cost ?? null
 })
 const showAccountCost = computed(() => props.showAccountCost)
+const showStandardCost = computed(() => props.showStandardCost)
 const strikeStandardCost = computed(() => props.strikeStandardCost)
 
 const formatDuration = (ms: number) =>

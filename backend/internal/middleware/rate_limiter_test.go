@@ -18,6 +18,14 @@ func TestWindowTTLMillis(t *testing.T) {
 	require.Equal(t, int64(2), windowTTLMillis(2500*time.Microsecond))
 }
 
+func TestRetryAfterSecondsRoundsUpAndStaysPositive(t *testing.T) {
+	require.Equal(t, int64(1), retryAfterSeconds(-1))
+	require.Equal(t, int64(1), retryAfterSeconds(0))
+	require.Equal(t, int64(1), retryAfterSeconds(1))
+	require.Equal(t, int64(1), retryAfterSeconds(1000))
+	require.Equal(t, int64(2), retryAfterSeconds(1001))
+}
+
 func TestRateLimiterFailureModes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -58,6 +66,7 @@ func TestRateLimiterFailureModes(t *testing.T) {
 	recorder = httptest.NewRecorder()
 	failCloseRouter.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+	require.Equal(t, "1", recorder.Header().Get("Retry-After"))
 }
 
 func TestRateLimiterDifferentIPsIndependent(t *testing.T) {
@@ -65,9 +74,9 @@ func TestRateLimiterDifferentIPsIndependent(t *testing.T) {
 
 	callCounts := make(map[string]int64)
 	originalRun := rateLimitRun
-	rateLimitRun = func(ctx context.Context, client *redis.Client, key string, windowMillis int64) (int64, bool, error) {
+	rateLimitRun = func(ctx context.Context, client *redis.Client, key string, windowMillis int64) (int64, bool, int64, error) {
 		callCounts[key]++
-		return callCounts[key], false, nil
+		return callCounts[key], false, windowMillis, nil
 	}
 	t.Cleanup(func() {
 		rateLimitRun = originalRun
@@ -101,6 +110,7 @@ func TestRateLimiterDifferentIPsIndependent(t *testing.T) {
 	rec3 := httptest.NewRecorder()
 	router.ServeHTTP(rec3, req3)
 	require.Equal(t, http.StatusTooManyRequests, rec3.Code, "第一个 IP 的第二次请求应被限流")
+	require.Equal(t, "1", rec3.Header().Get("Retry-After"))
 }
 
 func TestRateLimiterSuccessAndLimit(t *testing.T) {
@@ -109,13 +119,13 @@ func TestRateLimiterSuccessAndLimit(t *testing.T) {
 	originalRun := rateLimitRun
 	counts := []int64{1, 2}
 	callIndex := 0
-	rateLimitRun = func(ctx context.Context, client *redis.Client, key string, windowMillis int64) (int64, bool, error) {
+	rateLimitRun = func(ctx context.Context, client *redis.Client, key string, windowMillis int64) (int64, bool, int64, error) {
 		if callIndex >= len(counts) {
-			return counts[len(counts)-1], false, nil
+			return counts[len(counts)-1], false, 1500, nil
 		}
 		value := counts[callIndex]
 		callIndex++
-		return value, false, nil
+		return value, false, 1500, nil
 	}
 	t.Cleanup(func() {
 		rateLimitRun = originalRun
@@ -140,4 +150,5 @@ func TestRateLimiterSuccessAndLimit(t *testing.T) {
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+	require.Equal(t, "2", recorder.Header().Get("Retry-After"))
 }

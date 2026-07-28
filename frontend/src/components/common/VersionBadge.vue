@@ -141,6 +141,7 @@
 
                 <!-- Retry button -->
                 <button
+                  data-testid="version-update-retry"
                   @click="handleUpdate"
                   :disabled="updating"
                   class="flex w-full items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
@@ -183,6 +184,7 @@
 
                 <!-- Restart button with countdown -->
                 <button
+                  data-testid="version-restart"
                   @click="handleRestart"
                   :disabled="restarting"
                   class="flex w-full items-center justify-center gap-2 rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
@@ -319,6 +321,7 @@
 
                 <!-- Update button -->
                 <button
+                  data-testid="version-update"
                   @click="handleUpdate"
                   :disabled="updating"
                   class="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
@@ -377,6 +380,7 @@
                 <!-- Version rollback entry -->
                 <div class="border-t border-gray-100 pt-2 dark:border-dark-700">
                   <button
+                    data-testid="version-rollback-toggle"
                     @click="toggleRollbackPanel"
                     class="group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 dark:text-dark-500 dark:hover:bg-dark-700/50 dark:hover:text-dark-300"
                   >
@@ -476,6 +480,7 @@
                         <button
                           v-for="item in rollbackVersions"
                           :key="item.version"
+                          :data-testid="`version-rollback-option-${item.version}`"
                           @click="selectRollbackVersion(item.version)"
                           :disabled="rollingBack"
                           class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60"
@@ -584,6 +589,7 @@
                             </p>
 
                             <button
+                              data-testid="version-rollback-confirm"
                               @click="handleRollback"
                               :disabled="rollingBack"
                               class="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
@@ -634,6 +640,8 @@
     <span v-else-if="version" class="text-xs text-gray-500 dark:text-dark-400">
       v{{ version }}
     </span>
+
+    <TotpStepUpDialog :controller="systemStepUp" />
   </div>
 </template>
 
@@ -649,6 +657,13 @@ import {
   type RollbackVersionInfo
 } from '@/api/admin/system'
 import { useClipboard } from '@/composables/useClipboard'
+import {
+  isStepUpBlocked,
+  isStepUpCancelled,
+  stepUpBlockReason,
+  useStepUp
+} from '@/composables/useStepUp'
+import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const GITHUB_REPO = 'Wei-Shaw/sub2api'
@@ -663,6 +678,19 @@ const props = defineProps<{
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
+const systemStepUp = useStepUp()
+
+function handleSystemStepUpError(error: unknown): boolean {
+  if (isStepUpCancelled(error)) return true
+  if (!isStepUpBlocked(error)) return false
+
+  appStore.showError(
+    stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
+      ? t('stepUp.adminApiKeyForbidden')
+      : t('stepUp.notEnabled')
+  )
+  return true
+}
 
 const isAdmin = computed(() => authStore.isAdmin)
 
@@ -759,13 +787,14 @@ async function handleUpdate() {
   updateSuccess.value = false
 
   try {
-    const result = await performUpdate()
+    const result = await systemStepUp.run(() => performUpdate())
     successKind.value = 'update'
     updateSuccess.value = true
     needRestart.value = result.need_restart
     // Clear version cache to reflect update completed
     appStore.clearVersionCache()
   } catch (error: unknown) {
+    if (handleSystemStepUpError(error)) return
     const err = error as { response?: { data?: { message?: string } }; message?: string }
     updateError.value = err.response?.data?.message || err.message || t('version.updateFailed')
   } finally {
@@ -831,9 +860,10 @@ async function handleRollback() {
 
   rollingBack.value = true
   rollbackError.value = ''
+  const targetVersion = selectedRollbackVersion.value
 
   try {
-    const result = await rollbackAPI(selectedRollbackVersion.value)
+    const result = await systemStepUp.run(() => rollbackAPI(targetVersion))
     successKind.value = 'rollback'
     updateSuccess.value = true
     needRestart.value = result.need_restart
@@ -841,6 +871,7 @@ async function handleRollback() {
     // Clear version cache so the next check reflects the rolled-back version
     appStore.clearVersionCache()
   } catch (error: unknown) {
+    if (handleSystemStepUpError(error)) return
     const err = error as { response?: { data?: { message?: string } }; message?: string }
     rollbackError.value = err.response?.data?.message || err.message || t('version.rollbackFailed')
   } finally {
@@ -855,9 +886,14 @@ async function handleRestart() {
   restartCountdown.value = 8
 
   try {
-    await restartService()
+    await systemStepUp.run(() => restartService())
     // Service will restart, page will reload automatically or show disconnected
   } catch (error) {
+    if (handleSystemStepUpError(error)) {
+      restarting.value = false
+      restartCountdown.value = 0
+      return
+    }
     // Expected - connection will be lost during restart
     console.log('Service restarting...')
   }

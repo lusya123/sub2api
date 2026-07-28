@@ -69,6 +69,7 @@ var (
 	ErrBatchImageInvalidModel               = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_INVALID_MODEL", "batch image model is required")
 	ErrBatchImageNoAccountAvailable         = infraerrors.New(http.StatusBadGateway, "BATCH_IMAGE_NO_ACCOUNT_AVAILABLE", "no compatible batch image account is available")
 	ErrBatchImageInvalidItems               = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_INVALID_ITEMS", "batch image items are invalid")
+	ErrBatchImageInvalidStatus              = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_INVALID_STATUS", "batch image status filter is invalid")
 	ErrBatchImageDuplicateCustomIDInRequest = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_DUPLICATE_CUSTOM_ID", "batch image custom ids must be unique")
 	ErrBatchImagePromptTooLong              = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_PROMPT_TOO_LONG", "batch image prompt is too long")
 	ErrBatchImageInvalidReferenceImage      = infraerrors.New(http.StatusBadRequest, "BATCH_IMAGE_INVALID_REFERENCE_IMAGE", "batch image reference image is invalid")
@@ -250,6 +251,7 @@ type BatchImageItemFilter struct {
 
 type BatchImageJobFilter struct {
 	Status         string
+	Statuses       []string
 	TaskNameLike   string
 	Downloaded     *bool
 	CreatedAfter   *time.Time

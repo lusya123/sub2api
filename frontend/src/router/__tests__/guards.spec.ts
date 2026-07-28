@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { readFileSync } from 'node:fs'
-import { adminHomePath, canAccessAdminState } from '@/modules/adminAccess'
+import { adminHomePath, canAccessAdminState, isSuperAdminRoutePath } from '@/modules/adminAccess'
 import { resolveCompletedSetupRedirectPath } from '@/router/setupRedirect'
 
 // Mock 导航加载状态
@@ -462,6 +462,25 @@ describe('路由守卫逻辑', () => {
         authState
       )
       expect(redirect).toBe('/admin/dashboard')
+    })
+
+    it('operator: direct prompt-audit navigation redirects before the page can call forbidden APIs', () => {
+      const authState: MockAuthState = {
+        isAuthenticated: true,
+        isAdmin: false,
+        isOperator: true,
+        isSimpleMode: false,
+        backendModeEnabled: true,
+        hasPendingAuthSession: false,
+      }
+      const path = '/admin/prompt-audit'
+
+      expect(isSuperAdminRoutePath(path)).toBe(true)
+      expect(simulateGuard(
+        path,
+        { requiresAdmin: true, requiresSuperAdmin: isSuperAdminRoutePath(path) },
+        authState
+      )).toBe('/admin/dashboard')
     })
 
     it('admin: /login redirects to /admin/dashboard', () => {

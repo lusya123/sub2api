@@ -25,7 +25,7 @@
         <label class="input-label">{{ t('admin.users.username') }}</label>
         <input v-model="form.username" type="text" class="input" :placeholder="t('admin.users.enterUsername')" />
       </div>
-      <div>
+      <div v-if="canManageAdminRole">
         <label class="input-label">{{ t('admin.users.form.roleLabel') }}</label>
         <select v-model="form.role" class="input">
           <option value="user">{{ t('admin.users.roles.user') }}</option>
@@ -78,7 +78,12 @@ import Icon from '@/components/icons/Icon.vue'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 
-const props = defineProps<{ show: boolean }>()
+const props = withDefaults(defineProps<{
+  show: boolean
+  canManageAdminRole?: boolean
+}>(), {
+  canManageAdminRole: false
+})
 const emit = defineEmits(['close', 'success']); const { t } = useI18n()
 const appStore = useAppStore()
 
@@ -93,7 +98,12 @@ const submit = async () => {
   try {
     const { balance: rawBalance, ...rest } = { ...form }
     const balance = String(rawBalance).trim()
-    const payload: typeof rest & { balance?: number } = { ...rest }
+    const payload: typeof rest & { balance?: number } = {
+      ...rest,
+      // Operators may create regular users, but only super administrators can
+      // create an administrator. Keep the request fail-closed with the UI.
+      role: props.canManageAdminRole ? rest.role : 'user'
+    }
     if (balance !== '') {
       payload.balance = Number(balance)
     }

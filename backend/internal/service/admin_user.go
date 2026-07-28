@@ -18,6 +18,13 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
 
+var (
+	// Admin accounts are deliberately immutable for disable/delete operations.
+	// These are conflicts with the protected resource state, not server faults.
+	ErrAdminUserDisableProtected = infraerrors.Conflict("ADMIN_USER_DISABLE_PROTECTED", "admin users cannot be disabled")
+	ErrAdminUserDeleteProtected  = infraerrors.Conflict("ADMIN_USER_DELETE_PROTECTED", "admin users cannot be deleted")
+)
+
 // User management implementations
 func (s *adminServiceImpl) ListUsers(ctx context.Context, page, pageSize int, filters UserListFilters, sortBy, sortOrder string) ([]User, int64, error) {
 	params := pagination.PaginationParams{Page: page, PageSize: pageSize, SortBy: sortBy, SortOrder: sortOrder}
@@ -211,8 +218,8 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	}
 
 	// Protect admin users: cannot disable admin accounts
-	if user.Role == "admin" && input.Status == "disabled" {
-		return nil, errors.New("cannot disable admin user")
+	if user.Role == RoleAdmin && input.Status == StatusDisabled {
+		return nil, ErrAdminUserDisableProtected
 	}
 
 	oldConcurrency := user.Concurrency
@@ -375,8 +382,8 @@ func (s *adminServiceImpl) DeleteUser(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	if user.Role == "admin" {
-		return errors.New("cannot delete admin user")
+	if user.Role == RoleAdmin {
+		return ErrAdminUserDeleteProtected
 	}
 
 	apiKeys, err := s.listUserAPIKeysForDeletion(ctx, id)

@@ -470,7 +470,10 @@ func (r *fakeBatchImageRepository) ListBatchImageJobsForOwner(_ context.Context,
 		if job.UserID != userID || job.APIKeyID == nil || *job.APIKeyID != apiKeyID {
 			continue
 		}
-		if filter.Status != "" && job.Status != filter.Status {
+		if len(filter.Statuses) > 0 && !batchImageStatusIn(job.Status, filter.Statuses) {
+			continue
+		}
+		if len(filter.Statuses) == 0 && filter.Status != "" && job.Status != filter.Status {
 			continue
 		}
 		if filter.TaskNameLike != "" && !strings.Contains(strings.ToLower(job.TaskName), strings.ToLower(filter.TaskNameLike)) {
@@ -501,6 +504,15 @@ func (r *fakeBatchImageRepository) ListBatchImageJobsForOwner(_ context.Context,
 		}
 	}
 	return jobs, nil
+}
+
+func batchImageStatusIn(status string, statuses []string) bool {
+	for _, candidate := range statuses {
+		if status == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *fakeBatchImageRepository) GetBatchImageJobByID(_ context.Context, id int64) (*BatchImageJob, error) {

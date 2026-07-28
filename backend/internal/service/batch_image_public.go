@@ -544,9 +544,17 @@ func (s *BatchImagePublicService) List(ctx context.Context, owner BatchImageOwne
 	switch strings.TrimSpace(query.Status) {
 	case "", "all":
 	case "queued":
-		filter.Status = BatchImageJobStatusSubmitted
+		filter.Statuses = []string{
+			BatchImageJobStatusCreated,
+			BatchImageJobStatusUploading,
+			BatchImageJobStatusSubmitted,
+		}
 	case "processing_results":
 		filter.Status = BatchImageJobStatusIndexing
+	case "running":
+		filter.Status = BatchImageJobStatusRunning
+	case "settling":
+		filter.Status = BatchImageJobStatusSettling
 	case "completed":
 		filter.Status = BatchImageJobStatusCompleted
 	case "failed":
@@ -556,7 +564,7 @@ func (s *BatchImagePublicService) List(ctx context.Context, owner BatchImageOwne
 	case "output_deleted":
 		filter.Status = BatchImageJobStatusOutputDeleted
 	default:
-		filter.Status = strings.TrimSpace(query.Status)
+		return nil, ErrBatchImageInvalidStatus
 	}
 	switch strings.TrimSpace(strings.ToLower(query.Downloaded)) {
 	case "", "all":

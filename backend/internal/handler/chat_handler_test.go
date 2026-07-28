@@ -5,12 +5,57 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
+
+type chatAuthServiceStub struct{}
+
+func (chatAuthServiceStub) GenerateToken(context.Context, *service.User) (string, error) {
+	return "test-token", nil
+}
+
+func (chatAuthServiceStub) GetAccessTokenExpiresIn() int { return 3600 }
+
+type chatUserServiceStub struct{}
+
+func (chatUserServiceStub) GetByID(_ context.Context, id int64) (*service.User, error) {
+	return &service.User{ID: id, Email: "user@example.com", Role: service.RoleUser, Status: service.StatusActive}, nil
+}
+
+func TestCreateChatLaunchWithoutConfigurationReturnsServiceUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := &ChatHandler{
+		cfg:         &config.Config{},
+		authSvc:     chatAuthServiceStub{},
+		userService: chatUserServiceStub{},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7})
+		c.Next()
+	})
+	router.POST("/api/v1/chat/launch", h.CreateLaunch)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/launch", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	var got response.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, "CHAT_UNAVAILABLE", got.Reason)
+	require.NotContains(t, got.Message, "lobe.chat_url")
+}
 
 func TestChatSignInURLUsesConfiguredChatURL(t *testing.T) {
 	h := &ChatHandler{cfg: &config.Config{}}

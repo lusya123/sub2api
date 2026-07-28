@@ -145,3 +145,20 @@ func TestPromptAuditMutationAuditRoutesHaveStableActionsAndOmitBodies(t *testing
 		require.Truef(t, omitted, "%s must not persist its credential or confirmation-bearing body", route)
 	}
 }
+
+func TestCredentialExchangeAuditRoutesOmitBodies(t *testing.T) {
+	routes := []string{
+		"POST /api/v1/admin/accounts/import/codex-session",
+		"POST /api/v1/admin/accounts/exchange-code",
+		"POST /api/v1/admin/accounts/exchange-setup-token-code",
+		"POST /api/v1/admin/accounts/cookie-auth",
+		"POST /api/v1/admin/accounts/setup-token-cookie-auth",
+		"POST /api/v1/admin/openai/exchange-code",
+		"POST /api/v1/admin/gemini/oauth/exchange-code",
+		"POST /api/v1/admin/antigravity/oauth/exchange-code",
+		"POST /api/v1/admin/grok/oauth/exchange-code",
+	}
+	for _, route := range routes {
+		require.Truef(t, shouldOmitAuditBody(route), "%s must not persist its credential-bearing body", route)
+	}
+}

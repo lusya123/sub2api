@@ -491,9 +491,7 @@ type UsageLog struct {
 	OutputCost        *float64 `json:"output_cost,omitempty"`
 	CacheCreationCost *float64 `json:"cache_creation_cost,omitempty"`
 	CacheReadCost     *float64 `json:"cache_read_cost,omitempty"`
-	TotalCost         *float64 `json:"total_cost,omitempty"`
 	ActualCost        float64  `json:"actual_cost"`
-	RateMultiplier    *float64 `json:"rate_multiplier,omitempty"`
 	// LongContextBillingApplied records whether the upstream long-context
 	// multiplier was applied without exposing the group's internal rate details.
 	LongContextBillingApplied bool `json:"long_context_billing_applied"`

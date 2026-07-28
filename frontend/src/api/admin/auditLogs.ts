@@ -7,6 +7,8 @@ export interface AdminAuditLog {
   actor_user_id?: number | null
   actor_email?: string | null
   actor_role: string
+  auth_method?: string | null
+  credential_masked?: string | null
   method: string
   route_template: string
   path: string

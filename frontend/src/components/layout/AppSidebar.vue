@@ -271,7 +271,7 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
 const adminSettingsStore = useAdminSettingsStore()
-const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
+const { canUseBatchImage, ensureBatchImageAccess } = useBatchImageAccess()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
@@ -851,8 +851,8 @@ const adminNavItems = computed((): NavItem[] => {
       ],
     },
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
-    { path: '/admin/audit-logs', label: t('nav.auditLogs'), icon: ShieldIcon, hideInSimpleMode: true },
-    { path: '/admin/security-audit-logs', label: t('admin.audit.title'), icon: ShieldIcon, hideInSimpleMode: true }
+    { path: '/admin/audit-logs', label: t('nav.operationAuditLogs'), icon: ShieldIcon, hideInSimpleMode: true },
+    { path: '/admin/security-audit-logs', label: t('nav.securityAuditLogs'), icon: ShieldIcon, hideInSimpleMode: true }
   ]
 
   const visible = applyFeatureFlags(baseItems)
@@ -986,7 +986,7 @@ watch(
 )
 
 onMounted(() => {
-  void refreshBatchImageAccess()
+  void ensureBatchImageAccess()
   if (isAdmin.value) {
     adminSettingsStore.fetch()
   }

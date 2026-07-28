@@ -145,39 +145,36 @@ func (m *VisitorCookieManager) sign(payload string) string {
 }
 
 func (m *VisitorCookieManager) AllowCookieRequest(ctx context.Context, cookieValue string) bool {
+	allowed, _ := m.AllowCookieRequestWithRetry(ctx, cookieValue)
+	return allowed
+}
+
+func (m *VisitorCookieManager) AllowCookieRequestWithRetry(ctx context.Context, cookieValue string) (bool, time.Duration) {
 	if m == nil || m.rdb == nil {
-		return true
+		return true, 0
 	}
 	limit := defenseEnvInt("DEFENSE_VISITOR_COOKIE_PER_MINUTE", visitorCookieMaxPerMin)
 	if limit <= 0 {
-		return true
-	}
-	if ctx == nil {
-		ctx = context.Background()
+		return true, 0
 	}
 
 	h := sha256.Sum256([]byte(cookieValue))
 	key := "vck:" + hex.EncodeToString(h[:8])
-	cnt, err := m.rdb.Incr(ctx, key).Result()
-	if err != nil {
-		return true
-	}
-	if cnt == 1 {
-		_ = m.rdb.Expire(ctx, key, time.Minute).Err()
-	}
-	return cnt <= int64(limit)
+	return allowDefenseRateLimit(ctx, m.rdb, key, limit, time.Minute)
 }
 
 func (m *VisitorCookieManager) AllowIssueRequest(ctx context.Context, fingerprint string) bool {
+	allowed, _ := m.AllowIssueRequestWithRetry(ctx, fingerprint)
+	return allowed
+}
+
+func (m *VisitorCookieManager) AllowIssueRequestWithRetry(ctx context.Context, fingerprint string) (bool, time.Duration) {
 	if m == nil || m.rdb == nil {
-		return true
+		return true, 0
 	}
 	limit := defenseEnvInt("DEFENSE_VISITOR_COOKIE_ISSUE_PER_MIN", visitorIssueMaxPerMin)
 	if limit <= 0 {
-		return true
-	}
-	if ctx == nil {
-		ctx = context.Background()
+		return true, 0
 	}
 
 	normalized := strings.TrimSpace(fingerprint)
@@ -186,14 +183,7 @@ func (m *VisitorCookieManager) AllowIssueRequest(ctx context.Context, fingerprin
 	}
 	sum := sha256.Sum256([]byte(normalized))
 	key := "vci:" + hex.EncodeToString(sum[:8])
-	cnt, err := m.rdb.Incr(ctx, key).Result()
-	if err != nil {
-		return true
-	}
-	if cnt == 1 {
-		_ = m.rdb.Expire(ctx, key, time.Minute).Err()
-	}
-	return cnt <= int64(limit)
+	return allowDefenseRateLimit(ctx, m.rdb, key, limit, time.Minute)
 }
 
 func (m *VisitorCookieManager) StoreChallenge(ctx context.Context, challenge string, ttl time.Duration) {
@@ -242,23 +232,24 @@ func VisitorCookieIssuerMiddleware(mgr *VisitorCookieManager) gin.HandlerFunc {
 }
 
 func HasValidVisitorCookie(c *gin.Context, mgr *VisitorCookieManager) bool {
-	return checkVisitorCookie(c, mgr) == visitorCookieAllowed
+	decision, _ := checkVisitorCookie(c, mgr)
+	return decision == visitorCookieAllowed
 }
 
-func checkVisitorCookie(c *gin.Context, mgr *VisitorCookieManager) visitorCookieDecision {
+func checkVisitorCookie(c *gin.Context, mgr *VisitorCookieManager) (visitorCookieDecision, time.Duration) {
 	if mgr == nil || os.Getenv("DEFENSE_VISITOR_COOKIE_ENABLED") == "false" {
-		return visitorCookieNone
+		return visitorCookieNone, 0
 	}
 	cookieValue, err := c.Cookie(visitorCookieName)
 	if err != nil || cookieValue == "" {
-		return visitorCookieNone
+		return visitorCookieNone, 0
 	}
 	fingerprint, _ := c.Cookie(visitorFingerprintName)
 	if !mgr.VerifyCookieWithFingerprint(cookieValue, fingerprint) {
-		return visitorCookieNone
+		return visitorCookieNone, 0
 	}
-	if !mgr.AllowCookieRequest(c.Request.Context(), cookieValue) {
-		return visitorCookieLimited
+	if allowed, retryAfter := mgr.AllowCookieRequestWithRetry(c.Request.Context(), cookieValue); !allowed {
+		return visitorCookieLimited, retryAfter
 	}
-	return visitorCookieAllowed
+	return visitorCookieAllowed, 0
 }

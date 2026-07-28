@@ -65,6 +65,53 @@ func TestBatchImageRepository_InvalidProvider(t *testing.T) {
 	require.True(t, errors.Is(err, service.ErrBatchImageInvalidProvider))
 }
 
+func TestBatchImageRepository_ListForOwnerFiltersMultipleStatuses(t *testing.T) {
+	ctx := context.Background()
+	tx := testTx(t)
+	repo := newBatchImageRepositoryWithSQL(tx)
+	const userID int64 = 1002
+	const apiKeyID int64 = 2002
+
+	statuses := []string{
+		service.BatchImageJobStatusCreated,
+		service.BatchImageJobStatusUploading,
+		service.BatchImageJobStatusSubmitted,
+		service.BatchImageJobStatusRunning,
+	}
+	for i, status := range statuses {
+		keyID := apiKeyID
+		_, err := repo.CreateBatchImageJob(ctx, service.CreateBatchImageJobParams{
+			BatchID:   batchImageTestID(t, "multi-status-"+status),
+			UserID:    userID,
+			APIKeyID:  &keyID,
+			Provider:  service.BatchImageProviderGeminiAPI,
+			Model:     "gemini-2.5-flash-image",
+			Status:    status,
+			ItemCount: i + 1,
+		})
+		require.NoError(t, err)
+	}
+
+	jobs, err := repo.ListBatchImageJobsForOwner(ctx, userID, apiKeyID, service.BatchImageJobFilter{
+		Statuses: []string{
+			service.BatchImageJobStatusCreated,
+			service.BatchImageJobStatusUploading,
+			service.BatchImageJobStatusSubmitted,
+		},
+		Limit: 20,
+	})
+	require.NoError(t, err)
+	require.Len(t, jobs, 3)
+	for _, job := range jobs {
+		require.Contains(t, []string{
+			service.BatchImageJobStatusCreated,
+			service.BatchImageJobStatusUploading,
+			service.BatchImageJobStatusSubmitted,
+		}, job.Status)
+		require.NotEqual(t, service.BatchImageJobStatusRunning, job.Status)
+	}
+}
+
 func TestBatchImageRepository_TransitionIncrementsVersionAndEvents(t *testing.T) {
 	ctx := context.Background()
 	tx := testTx(t)

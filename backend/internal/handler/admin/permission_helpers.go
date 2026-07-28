@@ -9,11 +9,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var errOperatorTargetForbidden = infraerrors.Forbidden("OPERATOR_TARGET_FORBIDDEN", "operators can only manage regular users")
+var (
+	errOperatorTargetForbidden         = infraerrors.Forbidden("OPERATOR_TARGET_FORBIDDEN", "operators can only manage regular users")
+	errOperatorRoleEscalationForbidden = infraerrors.Forbidden("OPERATOR_ROLE_ESCALATION_FORBIDDEN", "operators cannot create or promote administrator accounts")
+)
 
 func isOperatorRequest(c *gin.Context) bool {
 	role, _ := middleware.GetUserRoleFromContext(c)
 	return service.IsOperatorRole(role)
+}
+
+func ensureOperatorRoleAssignmentAllowed(c *gin.Context, role string) error {
+	if isOperatorRequest(c) && role != "" && role != service.RoleUser {
+		return errOperatorRoleEscalationForbidden
+	}
+	return nil
 }
 
 func ensureOperatorCanManageUser(ctx context.Context, c *gin.Context, adminService service.AdminService, userID int64) error {

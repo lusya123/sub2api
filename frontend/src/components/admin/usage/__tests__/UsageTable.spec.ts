@@ -202,6 +202,53 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('$0.069568')
   })
 
+  it('renders user cost details without administrator-only standard pricing fields', async () => {
+    const row = {
+      ...baseImageRow,
+      request_id: 'req-user-image',
+      actual_cost: 0.03,
+      image_input_cost: 0.01,
+      image_output_cost: 0.02,
+    }
+    delete (row as Partial<typeof row>).total_cost
+    delete (row as Partial<typeof row>).rate_multiplier
+    delete (row as Partial<typeof row>).account_rate_multiplier
+
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [row],
+        loading: false,
+        columns: [],
+        showAccountBilling: false,
+        showStandardCost: false,
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const tooltipTriggers = wrapper.findAll('.group.relative')
+    await tooltipTriggers[tooltipTriggers.length - 1].trigger('mouseenter')
+    await nextTick()
+
+    const text = wrapper.text()
+    expect(text).toContain('Cost Breakdown')
+    expect(text).toContain('User billed')
+    expect(text).toContain('$0.030000')
+    expect(text).not.toContain('Rate')
+    expect(text).not.toContain('Original')
+    expect(text).not.toContain('Account billed')
+    expect(text).not.toContain('Per-image price')
+    expect(text).not.toContain('Image total price')
+    expect(text).not.toContain('undefined')
+    expect(text).not.toContain('NaN')
+  })
+
   it('shows requested and upstream models separately for admin rows', () => {
     const row = {
       request_id: 'req-admin-model-1',

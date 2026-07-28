@@ -279,6 +279,10 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if err := ensureOperatorRoleAssignmentAllowed(c, req.Role); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	// 创建管理员账号属权限敏感操作：需最近完成 step-up 2FA 验证。
 	if req.Role == service.RoleAdmin {
@@ -325,6 +329,10 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if err := ensureOperatorRoleAssignmentAllowed(c, req.Role); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	// 防锁死保护：管理员不能把自己降级为普通用户(单管理员场景下会失去后台访问权)。
 	// 与既有"不能禁用/删除 admin"保护一致。降级其他管理员仍然允许。
@@ -333,15 +341,21 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// 把普通用户提升为管理员属权限敏感操作：需最近完成 step-up 2FA 验证。
-	// 目标已是管理员时（前端编辑表单总是携带 role）不触发，避免日常编辑被打断。
-	if req.Role == service.RoleAdmin {
+	// Administrator credential/identity changes and role transitions are
+	// privilege-sensitive. Fetch the current database role (rather than trust
+	// the request) and require recent 2FA when step-up protection is enabled.
+	if req.Role != "" || req.Email != "" || req.Password != "" {
 		target, err := h.adminService.GetUser(c.Request.Context(), userID)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
-		if target.Role != service.RoleAdmin {
+		adminIdentityChanged := target.Role == service.RoleAdmin &&
+			((req.Email != "" && !strings.EqualFold(strings.TrimSpace(req.Email), strings.TrimSpace(target.Email))) ||
+				req.Password != "" ||
+				(req.Role != "" && req.Role != service.RoleAdmin))
+		promotingToAdmin := req.Role == service.RoleAdmin && target.Role != service.RoleAdmin
+		if adminIdentityChanged || promotingToAdmin {
 			if !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
 				return
 			}
@@ -383,6 +397,18 @@ func (h *UserHandler) UpdateRole(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
+	}
+	if req.Role == service.RoleOperator {
+		target, err := h.adminService.GetUser(c.Request.Context(), userID)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		if target.Role == service.RoleUser {
+			if !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
+				return
+			}
+		}
 	}
 	user, err := h.adminService.UpdateUserRole(c.Request.Context(), userID, req.Role)
 	if err != nil {

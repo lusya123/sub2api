@@ -27,7 +27,8 @@ describe('admin access policy', () => {
     const routes: RouteRecordRaw[] = [
       { path: '/admin/users', component: {} },
       { path: '/admin/settings', component: {} },
-      { path: '/admin/security-audit-logs', component: {} }
+      { path: '/admin/security-audit-logs', component: {} },
+      { path: '/admin/prompt-audit', component: {} }
     ]
 
     applyAdminAccessPolicy(routes)
@@ -35,8 +36,10 @@ describe('admin access policy', () => {
     expect(routes[0].meta?.requiresSuperAdmin).toBeUndefined()
     expect(routes[1].meta?.requiresSuperAdmin).toBe(true)
     expect(routes[2].meta?.requiresSuperAdmin).toBe(true)
+    expect(routes[3].meta?.requiresSuperAdmin).toBe(true)
     expect(isSuperAdminRoutePath('/admin/settings')).toBe(true)
     expect(isSuperAdminRoutePath('/admin/security-audit-logs')).toBe(true)
+    expect(isSuperAdminRoutePath('/admin/prompt-audit')).toBe(true)
   })
 
   it('resolves admin fallback destinations consistently', () => {

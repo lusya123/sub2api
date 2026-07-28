@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import type { AdminUser } from '@/types'
+import { StepUpCancelledError } from '@/composables/useStepUp'
 import UsersView from '../UsersView.vue'
 
 const {
@@ -9,13 +10,28 @@ const {
   getAllGroups,
   getBatchUsersUsage,
   listEnabledDefinitions,
-  getBatchUserAttributes
+  getBatchUserAttributes,
+  getPlatformQuotas,
+  updateRole,
+  stepUpRun,
+  showError,
+  showSuccess,
+  authState
 } = vi.hoisted(() => ({
   listUsers: vi.fn(),
   getAllGroups: vi.fn(),
   getBatchUsersUsage: vi.fn(),
   listEnabledDefinitions: vi.fn(),
-  getBatchUserAttributes: vi.fn()
+  getBatchUserAttributes: vi.fn(),
+  getPlatformQuotas: vi.fn(),
+  updateRole: vi.fn(),
+  stepUpRun: vi.fn(),
+  showError: vi.fn(),
+  showSuccess: vi.fn(),
+  authState: {
+    isAdmin: true,
+    isOperator: false
+  }
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -23,7 +39,9 @@ vi.mock('@/api/admin', () => ({
     users: {
       list: listUsers,
       toggleStatus: vi.fn(),
-      delete: vi.fn()
+      delete: vi.fn(),
+      updateRole,
+      getPlatformQuotas
     },
     groups: {
       getAll: getAllGroups
@@ -40,15 +58,37 @@ vi.mock('@/api/admin', () => ({
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
-    showSuccess: vi.fn()
+    showError,
+    showSuccess
   })
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    isAdmin: true
-  })
+  useAuthStore: () => authState
+}))
+
+vi.mock('@/composables/useStepUp', async () => {
+  const actual = await vi.importActual<typeof import('@/composables/useStepUp')>(
+    '@/composables/useStepUp'
+  )
+  return {
+    ...actual,
+    useStepUp: () => ({
+      visible: { value: false },
+      blockedReason: { value: '' },
+      prompt: vi.fn(),
+      onVerified: vi.fn(),
+      onCancel: vi.fn(),
+      run: stepUpRun
+    })
+  }
+})
+
+vi.mock('@/components/auth/TotpStepUpDialog.vue', () => ({
+  default: {
+    props: ['controller'],
+    template: '<div data-test="users-step-up-dialog" />'
+  }
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -83,15 +123,16 @@ const createAdminUser = (overrides: Partial<AdminUser> = {}): AdminUser => ({
 })
 
 const DataTableStub = {
-  props: ['columns', 'data', 'selectedKeys'],
+  props: ['columns', 'data', 'selectedKeys', 'selectable'],
   emits: ['sort', 'update:selectedKeys'],
   template: `
-    <div>
+    <div data-test="users-table" :data-selectable="String(selectable)">
       <div data-test="columns">{{ columns.map(col => col.key).join(',') }}</div>
       <div data-test="row-order">{{ data.map(row => row.email).join(',') }}</div>
       <div data-test="selected-keys">{{ (selectedKeys || []).join(',') }}</div>
       <button data-test="sort-last-used" @click="$emit('sort', 'last_used_at', 'desc')">sort</button>
       <button
+        v-if="selectable"
         v-for="row in data"
         :key="'select-' + row.id"
         :data-test="'select-' + row.id"
@@ -104,6 +145,9 @@ const DataTableStub = {
       </template>
       <div v-for="row in data" :key="row.id">
         <slot name="cell-last_used_at" :value="row.last_used_at" :row="row" />
+        <slot name="cell-balance" :value="row.balance" :row="row" />
+        <slot name="cell-balance_platform_quota" :row="row" />
+        <slot name="cell-actions" :row="row" />
       </div>
     </div>
   `
@@ -125,16 +169,98 @@ const BulkEditUserModalStub = {
   `
 }
 
+const UserCreateRoleModalStub = {
+  props: ['show', 'canManageAdminRole'],
+  template: `
+    <div
+      data-test="create-user-modal"
+      :data-show="String(show)"
+      :data-can-manage-admin-role="String(canManageAdminRole)"
+    />
+  `
+}
+
+const UserEditRoleModalStub = {
+  props: ['show', 'user', 'canManageAdminRole'],
+  template: `
+    <div
+      data-test="edit-user-modal"
+      :data-show="String(show)"
+      :data-can-manage-admin-role="String(canManageAdminRole)"
+    />
+  `
+}
+
+const UserApiKeysPermissionStub = {
+  props: ['show', 'user', 'canEditGroup'],
+  template: `
+    <div
+      data-test="api-keys-modal"
+      :data-can-edit-group="String(canEditGroup)"
+    />
+  `
+}
+
+function mountUsersView() {
+  return mount(UsersView, {
+    global: {
+      stubs: {
+        AppLayout: { template: '<div><slot /></div>' },
+        TablePageLayout: {
+          template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+        },
+        DataTable: DataTableStub,
+        Pagination: true,
+        ConfirmDialog: true,
+        EmptyState: true,
+        GroupBadge: true,
+        Select: true,
+        UserAttributesConfigModal: true,
+        UserConcurrencyCell: true,
+        UserCreateModal: true,
+        UserEditModal: true,
+        BulkEditUserModal: BulkEditUserModalStub,
+        UserPlatformQuotaModal: true,
+        UserApiKeysModal: UserApiKeysPermissionStub,
+        UserAllowedGroupsModal: true,
+        UserBalanceModal: true,
+        UserBalanceHistoryModal: true,
+        GroupReplaceModal: true,
+        Icon: true,
+        Teleport: true
+      }
+    }
+  })
+}
+
+async function openFirstUserActionMenu(wrapper: ReturnType<typeof mountUsersView>) {
+  await wrapper.get('.action-menu-trigger').trigger('click', {
+    clientX: 400,
+    clientY: 200
+  })
+  await flushPromises()
+}
+
 describe('admin UsersView', () => {
   beforeEach(() => {
     vi.useRealTimers()
     localStorage.clear()
+    authState.isAdmin = true
+    authState.isOperator = false
 
     listUsers.mockReset()
     getAllGroups.mockReset()
     getBatchUsersUsage.mockReset()
     listEnabledDefinitions.mockReset()
     getBatchUserAttributes.mockReset()
+    getPlatformQuotas.mockReset()
+    updateRole.mockReset()
+    stepUpRun.mockReset()
+    showError.mockReset()
+    showSuccess.mockReset()
+
+    updateRole.mockResolvedValue(undefined)
+    stepUpRun.mockImplementation(async (action: () => Promise<unknown>) => action())
 
     listUsers.mockResolvedValue({
       items: [createAdminUser()],
@@ -146,11 +272,78 @@ describe('admin UsersView', () => {
     getAllGroups.mockResolvedValue([])
     getBatchUsersUsage.mockResolvedValue({ stats: {} })
     listEnabledDefinitions.mockResolvedValue([])
-    getBatchUserAttributes.mockResolvedValue({ values: {} })
+    getBatchUserAttributes.mockResolvedValue({ attributes: {} })
+    getPlatformQuotas.mockResolvedValue({ platform_quotas: [] })
   })
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('runs operator delegation through step-up and refreshes after success', async () => {
+    const wrapper = mountUsersView()
+    await flushPromises()
+    await openFirstUserActionMenu(wrapper)
+
+    expect(wrapper.find('[data-test="users-step-up-dialog"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="delegate-operator"]').trigger('click')
+    await flushPromises()
+
+    expect(stepUpRun).toHaveBeenCalledOnce()
+    expect(updateRole).toHaveBeenCalledWith(42, 'operator')
+    expect(showSuccess).toHaveBeenCalledWith('admin.users.operatorDelegated')
+    expect(listUsers).toHaveBeenCalledTimes(2)
+  })
+
+  it('silently stops operator delegation when the step-up dialog is cancelled', async () => {
+    stepUpRun.mockRejectedValueOnce(new StepUpCancelledError())
+
+    const wrapper = mountUsersView()
+    await flushPromises()
+    await openFirstUserActionMenu(wrapper)
+    await wrapper.get('[data-testid="delegate-operator"]').trigger('click')
+    await flushPromises()
+
+    expect(updateRole).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('shows the dedicated reason when operator delegation step-up is blocked', async () => {
+    stepUpRun.mockRejectedValueOnce({
+      status: 403,
+      reason: 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
+    })
+
+    const wrapper = mountUsersView()
+    await flushPromises()
+    await openFirstUserActionMenu(wrapper)
+    await wrapper.get('[data-testid="delegate-operator"]').trigger('click')
+    await flushPromises()
+
+    expect(updateRole).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('stepUp.adminApiKeyForbidden')
+  })
+
+  it('also routes operator revocation through the same step-up controller', async () => {
+    listUsers.mockResolvedValue({
+      items: [createAdminUser({ role: 'operator' })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    const wrapper = mountUsersView()
+    await flushPromises()
+    await openFirstUserActionMenu(wrapper)
+    await wrapper.get('[data-testid="revoke-operator"]').trigger('click')
+    await flushPromises()
+
+    expect(stepUpRun).toHaveBeenCalledOnce()
+    expect(updateRole).toHaveBeenCalledWith(42, 'user')
+    expect(showSuccess).toHaveBeenCalledWith('admin.users.operatorRevoked')
   })
 
   it('shows active, used, and created activity columns in order and requests last_used_at sort', async () => {
@@ -173,7 +366,7 @@ describe('admin UsersView', () => {
           UserEditModal: true,
           BulkEditUserModal: BulkEditUserModalStub,
           UserPlatformQuotaModal: true,
-          UserApiKeysModal: true,
+          UserApiKeysModal: UserApiKeysPermissionStub,
           UserAllowedGroupsModal: true,
           UserBalanceModal: true,
           UserBalanceHistoryModal: true,
@@ -374,5 +567,86 @@ describe('admin UsersView', () => {
     expect(wrapper.get('[data-test="row-order"]').text()).toBe('refreshed-page-two@example.com')
     expect(wrapper.find('[data-test="bulk-edit-limits"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="selected-keys"]').text()).toBe('')
+  })
+
+  it('hides super-admin-only user controls from an operator', async () => {
+    authState.isAdmin = false
+    authState.isOperator = true
+    localStorage.setItem('user-column-settings-version', '3')
+    localStorage.setItem('user-hidden-columns', JSON.stringify([]))
+    listEnabledDefinitions.mockResolvedValue([{
+      id: 1,
+      key: 'operator_visible_attribute',
+      name: 'Operator Visible Attribute',
+      description: '',
+      type: 'text',
+      options: [],
+      required: false,
+      validation: {},
+      placeholder: '',
+      display_order: 1,
+      enabled: true,
+      created_at: '2026-07-20T00:00:00Z',
+      updated_at: '2026-07-20T00:00:00Z'
+    }])
+    listUsers.mockResolvedValue({
+      items: [
+        createAdminUser({ id: 41, email: 'admin@example.com', role: 'admin', balance: 10 }),
+        createAdminUser({ id: 42, email: 'operator@example.com', role: 'operator', balance: 20 }),
+        createAdminUser({ id: 43, email: 'user@example.com', role: 'user', balance: 30 })
+      ],
+      total: 3,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    const wrapper = mount(UsersView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          EmptyState: true,
+          GroupBadge: true,
+          Select: true,
+          UserAttributesConfigModal: true,
+          UserConcurrencyCell: true,
+          UserCreateModal: UserCreateRoleModalStub,
+          UserEditModal: UserEditRoleModalStub,
+          BulkEditUserModal: BulkEditUserModalStub,
+          UserPlatformQuotaModal: true,
+          UserApiKeysModal: UserApiKeysPermissionStub,
+          UserAllowedGroupsModal: true,
+          UserBalanceModal: true,
+          UserBalanceHistoryModal: true,
+          GroupReplaceModal: true,
+          UserPlatformQuotaCell: { template: '<span data-test="quota-summary">quota</span>' },
+          Icon: true,
+          Teleport: true
+        }
+      }
+    })
+
+    await flushPromises()
+    await new Promise((resolve) => window.setTimeout(resolve, 60))
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="users-table"]').attributes('data-selectable')).toBe('false')
+    expect(wrapper.get('[data-test="columns"]').text().split(',')).not.toContain('balance_platform_quota')
+    expect(wrapper.find('[data-test="bulk-edit-limits"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="create-user-modal"]').attributes('data-can-manage-admin-role')).toBe('false')
+    expect(wrapper.get('[data-test="edit-user-modal"]').attributes('data-can-manage-admin-role')).toBe('false')
+    expect(wrapper.get('[data-test="api-keys-modal"]').attributes('data-can-edit-group')).toBe('false')
+    expect(wrapper.findAll('.action-menu-trigger')).toHaveLength(1)
+    expect(wrapper.findAll('button[title="admin.users.platformQuota.cellColumnTooltip"]')).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('admin.users.attributes.configButton')
+    expect(getPlatformQuotas).not.toHaveBeenCalled()
+    expect(getBatchUsersUsage).toHaveBeenCalledWith([41, 42, 43])
+    expect(getBatchUserAttributes).toHaveBeenCalledWith([41, 42, 43])
   })
 })

@@ -4,11 +4,372 @@ package service
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/websearch"
 	"github.com/stretchr/testify/require"
 )
+
+func expireWebSearchEmulationCacheForTest() {
+	webSearchEmulationCacheMu.Lock()
+	webSearchEmulationCacheGeneration++
+	webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{expiresAt: 0})
+	webSearchEmulationCacheMu.Unlock()
+	webSearchEmulationSF.Forget(sfKeyWebSearchConfig)
+}
+
+type webSearchConfigRepoStub struct {
+	mu         sync.Mutex
+	value      string
+	getCalls   int
+	setCalls   int
+	getValueFn func(call int, current string) (string, error)
+}
+
+func (r *webSearchConfigRepoStub) Get(context.Context, string) (*Setting, error) {
+	panic("unexpected Get call")
+}
+
+func (r *webSearchConfigRepoStub) GetValue(_ context.Context, _ string) (string, error) {
+	r.mu.Lock()
+	r.getCalls++
+	call := r.getCalls
+	current := r.value
+	fn := r.getValueFn
+	r.mu.Unlock()
+	if fn != nil {
+		return fn(call, current)
+	}
+	if current == "" {
+		return "", ErrSettingNotFound
+	}
+	return current, nil
+}
+
+func (r *webSearchConfigRepoStub) Set(_ context.Context, _ string, value string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.setCalls++
+	r.value = value
+	return nil
+}
+
+func (r *webSearchConfigRepoStub) GetMultiple(context.Context, []string) (map[string]string, error) {
+	panic("unexpected GetMultiple call")
+}
+
+func (r *webSearchConfigRepoStub) SetMultiple(context.Context, map[string]string) error {
+	panic("unexpected SetMultiple call")
+}
+
+func (r *webSearchConfigRepoStub) GetAll(context.Context) (map[string]string, error) {
+	panic("unexpected GetAll call")
+}
+
+func (r *webSearchConfigRepoStub) Delete(context.Context, string) error {
+	panic("unexpected Delete call")
+}
+
+func (r *webSearchConfigRepoStub) setCallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.setCalls
+}
+
+func (r *webSearchConfigRepoStub) getCallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.getCalls
+}
+
+func TestGetWebSearchEmulationConfig_MissingSettingUsesDisabledDefault(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	svc := &SettingService{settingRepo: &settingRepoStub{values: map[string]string{}}}
+	cfg, err := svc.GetWebSearchEmulationConfig(context.Background())
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.False(t, cfg.Enabled)
+	require.Empty(t, cfg.Providers)
+}
+
+func TestGetWebSearchEmulationConfig_RepositoryErrorStillFails(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	repoErr := errors.New("database unavailable")
+	svc := &SettingService{settingRepo: &settingRepoStub{err: repoErr}}
+	cfg, err := svc.GetWebSearchEmulationConfig(context.Background())
+
+	require.ErrorIs(t, err, repoErr)
+	require.NotNil(t, cfg)
+	require.False(t, cfg.Enabled)
+	require.Empty(t, cfg.Providers)
+}
+
+func TestGetWebSearchEmulationConfig_CachedRepositoryErrorRemainsAnError(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	repoErr := errors.New("database unavailable")
+	repo := &webSearchConfigRepoStub{
+		getValueFn: func(int, string) (string, error) {
+			return "", repoErr
+		},
+	}
+	svc := &SettingService{settingRepo: repo}
+
+	first, firstErr := svc.GetWebSearchEmulationConfig(context.Background())
+	second, secondErr := svc.GetWebSearchEmulationConfig(context.Background())
+
+	require.ErrorIs(t, firstErr, repoErr)
+	require.ErrorIs(t, secondErr, repoErr)
+	require.NotNil(t, first)
+	require.NotNil(t, second)
+	require.False(t, first.Enabled)
+	require.False(t, second.Enabled)
+	require.Equal(t, 1, repo.getCallCount(), "the cached error should avoid a second repository read")
+}
+
+func TestSaveWebSearchEmulationConfig_EmptyAPIKeyPreservesExistingSecret(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	repo := newMockSettingRepo()
+	repo.data[SettingKeyWebSearchEmulationConfig] = `{"enabled":true,"providers":[{"type":"brave","api_key":"brave-secret","quota_limit":1000,"proxy_id":null}]}`
+	svc := &SettingService{settingRepo: repo}
+	incoming := &WebSearchEmulationConfig{
+		Enabled: true,
+		Providers: []WebSearchProviderConfig{
+			{Type: websearch.ProviderTypeBrave, QuotaLimit: int64Ptr(1000)},
+		},
+	}
+
+	require.NoError(t, svc.SaveWebSearchEmulationConfig(context.Background(), incoming))
+
+	storedRaw, err := repo.GetValue(context.Background(), SettingKeyWebSearchEmulationConfig)
+	require.NoError(t, err)
+	stored := parseWebSearchConfigJSON(storedRaw)
+	require.Len(t, stored.Providers, 1)
+	require.Equal(t, "brave-secret", stored.Providers[0].APIKey)
+
+	responseCfg := SanitizeWebSearchConfig(context.Background(), stored)
+	require.Empty(t, responseCfg.Providers[0].APIKey)
+	require.True(t, responseCfg.Providers[0].APIKeyConfigured)
+}
+
+func TestSaveWebSearchEmulationConfig_ExistingConfigReadErrorDoesNotWrite(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	repoErr := errors.New("database read unavailable")
+	repo := &webSearchConfigRepoStub{
+		getValueFn: func(int, string) (string, error) {
+			return "", repoErr
+		},
+	}
+	svc := &SettingService{settingRepo: repo}
+	cfg := &WebSearchEmulationConfig{
+		Enabled: false,
+		Providers: []WebSearchProviderConfig{
+			{Type: websearch.ProviderTypeBrave},
+		},
+	}
+
+	err := svc.SaveWebSearchEmulationConfig(context.Background(), cfg)
+
+	require.ErrorIs(t, err, repoErr)
+	require.Zero(t, repo.setCallCount(), "a failed secret-preservation read must not be followed by Set")
+}
+
+func TestSaveWebSearchEmulationConfig_MissingExistingConfigAllowsFirstSave(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	repo := &webSearchConfigRepoStub{
+		getValueFn: func(int, string) (string, error) {
+			return "", ErrSettingNotFound
+		},
+	}
+	svc := &SettingService{settingRepo: repo}
+	cfg := &WebSearchEmulationConfig{
+		Enabled: true,
+		Providers: []WebSearchProviderConfig{
+			{Type: websearch.ProviderTypeBrave, APIKey: "first-secret"},
+		},
+	}
+
+	require.NoError(t, svc.SaveWebSearchEmulationConfig(context.Background(), cfg))
+	require.Equal(t, 1, repo.setCallCount())
+}
+
+func TestWebSearchEmulationConfig_InFlightOldLoadCannotOverwriteSave(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	firstLoadStarted := make(chan struct{})
+	releaseFirstLoad := make(chan struct{})
+	repo := &webSearchConfigRepoStub{
+		value: `{"enabled":true,"providers":[{"type":"brave","api_key":"old-secret"}]}`,
+		getValueFn: func(call int, current string) (string, error) {
+			if call == 1 {
+				close(firstLoadStarted)
+				<-releaseFirstLoad
+			}
+			return current, nil
+		},
+	}
+	svc := &SettingService{settingRepo: repo}
+
+	type loadResult struct {
+		cfg *WebSearchEmulationConfig
+		err error
+	}
+	loadDone := make(chan loadResult, 1)
+	go func() {
+		cfg, err := svc.GetWebSearchEmulationConfig(context.Background())
+		loadDone <- loadResult{cfg: cfg, err: err}
+	}()
+	<-firstLoadStarted
+
+	saveDone := make(chan error, 1)
+	go func() {
+		saveDone <- svc.SaveWebSearchEmulationConfig(context.Background(), &WebSearchEmulationConfig{
+			Enabled: true,
+			Providers: []WebSearchProviderConfig{
+				{Type: websearch.ProviderTypeBrave, APIKey: "new-secret"},
+			},
+		})
+	}()
+
+	select {
+	case err := <-saveDone:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		close(releaseFirstLoad)
+		t.Fatal("save was blocked by an unrelated in-flight config load")
+	}
+	close(releaseFirstLoad)
+
+	oldLoad := <-loadDone
+	require.NoError(t, oldLoad.err)
+	require.Equal(t, "old-secret", oldLoad.cfg.Providers[0].APIKey)
+
+	current, err := svc.GetWebSearchEmulationConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "new-secret", current.Providers[0].APIKey,
+		"the old in-flight load must not replace the cache written by Save")
+}
+
+func TestWebSearchEmulationConfig_StaleSaveGenerationCannotInstallManager(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	repo := &webSearchConfigRepoStub{}
+	svc := &SettingService{settingRepo: repo}
+	first := &WebSearchEmulationConfig{
+		Enabled: true,
+		Providers: []WebSearchProviderConfig{
+			{Type: websearch.ProviderTypeBrave, APIKey: "first-secret"},
+		},
+	}
+	require.NoError(t, svc.SaveWebSearchEmulationConfig(context.Background(), first))
+	webSearchEmulationCacheMu.Lock()
+	firstGeneration := webSearchEmulationCacheGeneration
+	webSearchEmulationCacheMu.Unlock()
+
+	second := &WebSearchEmulationConfig{
+		Enabled: true,
+		Providers: []WebSearchProviderConfig{
+			{Type: websearch.ProviderTypeBrave, APIKey: "second-secret"},
+		},
+	}
+	require.NoError(t, svc.SaveWebSearchEmulationConfig(context.Background(), second))
+	webSearchEmulationCacheMu.Lock()
+	secondGeneration := webSearchEmulationCacheGeneration
+	webSearchEmulationCacheMu.Unlock()
+
+	var built []string
+	svc.webSearchManagerBuilder = func(cfg *WebSearchEmulationConfig, _ map[int64]string) {
+		built = append(built, cfg.Providers[0].APIKey)
+	}
+	svc.rebuildWebSearchManagerSnapshot(context.Background(), firstGeneration, cloneWebSearchEmulationConfig(first))
+	require.Empty(t, built, "a stale save generation must not invoke the manager builder")
+
+	svc.rebuildWebSearchManagerSnapshot(context.Background(), secondGeneration, cloneWebSearchEmulationConfig(second))
+	require.Equal(t, []string{"second-secret"}, built)
+}
+
+func TestWebSearchEmulationConfig_ConcurrentSavesInstallNewestManagerLast(t *testing.T) {
+	expireWebSearchEmulationCacheForTest()
+	t.Cleanup(expireWebSearchEmulationCacheForTest)
+
+	repo := &webSearchConfigRepoStub{}
+	svc := &SettingService{settingRepo: repo}
+	firstBuilderEntered := make(chan struct{})
+	releaseFirstBuilder := make(chan struct{})
+	var builtMu sync.Mutex
+	var built []string
+	svc.webSearchManagerBuilder = func(cfg *WebSearchEmulationConfig, _ map[int64]string) {
+		builtMu.Lock()
+		call := len(built)
+		built = append(built, cfg.Providers[0].APIKey)
+		if call == 0 {
+			close(firstBuilderEntered)
+		}
+		builtMu.Unlock()
+		if call == 0 {
+			<-releaseFirstBuilder
+		}
+	}
+
+	firstSaveDone := make(chan error, 1)
+	go func() {
+		firstSaveDone <- svc.SaveWebSearchEmulationConfig(context.Background(), &WebSearchEmulationConfig{
+			Enabled: true,
+			Providers: []WebSearchProviderConfig{
+				{Type: websearch.ProviderTypeBrave, APIKey: "first-secret"},
+			},
+		})
+	}()
+	<-firstBuilderEntered
+
+	// The builder is the manager-commit critical section. If it has begun, a
+	// newer save must not persist until the older builder returns.
+	if webSearchEmulationCacheMu.TryLock() {
+		webSearchEmulationCacheMu.Unlock()
+		close(releaseFirstBuilder)
+		<-firstSaveDone
+		t.Fatal("manager builder ran without holding the config commit mutex")
+	}
+
+	secondSaveDone := make(chan error, 1)
+	go func() {
+		secondSaveDone <- svc.SaveWebSearchEmulationConfig(context.Background(), &WebSearchEmulationConfig{
+			Enabled: true,
+			Providers: []WebSearchProviderConfig{
+				{Type: websearch.ProviderTypeBrave, APIKey: "second-secret"},
+			},
+		})
+	}()
+	close(releaseFirstBuilder)
+
+	require.NoError(t, <-firstSaveDone)
+	require.NoError(t, <-secondSaveDone)
+	builtMu.Lock()
+	builtSnapshot := append([]string(nil), built...)
+	builtMu.Unlock()
+	require.Equal(t, []string{"first-secret", "second-secret"}, builtSnapshot)
+
+	current, err := svc.GetWebSearchEmulationConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "second-secret", current.Providers[0].APIKey)
+}
 
 // --- validateWebSearchConfig ---
 

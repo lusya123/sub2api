@@ -114,6 +114,9 @@ const (
 	openAIGPT54LongContextInputThreshold   = 272000
 	openAIGPT54LongContextInputMultiplier  = 2.0
 	openAIGPT54LongContextOutputMultiplier = 1.5
+	miniMaxM3LongContextInputThreshold     = 512000
+	miniMaxM3LongContextMultiplier         = 2.0
+	miniMaxM3PriorityMultiplier            = 1.5
 )
 
 func normalizeBillingServiceTier(serviceTier string) string {
@@ -267,31 +270,6 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:     false,
 	}
 
-	// GLM-5 official fallback pricing.
-	s.fallbackPrices["glm-5"] = &ModelPricing{
-		InputPricePerToken:         1.0e-6, // $1 per MTok
-		OutputPricePerToken:        3.2e-6, // $3.2 per MTok
-		CacheCreationPricePerToken: 0,
-		CacheReadPricePerToken:     0.2e-6, // $0.2 per MTok
-		SupportsCacheBreakdown:     false,
-	}
-
-	// MiniMax M2.5 standard and highspeed fallback pricing.
-	s.fallbackPrices["minimax-m2.5"] = &ModelPricing{
-		InputPricePerToken:         0.3e-6,   // $0.3 per MTok
-		OutputPricePerToken:        1.2e-6,   // $1.2 per MTok
-		CacheCreationPricePerToken: 0.375e-6, // $0.375 per MTok
-		CacheReadPricePerToken:     0.03e-6,  // $0.03 per MTok
-		SupportsCacheBreakdown:     false,
-	}
-	s.fallbackPrices["minimax-m2.5-highspeed"] = &ModelPricing{
-		InputPricePerToken:         0.6e-6,   // $0.6 per MTok
-		OutputPricePerToken:        2.4e-6,   // $2.4 per MTok
-		CacheCreationPricePerToken: 0.375e-6, // same as standard
-		CacheReadPricePerToken:     0.03e-6,  // same as standard
-		SupportsCacheBreakdown:     false,
-	}
-
 	// OpenAI GPT-5.4（业务指定价格）
 	s.fallbackPrices["gpt-5.4"] = &ModelPricing{
 		InputPricePerToken:             2.5e-6,  // $2.5 per MTok
@@ -412,6 +390,12 @@ func (s *BillingService) initFallbackPricing() {
 	// Source: https://docs.z.ai/guides/overview/pricing (USD per 1M tokens)
 	// 注意：CacheReadPricePerToken 即"缓存命中"价格，CacheCreationPricePerToken 留空（智谱未公开写入价，按 0 处理）。
 	// GLM-4.6 与 GLM-4.5 在 z.ai 国际版上定价一致；GLM-4.5 国内按 ¥0.8/¥2，汇率换算后约 $0.112/$0.28，与国际版 $0.6/$2.2 不同，本分支采用国际版 USD 口径与现有 Claude/GPT 一致。
+	s.fallbackPrices["glm-5.2"] = &ModelPricing{
+		InputPricePerToken:     1.4e-6, // $1.40 per MTok
+		OutputPricePerToken:    4.4e-6, // $4.40 per MTok
+		CacheReadPricePerToken: 0.26e-6,
+		SupportsCacheBreakdown: false,
+	}
 	s.fallbackPrices["glm-5.1"] = &ModelPricing{
 		InputPricePerToken:     1.4e-6, // $1.40 per MTok
 		OutputPricePerToken:    4.4e-6, // $4.40 per MTok
@@ -489,6 +473,44 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown: false,
 	}
 
+	// ---- 智谱 GLM Vision ----
+	// Vision SKU 必须独立于文本模型匹配，否则 glm-5 / glm-4.6 等前缀会
+	// 将它们错误计成文本模型价格。
+	s.fallbackPrices["glm-5v-turbo"] = &ModelPricing{
+		InputPricePerToken:     1.2e-6,
+		OutputPricePerToken:    4e-6,
+		CacheReadPricePerToken: 0.24e-6,
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["glm-4.6v"] = &ModelPricing{
+		InputPricePerToken:     0.3e-6,
+		OutputPricePerToken:    0.9e-6,
+		CacheReadPricePerToken: 0.05e-6,
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["glm-4.6v-flashx"] = &ModelPricing{
+		InputPricePerToken:     0.04e-6,
+		OutputPricePerToken:    0.4e-6,
+		CacheReadPricePerToken: 0.004e-6,
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["glm-4.5v"] = &ModelPricing{
+		InputPricePerToken:     0.6e-6,
+		OutputPricePerToken:    1.8e-6,
+		CacheReadPricePerToken: 0.11e-6,
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["glm-4.6v-flash"] = &ModelPricing{
+		InputPricePerToken:     0,
+		OutputPricePerToken:    0,
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["glm-ocr"] = &ModelPricing{
+		InputPricePerToken:     0.03e-6,
+		OutputPricePerToken:    0.03e-6,
+		SupportsCacheBreakdown: false,
+	}
+
 	// ---- 月之暗面 Kimi（K 系列）----
 	// Source: https://platform.moonshot.cn/docs/pricing/overview (元/百万 tokens 口径)
 	//       交叉验证：https://www.tmtpost.com/7961404.html (USD 口径)
@@ -527,44 +549,76 @@ func (s *BillingService) initFallbackPricing() {
 	}
 
 	// ---- MiniMax M 系列 ----
-	// Source: https://platform.minimax.io/docs/guides/pricing-paygo
-	// 注意：MiniMax M3 在 >512K context 时价格翻倍，本兜底采用 ≤512K 标准 tier（保守口径，对用户有利）。
-	// 如需支持长上下文 multiplier，可后续参考 GPT-5.4 模式扩展 LongContextXxx 字段。
+	// Sources:
+	//   - https://platform.minimax.io/docs/guides/pricing-paygo
+	//   - https://platform.minimax.io/docs/api-reference/anthropic-api-compatible-cache
+	// Pay-as-you-go is authoritative for the highspeed base input price; the
+	// explicit-cache page is authoritative for M2.x read/write token prices.
+	// M3 does not publish a separate cache-write price and is not listed as an
+	// explicit-cache model. If cache_creation tokens are nevertheless observed,
+	// charge them at the corresponding ordinary input rate rather than at zero.
 	s.fallbackPrices["minimax-m3"] = &ModelPricing{
-		InputPricePerToken:     0.60e-6, // $0.60 per MTok (≤512K standard tier, 含 50% 永久折扣前原价 $1.20)
-		OutputPricePerToken:    2.40e-6,
-		CacheReadPricePerToken: 0.12e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:                 0.30e-6, // permanent-discount price at <=512K
+		InputPricePerTokenPriority:         0.45e-6,
+		OutputPricePerToken:                1.20e-6,
+		OutputPricePerTokenPriority:        1.80e-6,
+		CacheCreationPricePerToken:         0.30e-6, // conservative: same as uncached input
+		CacheCreationPricePerTokenPriority: 0.45e-6,
+		CacheReadPricePerToken:             0.06e-6,
+		CacheReadPricePerTokenPriority:     0.09e-6,
+		SupportsCacheBreakdown:             false,
+		LongContextInputThreshold:          miniMaxM3LongContextInputThreshold,
+		LongContextInputMultiplier:         miniMaxM3LongContextMultiplier,
+		LongContextOutputMultiplier:        miniMaxM3LongContextMultiplier,
 	}
 	s.fallbackPrices["minimax-m2.7"] = &ModelPricing{
-		InputPricePerToken:     0.30e-6, // $0.30 per MTok
-		OutputPricePerToken:    1.20e-6,
-		CacheReadPricePerToken: 0.06e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:         0.30e-6, // $0.30 per MTok
+		OutputPricePerToken:        1.20e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.06e-6,
+		SupportsCacheBreakdown:     false,
 	}
 	s.fallbackPrices["minimax-m2.7-highspeed"] = &ModelPricing{
-		InputPricePerToken:     0.60e-6,
-		OutputPricePerToken:    2.40e-6,
-		CacheReadPricePerToken: 0.06e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:         0.60e-6,
+		OutputPricePerToken:        2.40e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.06e-6,
+		SupportsCacheBreakdown:     false,
 	}
 	s.fallbackPrices["minimax-m2.5"] = &ModelPricing{
-		InputPricePerToken:     0.30e-6,
-		OutputPricePerToken:    1.20e-6,
-		CacheReadPricePerToken: 0.03e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:         0.30e-6,
+		OutputPricePerToken:        1.20e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.03e-6,
+		SupportsCacheBreakdown:     false,
+	}
+	s.fallbackPrices["minimax-m2.5-highspeed"] = &ModelPricing{
+		InputPricePerToken:         0.60e-6,
+		OutputPricePerToken:        2.40e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.03e-6,
+		SupportsCacheBreakdown:     false,
 	}
 	s.fallbackPrices["minimax-m2.1"] = &ModelPricing{
-		InputPricePerToken:     0.30e-6,
-		OutputPricePerToken:    1.20e-6,
-		CacheReadPricePerToken: 0.03e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:         0.30e-6,
+		OutputPricePerToken:        1.20e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.03e-6,
+		SupportsCacheBreakdown:     false,
+	}
+	s.fallbackPrices["minimax-m2.1-highspeed"] = &ModelPricing{
+		InputPricePerToken:         0.60e-6,
+		OutputPricePerToken:        2.40e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.03e-6,
+		SupportsCacheBreakdown:     false,
 	}
 	s.fallbackPrices["minimax-m2"] = &ModelPricing{
-		InputPricePerToken:     0.30e-6,
-		OutputPricePerToken:    1.20e-6,
-		CacheReadPricePerToken: 0.03e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:         0.30e-6,
+		OutputPricePerToken:        1.20e-6,
+		CacheCreationPricePerToken: 0.375e-6,
+		CacheReadPricePerToken:     0.03e-6,
+		SupportsCacheBreakdown:     false,
 	}
 
 	// ---- 火山方舟 豆包 Embedding（多模态向量化）----
@@ -607,9 +661,55 @@ func (s *BillingService) initFallbackPricing() {
 	}
 }
 
+// fallbackModelIdentifier extracts a provider-qualified model's terminal ID.
+// Matching on this normalized ID avoids accidental substring matches such as
+// "not-glm-5-wrapper" while still supporting common "provider/model" names.
+func fallbackModelIdentifier(model string) string {
+	id := strings.ToLower(strings.TrimSpace(model))
+	if idx := strings.LastIndexAny(id, "/:"); idx >= 0 {
+		id = id[idx+1:]
+	}
+	return id
+}
+
+// matchesFallbackModelSKU accepts an exact official SKU and narrowly-scoped
+// immutable aliases (a numeric release suffix or "-latest"). It deliberately
+// rejects arbitrary suffixes so a future vision/highspeed model cannot inherit
+// a cheaper text/standard price merely because its name shares a prefix.
+func matchesFallbackModelSKU(modelID string, aliases ...string) bool {
+	for _, alias := range aliases {
+		if modelID == alias {
+			return true
+		}
+		prefix := alias + "-"
+		if !strings.HasPrefix(modelID, prefix) {
+			continue
+		}
+		suffix := strings.TrimPrefix(modelID, prefix)
+		if suffix == "latest" {
+			return true
+		}
+		if len(suffix) < 4 || len(suffix) > 14 {
+			continue
+		}
+		numeric := true
+		for i := 0; i < len(suffix); i++ {
+			if suffix[i] < '0' || suffix[i] > '9' {
+				numeric = false
+				break
+			}
+		}
+		if numeric {
+			return true
+		}
+	}
+	return false
+}
+
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
+	modelID := fallbackModelIdentifier(modelLower)
 
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {
@@ -640,28 +740,30 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	if strings.Contains(modelLower, "claude") {
 		return s.fallbackPrices["claude-sonnet-4"]
 	}
-	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
+	// These are explicit repository-supported Gemini 3.1 Pro aliases with the
+	// same published token price. Keep the list exact: image and future suffixes
+	// must not inherit Pro text pricing by prefix.
+	if matchesFallbackModelSKU(
+		modelID,
+		"gemini-3.1-pro",
+		"gemini-3-1-pro",
+		"gemini-3.1-pro-high",
+		"gemini-3.1-pro-low",
+		"gemini-3.1-pro-preview",
+		"gemini-3.1-pro-preview-customtools",
+	) {
 		return s.fallbackPrices["gemini-3.1-pro"]
-	}
-	if strings.Contains(modelLower, "glm") {
-		return s.fallbackPrices["glm-5"]
-	}
-	if strings.Contains(modelLower, "minimax") {
-		if strings.Contains(modelLower, "highspeed") {
-			return s.fallbackPrices["minimax-m2.5-highspeed"]
-		}
-		return s.fallbackPrices["minimax-m2.5"]
 	}
 
 	// DeepSeek V4 系列：仅匹配已知 V4 Pro/Flash 与官方兼容别名
 	// （deepseek-chat / deepseek-reasoner → V4 Flash），未知 deepseek-* 型号不回退，避免误计价。
-	if strings.Contains(modelLower, "deepseek-v4-flash") {
+	if matchesFallbackModelSKU(modelID, "deepseek-v4-flash") {
 		return s.fallbackPrices["deepseek-v4-flash"]
 	}
-	if strings.Contains(modelLower, "deepseek-v4-pro") {
+	if matchesFallbackModelSKU(modelID, "deepseek-v4-pro") {
 		return s.fallbackPrices["deepseek-v4-pro"]
 	}
-	if strings.Contains(modelLower, "deepseek-chat") || strings.Contains(modelLower, "deepseek-reasoner") {
+	if matchesFallbackModelSKU(modelID, "deepseek-chat", "deepseek-reasoner") {
 		return s.fallbackPrices["deepseek-v4-flash"]
 	}
 
@@ -669,90 +771,121 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// 匹配策略：长 key 优先（具体模型 → 系列 / 厂商），未知型号不回退以避免误计价。
 	// 与 DeepSeek 一样采用"白名单"语义：未在本表命中的国产模型 alias 一律不返回兜底价。
 
-	// 智谱 GLM（z.ai 公开 SKU：glm-5.1 / glm-5 / glm-5-turbo / glm-4.7 / glm-4.6 / glm-4.5 等）
-	// 匹配顺序：先判别最高 tier，再依次降级。
-	if strings.Contains(modelLower, "glm-5.1") {
+	// 智谱 GLM：只匹配官方 SKU、明确兼容别名和安全的版本后缀。
+	// Vision 先列出以明确其独立价格，matchesFallbackModelSKU 也会阻止
+	// 视觉模型被相似的文本模型前缀吞掉。
+	if matchesFallbackModelSKU(modelID, "glm-5v-turbo") {
+		return s.fallbackPrices["glm-5v-turbo"]
+	}
+	if matchesFallbackModelSKU(modelID, "glm-4.6v-flashx") {
+		return s.fallbackPrices["glm-4.6v-flashx"]
+	}
+	if matchesFallbackModelSKU(modelID, "glm-4.6v-flash") {
+		return s.fallbackPrices["glm-4.6v-flash"]
+	}
+	if matchesFallbackModelSKU(modelID, "glm-4.6v") {
+		return s.fallbackPrices["glm-4.6v"]
+	}
+	if matchesFallbackModelSKU(modelID, "glm-4.5v") {
+		return s.fallbackPrices["glm-4.5v"]
+	}
+	if matchesFallbackModelSKU(modelID, "glm-ocr") {
+		return s.fallbackPrices["glm-ocr"]
+	}
+	if matchesFallbackModelSKU(modelID, "glm-5.2", "glm-5-2") {
+		return s.fallbackPrices["glm-5.2"]
+	}
+	if matchesFallbackModelSKU(modelID, "glm-5.1", "glm-5-1") {
 		return s.fallbackPrices["glm-5.1"]
 	}
-	if strings.Contains(modelLower, "glm-5-turbo") || strings.Contains(modelLower, "glm-5turbo") {
+	if matchesFallbackModelSKU(modelID, "glm-5-turbo", "glm-5turbo") {
 		return s.fallbackPrices["glm-5-turbo"]
 	}
-	if strings.Contains(modelLower, "glm-5") {
+	if matchesFallbackModelSKU(modelID, "glm-5") {
 		return s.fallbackPrices["glm-5"]
 	}
-	if strings.Contains(modelLower, "glm-4.7-flashx") {
+	if matchesFallbackModelSKU(modelID, "glm-4.7-flashx") {
 		return s.fallbackPrices["glm-4.7-flashx"]
 	}
-	if strings.Contains(modelLower, "glm-4.7-flash") {
+	if matchesFallbackModelSKU(modelID, "glm-4.7-flash") {
 		return s.fallbackPrices["glm-4.7-flash"]
 	}
-	if strings.Contains(modelLower, "glm-4.7") {
+	if matchesFallbackModelSKU(modelID, "glm-4.7") {
 		return s.fallbackPrices["glm-4.7"]
 	}
-	if strings.Contains(modelLower, "glm-4.6") {
+	if matchesFallbackModelSKU(modelID, "glm-4.6") {
 		return s.fallbackPrices["glm-4.6"]
 	}
-	if strings.Contains(modelLower, "glm-4.5-flash") {
+	if matchesFallbackModelSKU(modelID, "glm-4.5-flash") {
 		return s.fallbackPrices["glm-4.5-flash"]
 	}
-	if strings.Contains(modelLower, "glm-4.5-x") || strings.Contains(modelLower, "glm-4.5x") {
+	if matchesFallbackModelSKU(modelID, "glm-4.5-x", "glm-4.5x") {
 		return s.fallbackPrices["glm-4.5-x"]
 	}
-	if strings.Contains(modelLower, "glm-4.5-airx") || strings.Contains(modelLower, "glm-4.5airx") {
+	if matchesFallbackModelSKU(modelID, "glm-4.5-airx", "glm-4.5airx") {
 		return s.fallbackPrices["glm-4.5-airx"]
 	}
-	if strings.Contains(modelLower, "glm-4.5-air") || strings.Contains(modelLower, "glm-4.5air") {
+	if matchesFallbackModelSKU(modelID, "glm-4.5-air", "glm-4.5air") {
 		return s.fallbackPrices["glm-4.5-air"]
 	}
-	if strings.Contains(modelLower, "glm-4.5") {
+	if matchesFallbackModelSKU(modelID, "glm-4.5") {
 		return s.fallbackPrices["glm-4.5"]
 	}
-	if strings.Contains(modelLower, "glm-4-32b") {
+	if matchesFallbackModelSKU(modelID, "glm-4-32b-0414-128k") {
 		return s.fallbackPrices["glm-4-32b-0414-128k"]
 	}
 
 	// 月之暗面 Kimi（kimi-k2.6 / kimi-for-coding / kimi-k2.5 / kimi-k2-thinking / kimi-k2）
 	// K2-0905 / K2-0711 官方未保留定价，不进入 fallback。
-	if strings.Contains(modelLower, "kimi-for-coding") {
+	if matchesFallbackModelSKU(modelID, "kimi-for-coding") {
 		return s.fallbackPrices["kimi-for-coding"]
 	}
-	if strings.Contains(modelLower, "kimi-k2.6") || strings.Contains(modelLower, "kimi-k2-6") {
+	if matchesFallbackModelSKU(modelID, "kimi-k2.6", "kimi-k2-6") {
 		return s.fallbackPrices["kimi-k2.6"]
 	}
-	if strings.Contains(modelLower, "kimi-k2.5") || strings.Contains(modelLower, "kimi-k2-5") {
+	if matchesFallbackModelSKU(modelID, "kimi-k2.5", "kimi-k2-5") {
 		return s.fallbackPrices["kimi-k2.5"]
 	}
-	if strings.Contains(modelLower, "kimi-k2-thinking") || strings.Contains(modelLower, "kimi-k2-thinking-") {
+	if matchesFallbackModelSKU(modelID, "kimi-k2-thinking", "kimi-k2-thinking-preview") {
 		return s.fallbackPrices["kimi-k2-thinking"]
 	}
-	if strings.Contains(modelLower, "kimi-k2") || strings.Contains(modelLower, "kimi/k2") {
+	// K2-0905 / K2-0711 have no retained official price. Do not treat their
+	// numeric release suffix as the base K2 SKU; only explicit base aliases pass.
+	if modelID == "kimi-k2" || modelID == "kimi-k2-latest" || strings.EqualFold(strings.TrimSpace(model), "kimi/k2") {
 		return s.fallbackPrices["kimi-k2"]
 	}
 
-	// MiniMax M 系列（M3 / M2.7 / M2.5 / M2.1 / M2；含 highspeed 变体）
-	if strings.Contains(modelLower, "minimax-m3") {
+	// MiniMax M 系列：精确 SKU 匹配；未知模型 fail closed，防止未来型号
+	// 被 M2.5 的通用价格少计。
+	if matchesFallbackModelSKU(modelID, "minimax-m3") {
 		return s.fallbackPrices["minimax-m3"]
 	}
-	if strings.Contains(modelLower, "minimax-m2.7-highspeed") || strings.Contains(modelLower, "minimax-m2-7-highspeed") {
+	if matchesFallbackModelSKU(modelID, "minimax-m2.7-highspeed", "minimax-m2-7-highspeed") {
 		return s.fallbackPrices["minimax-m2.7-highspeed"]
 	}
-	if strings.Contains(modelLower, "minimax-m2.7") || strings.Contains(modelLower, "minimax-m2-7") {
+	if matchesFallbackModelSKU(modelID, "minimax-m2.7", "minimax-m2-7") {
 		return s.fallbackPrices["minimax-m2.7"]
 	}
-	if strings.Contains(modelLower, "minimax-m2.5") || strings.Contains(modelLower, "minimax-m2-5") {
+	if matchesFallbackModelSKU(modelID, "minimax-m2.5-highspeed", "minimax-m2-5-highspeed") {
+		return s.fallbackPrices["minimax-m2.5-highspeed"]
+	}
+	if matchesFallbackModelSKU(modelID, "minimax-m2.5", "minimax-m2-5") {
 		return s.fallbackPrices["minimax-m2.5"]
 	}
-	if strings.Contains(modelLower, "minimax-m2.1") || strings.Contains(modelLower, "minimax-m2-1") {
+	if matchesFallbackModelSKU(modelID, "minimax-m2.1-highspeed", "minimax-m2-1-highspeed") {
+		return s.fallbackPrices["minimax-m2.1-highspeed"]
+	}
+	if matchesFallbackModelSKU(modelID, "minimax-m2.1", "minimax-m2-1") {
 		return s.fallbackPrices["minimax-m2.1"]
 	}
-	if strings.Contains(modelLower, "minimax-m2") || strings.Contains(modelLower, "minimax-m-2") {
+	if matchesFallbackModelSKU(modelID, "minimax-m2", "minimax-m-2", "minimax-m2-stable") {
 		return s.fallbackPrices["minimax-m2"]
 	}
 
 	// 火山方舟 豆包 Embedding（多模态向量化）。
 	// most-specific-first：放在未来任何 doubao-embedding / doubao 宽匹配之前。
 	// 覆盖带版本后缀的别名（如 doubao-embedding-vision-251215）。
-	if strings.Contains(modelLower, "doubao-embedding-vision") {
+	if matchesFallbackModelSKU(modelID, "doubao-embedding-vision") {
 		return s.fallbackPrices["doubao-embedding-vision"]
 	}
 
@@ -1195,14 +1328,21 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	normalized := normalizeKnownOpenAICodexModel(model)
 	isGPT56 := isOpenAIGPT56Model(normalized)
 	usesLegacyLongContextPricing := usesOpenAILegacyLongContextPricing(normalized)
-	if !isGPT56 && !usesLegacyLongContextPricing {
+	isMiniMaxM3 := matchesFallbackModelSKU(fallbackModelIdentifier(model), "minimax-m3")
+	if !isGPT56 && !usesLegacyLongContextPricing && !isMiniMaxM3 {
 		return pricing
 	}
 	needsLongContextPolicy := (isGPT56 || usesLegacyLongContextPricing) &&
 		(pricing.LongContextInputThreshold <= 0 || pricing.LongContextInputMultiplier <= 0 || pricing.LongContextOutputMultiplier <= 0)
 	needsCacheCreationPolicy := isGPT56 && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
 		(pricing.InputPricePerTokenPriority > 0 && pricing.CacheCreationPricePerTokenPriority <= 0))
-	if !needsLongContextPolicy && !needsCacheCreationPolicy {
+	needsMiniMaxM3Policy := isMiniMaxM3 && (pricing.LongContextInputThreshold != miniMaxM3LongContextInputThreshold ||
+		pricing.LongContextInputMultiplier != miniMaxM3LongContextMultiplier ||
+		pricing.LongContextOutputMultiplier != miniMaxM3LongContextMultiplier ||
+		pricing.InputPricePerTokenPriority <= 0 || pricing.OutputPricePerTokenPriority <= 0 ||
+		pricing.CacheReadPricePerTokenPriority <= 0 ||
+		(!pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 || pricing.CacheCreationPricePerTokenPriority <= 0)))
+	if !needsLongContextPolicy && !needsCacheCreationPolicy && !needsMiniMaxM3Policy {
 		return pricing
 	}
 	cloned := *pricing
@@ -1223,6 +1363,31 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 		}
 		if cloned.LongContextOutputMultiplier <= 0 {
 			cloned.LongContextOutputMultiplier = openAIGPT54LongContextOutputMultiplier
+		}
+	}
+	if isMiniMaxM3 {
+		// M3's 512K tier is intrinsic provider pricing, not an optional account
+		// surcharge. UsageTokens exposes uncached + cache-write + cache-read input,
+		// so shouldApplySessionLongContextPricing can determine the tier exactly.
+		cloned.LongContextInputThreshold = miniMaxM3LongContextInputThreshold
+		cloned.LongContextInputMultiplier = miniMaxM3LongContextMultiplier
+		cloned.LongContextOutputMultiplier = miniMaxM3LongContextMultiplier
+		if cloned.InputPricePerTokenPriority <= 0 {
+			cloned.InputPricePerTokenPriority = cloned.InputPricePerToken * miniMaxM3PriorityMultiplier
+		}
+		if cloned.OutputPricePerTokenPriority <= 0 {
+			cloned.OutputPricePerTokenPriority = cloned.OutputPricePerToken * miniMaxM3PriorityMultiplier
+		}
+		if cloned.CacheReadPricePerTokenPriority <= 0 {
+			cloned.CacheReadPricePerTokenPriority = cloned.CacheReadPricePerToken * miniMaxM3PriorityMultiplier
+		}
+		if !cloned.CacheCreationPriceExplicit {
+			if cloned.CacheCreationPricePerToken <= 0 {
+				cloned.CacheCreationPricePerToken = cloned.InputPricePerToken
+			}
+			if cloned.CacheCreationPricePerTokenPriority <= 0 {
+				cloned.CacheCreationPricePerTokenPriority = cloned.InputPricePerTokenPriority
+			}
 		}
 	}
 	return &cloned

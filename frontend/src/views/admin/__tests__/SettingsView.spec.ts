@@ -10,6 +10,9 @@ const {
   getWebSearchEmulationConfig,
   updateWebSearchEmulationConfig,
   getAdminApiKey,
+  regenerateAdminApiKey,
+  deleteAdminApiKey,
+  stepUpTotp,
   getOverloadCooldownSettings,
   getRateLimit429CooldownSettings,
   updateRateLimit429CooldownSettings,
@@ -34,6 +37,9 @@ const {
   getWebSearchEmulationConfig: vi.fn(),
   updateWebSearchEmulationConfig: vi.fn(),
   getAdminApiKey: vi.fn(),
+  regenerateAdminApiKey: vi.fn(),
+  deleteAdminApiKey: vi.fn(),
+  stepUpTotp: vi.fn(),
   getOverloadCooldownSettings: vi.fn(),
   getRateLimit429CooldownSettings: vi.fn(),
   updateRateLimit429CooldownSettings: vi.fn(),
@@ -67,6 +73,8 @@ vi.mock("@/api", () => ({
       getWebSearchEmulationConfig,
       updateWebSearchEmulationConfig,
       getAdminApiKey,
+      regenerateAdminApiKey,
+      deleteAdminApiKey,
       getOverloadCooldownSettings,
       getRateLimit429CooldownSettings,
       updateRateLimit429CooldownSettings,
@@ -90,6 +98,9 @@ vi.mock("@/api", () => ({
       createProvider,
       deleteProvider,
     },
+  },
+  totpAPI: {
+    stepUp: stepUpTotp,
   },
 }));
 
@@ -536,6 +547,18 @@ async function openSecurityTab(wrapper: ReturnType<typeof mountView>) {
   await flushPromises();
 }
 
+async function completeStepUp(
+  wrapper: ReturnType<typeof mountView>,
+  code = "123456",
+) {
+  const cells = wrapper.findAll('input[pattern="[0-9]"]');
+  expect(cells).toHaveLength(6);
+  for (const [index, digit] of [...code].entries()) {
+    await cells[index]!.setValue(digit);
+  }
+  await flushPromises();
+}
+
 async function openGatewayTab(wrapper: ReturnType<typeof mountView>) {
   const gatewayTabButton = wrapper
     .findAll("button")
@@ -563,6 +586,9 @@ describe("admin SettingsView payment visible method controls", () => {
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
     getAdminApiKey.mockReset();
+    regenerateAdminApiKey.mockReset();
+    deleteAdminApiKey.mockReset();
+    stepUpTotp.mockReset();
     getOverloadCooldownSettings.mockReset();
     getRateLimit429CooldownSettings.mockReset();
     updateRateLimit429CooldownSettings.mockReset();
@@ -600,6 +626,9 @@ describe("admin SettingsView payment visible method controls", () => {
       exists: false,
       masked_key: "",
     });
+    regenerateAdminApiKey.mockResolvedValue({ key: "sk-admin-default" });
+    deleteAdminApiKey.mockResolvedValue({ message: "deleted" });
+    stepUpTotp.mockResolvedValue(undefined);
     getOverloadCooldownSettings.mockResolvedValue({
       enabled: true,
       cooldown_minutes: 10,
@@ -640,6 +669,106 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("retries admin API key generation after successful step-up verification", async () => {
+    regenerateAdminApiKey
+      .mockRejectedValueOnce({ status: 403, code: "STEP_UP_REQUIRED" })
+      .mockResolvedValueOnce({ key: "sk-admin-1234567890" });
+
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    await wrapper.get('[data-testid="admin-api-key-create"]').trigger("click");
+    await flushPromises();
+
+    expect(regenerateAdminApiKey).toHaveBeenCalledTimes(1);
+    await completeStepUp(wrapper);
+
+    expect(stepUpTotp).toHaveBeenCalledWith("123456");
+    expect(regenerateAdminApiKey).toHaveBeenCalledTimes(2);
+    expect(showSuccess).toHaveBeenCalledWith(
+      "admin.settings.adminApiKey.keyGenerated",
+    );
+    expect(wrapper.text()).toContain("sk-admin-1234567890");
+  });
+
+  it("treats cancellation of admin API key generation as a silent no-op", async () => {
+    regenerateAdminApiKey.mockRejectedValue({
+      status: 403,
+      code: "STEP_UP_REQUIRED",
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    const errorsBeforeAction = showError.mock.calls.length;
+    await wrapper.get('[data-testid="admin-api-key-create"]').trigger("click");
+    await flushPromises();
+
+    const stepUpDialog = wrapper
+      .findAll(".fixed")
+      .find((node) => node.text().includes("stepUp.title"));
+    expect(stepUpDialog).toBeDefined();
+    const cancel = stepUpDialog!
+      .findAll("button")
+      .find((button) => button.text() === "common.cancel");
+    expect(cancel).toBeDefined();
+    await cancel!.trigger("click");
+    await flushPromises();
+
+    expect(regenerateAdminApiKey).toHaveBeenCalledOnce();
+    expect(showError).toHaveBeenCalledTimes(errorsBeforeAction);
+    expect(showSuccess).not.toHaveBeenCalled();
+    expect(
+      wrapper.get('[data-testid="admin-api-key-create"]').attributes("disabled"),
+    ).toBeUndefined();
+  });
+
+  it("shows a dedicated message when admin API key step-up is blocked", async () => {
+    regenerateAdminApiKey.mockRejectedValue({
+      status: 403,
+      reason: "STEP_UP_TOTP_NOT_ENABLED",
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    await wrapper.get('[data-testid="admin-api-key-create"]').trigger("click");
+    await flushPromises();
+
+    expect(showError).toHaveBeenCalledWith("stepUp.notEnabled");
+    expect(showSuccess).not.toHaveBeenCalled();
+  });
+
+  it("retries admin API key deletion after successful step-up verification", async () => {
+    getAdminApiKey.mockResolvedValue({
+      exists: true,
+      masked_key: "sk-admin...7890",
+    });
+    deleteAdminApiKey
+      .mockRejectedValueOnce({ status: 403, code: "STEP_UP_REQUIRED" })
+      .mockResolvedValueOnce({ message: "deleted" });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    await wrapper.get('[data-testid="admin-api-key-delete"]').trigger("click");
+    await flushPromises();
+
+    expect(deleteAdminApiKey).toHaveBeenCalledTimes(1);
+    await completeStepUp(wrapper, "654321");
+
+    expect(stepUpTotp).toHaveBeenCalledWith("654321");
+    expect(deleteAdminApiKey).toHaveBeenCalledTimes(2);
+    expect(showSuccess).toHaveBeenCalledWith(
+      "admin.settings.adminApiKey.keyDeleted",
+    );
+    expect(wrapper.find('[data-testid="admin-api-key-create"]').exists()).toBe(
+      true,
+    );
+    confirmSpy.mockRestore();
   });
 
   it("does not render legacy visible payment method controls", async () => {

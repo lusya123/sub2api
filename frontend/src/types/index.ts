@@ -1444,13 +1444,12 @@ export interface UsageLog {
   cache_creation_5m_tokens: number
   cache_creation_1h_tokens: number
 
-  input_cost: number
-  output_cost: number
-  cache_creation_cost: number
-  cache_read_cost: number
-  total_cost: number
+  show_cost_breakdown?: boolean
+  input_cost?: number
+  output_cost?: number
+  cache_creation_cost?: number
+  cache_read_cost?: number
   actual_cost: number
-  rate_multiplier: number
   long_context_billing_applied: boolean
   billing_type: number
 
@@ -1468,9 +1467,9 @@ export interface UsageLog {
   image_size_source: ImageSizeSource | null
   image_size_breakdown: ImageSizeBreakdown | null
   image_input_tokens: number
-  image_input_cost: number
+  image_input_cost?: number
   image_output_tokens: number
-  image_output_cost: number
+  image_output_cost?: number
 
   // User-Agent
   user_agent: string | null
@@ -1496,6 +1495,15 @@ export interface UsageLogAccountSummary {
 }
 
 export interface AdminUsageLog extends UsageLog {
+  // Admin usage always includes the complete standard-cost breakdown.
+  input_cost: number
+  output_cost: number
+  cache_creation_cost: number
+  cache_read_cost: number
+  image_input_cost: number
+  image_output_cost: number
+  total_cost: number
+  rate_multiplier: number
   upstream_model?: string | null
   model_mapping_chain?: string | null
 
@@ -1665,7 +1673,7 @@ export interface TrendDataPoint {
   cache_creation_tokens: number
   cache_read_tokens: number
   total_tokens: number
-  cost: number // 标准计费
+  cost?: number // 标准计费（普通用户接口不返回）
   actual_cost: number // 实际扣除
 }
 
@@ -1677,7 +1685,7 @@ export interface ModelStat {
   cache_creation_tokens: number
   cache_read_tokens: number
   total_tokens: number
-  cost: number // 标准计费
+  cost?: number // 标准计费（普通用户接口不返回）
   actual_cost: number // 实际扣除
   account_cost?: number // 账号成本（仅管理员接口返回）
 }
@@ -1695,7 +1703,7 @@ export interface GroupStat {
   group_name: string
   requests: number
   total_tokens: number
-  cost: number // 标准计费
+  cost?: number // 标准计费（普通用户接口不返回）
   actual_cost: number // 实际扣除
   account_cost?: number // 账号成本（仅管理员接口返回）
 }

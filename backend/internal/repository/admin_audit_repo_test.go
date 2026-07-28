@@ -19,12 +19,12 @@ func TestAdminAuditRepositoryListHydratesUserRefs(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
 
 	rows := sqlmock.NewRows([]string{
-		"id", "created_at", "actor_user_id", "actor_email", "actor_role", "method", "route_template", "path",
+		"id", "created_at", "actor_user_id", "actor_email", "actor_role", "auth_method", "credential_masked", "method", "route_template", "path",
 		"module", "action", "action_type", "target_type", "target_id", "status_code", "success",
 		"error_code", "error_message", "ip_address", "user_agent", "summary",
 		"query_params", "request_body", "duration_ms",
 	}).AddRow(
-		int64(100), createdAt, int64(1), "admin@example.com", service.RoleAdmin, "POST",
+		int64(100), createdAt, int64(1), "admin@example.com", service.RoleAdmin, service.AuditAuthMethodJWT, "eyJhbG****test", "POST",
 		"/api/v1/admin/subscriptions/bulk-assign", "/api/v1/admin/subscriptions/bulk-assign",
 		"subscriptions", "subscriptions.write.bulk_assign", "write", "user", int64(42), 200, true,
 		"", "", "127.0.0.1", "test-agent", "bulk assign",
@@ -47,6 +47,8 @@ func TestAdminAuditRepositoryListHydratesUserRefs(t *testing.T) {
 	result, err := repo.List(context.Background(), &service.AdminAuditLogFilter{Page: 1, PageSize: 20})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
+	require.Equal(t, service.AuditAuthMethodJWT, result.Logs[0].AuthMethod)
+	require.Equal(t, "eyJhbG****test", result.Logs[0].CredentialMasked)
 	require.Equal(t, map[int64]string{
 		42: "target@example.com",
 		43: "single@example.com",

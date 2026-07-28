@@ -68,5 +68,6 @@ func TestAuthRoutesRateLimitFailCloseWhenRedisUnavailable(t *testing.T) {
 
 		require.Equal(t, http.StatusTooManyRequests, w.Code, "path=%s", path)
 		require.Contains(t, w.Body.String(), "rate limit exceeded", "path=%s", path)
+		require.Equal(t, "60", w.Header().Get("Retry-After"), "path=%s", path)
 	}
 }

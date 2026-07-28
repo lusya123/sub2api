@@ -357,4 +357,52 @@ describe('OperationDashboardView', () => {
     expect(wrapper.text()).toContain('admin.operations.title')
     expect(wrapper.text()).toContain('$12.34')
   })
+
+  it('deeply normalizes null collection fields returned by an empty database', async () => {
+    const emptyDatabaseSnapshot = {
+      ...snapshot,
+      trend: null,
+      funnel: null,
+      funnel_previous: null,
+      cohorts: null,
+      advice: null,
+      lists: {
+        high_spending: null,
+        silent_high_value: null,
+        benefit_idle: null,
+        expiring_soon: null,
+        new_inactive: null
+      },
+      distribution: {
+        groups: null,
+        models: null,
+        api_keys: null,
+        promos: null,
+        redeem_types: null
+      },
+      churn: {
+        ...snapshot.churn,
+        history: null
+      },
+      pyramid: {
+        ...snapshot.pyramid,
+        levels: null
+      },
+      financial: {
+        ...snapshot.financial,
+        arpu_history: null
+      },
+      product_matrix: {
+        plans: null,
+        models: null
+      }
+    }
+    getSnapshot.mockResolvedValue(emptyDatabaseSnapshot)
+
+    const wrapper = mount(OperationDashboardView, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.operations.title')
+    expect(wrapper.text()).toContain('admin.operations.empty')
+  })
 })

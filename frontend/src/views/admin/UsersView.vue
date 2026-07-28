@@ -245,7 +245,7 @@
             </div>
 
             <button
-              v-if="selectedCount > 0"
+              v-if="authStore.isAdmin && selectedCount > 0"
               class="btn btn-secondary flex-1 md:flex-initial"
               data-test="bulk-edit-limits"
               @click="showBulkEditModal = true"
@@ -270,7 +270,7 @@
           :data="sortedUsers"
           :loading="loading"
           row-key="id"
-          selectable
+          :selectable="authStore.isAdmin"
           :selected-keys="selectedIds"
           :selection-label="getUserSelectionLabel"
           :actions-count="7"
@@ -427,13 +427,20 @@
             <div class="flex items-center gap-2">
               <div class="group relative">
                 <button
+                  v-if="canOperateUser(row)"
                   class="font-medium text-gray-900 underline decoration-dashed decoration-gray-300 underline-offset-4 transition-colors hover:text-primary-600 dark:text-white dark:decoration-dark-500 dark:hover:text-primary-400"
                   @click="handleBalanceHistory(row)"
                 >
                   ${{ value.toFixed(2) }}
                 </button>
+                <span v-else class="font-medium text-gray-900 dark:text-white">
+                  ${{ value.toFixed(2) }}
+                </span>
                 <!-- Instant tooltip -->
-                <div class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover:opacity-100 dark:bg-dark-600">
+                <div
+                  v-if="canOperateUser(row)"
+                  class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover:opacity-100 dark:bg-dark-600"
+                >
                   {{ t('admin.users.balanceHistoryTip') }}
                   <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-dark-600"></div>
                 </div>
@@ -451,6 +458,7 @@
 
           <template #cell-balance_platform_quota="{ row }">
             <button
+              v-if="authStore.isAdmin"
               type="button"
               class="block text-left underline decoration-dashed decoration-gray-300 underline-offset-4 transition-colors hover:decoration-primary-400 dark:decoration-dark-500"
               :title="t('admin.users.platformQuota.cellColumnTooltip')"
@@ -458,6 +466,7 @@
             >
               <UserPlatformQuotaCell :quotas="platformQuotaStats[row.id]" />
             </button>
+            <UserPlatformQuotaCell v-else :quotas="platformQuotaStats[row.id]" />
           </template>
 
           <!-- 用量列自定义表头：列名 + 单个排序图标按钮，点击展开"今日/近30天"菜单。
@@ -632,6 +641,7 @@
 
               <!-- More Actions Menu Trigger -->
               <button
+                v-if="canOperateUser(row)"
                 @click="openActionMenu(row, $event)"
                 class="action-menu-trigger flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white"
                 :class="{ 'bg-gray-100 text-gray-900 dark:bg-dark-700 dark:text-white': activeMenuId === row.id }"
@@ -722,6 +732,7 @@
 
               <!-- Platform Quotas -->
               <button
+                v-if="authStore.isAdmin"
                 @click="handlePlatformQuota(user); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -741,6 +752,7 @@
 
               <button
                 v-if="authStore.isAdmin && user.role === 'user'"
+                data-testid="delegate-operator"
                 @click="handleUpdateRole(user, 'operator'); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -750,6 +762,7 @@
 
               <button
                 v-if="authStore.isAdmin && user.role === 'operator'"
+                data-testid="revoke-operator"
                 @click="handleUpdateRole(user, 'user'); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -775,8 +788,19 @@
     </Teleport>
 
     <ConfirmDialog :show="showDeleteDialog" :title="t('admin.users.deleteUser')" :message="t('admin.users.deleteConfirm', { email: deletingUser?.email })" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
-    <UserCreateModal :show="showCreateModal" @close="showCreateModal = false" @success="loadUsers" />
-    <UserEditModal :show="showEditModal" :user="editingUser" @close="closeEditModal" @success="loadUsers" />
+    <UserCreateModal
+      :show="showCreateModal"
+      :can-manage-admin-role="authStore.isAdmin"
+      @close="showCreateModal = false"
+      @success="loadUsers"
+    />
+    <UserEditModal
+      :show="showEditModal"
+      :user="editingUser"
+      :can-manage-admin-role="authStore.isAdmin"
+      @close="closeEditModal"
+      @success="loadUsers"
+    />
     <BulkEditUserModal
       :show="showBulkEditModal"
       :selected-ids="selectedIds"
@@ -789,12 +813,18 @@
       @close="closePlatformQuotaModal"
       @success="loadUsers"
     />
-    <UserApiKeysModal :show="showApiKeysModal" :user="viewingUser" @close="closeApiKeysModal" />
+    <UserApiKeysModal
+      :show="showApiKeysModal"
+      :user="viewingUser"
+      :can-edit-group="authStore.isAdmin"
+      @close="closeApiKeysModal"
+    />
     <UserAllowedGroupsModal :show="showAllowedGroupsModal" :user="allowedGroupsUser" @close="closeAllowedGroupsModal" @success="loadUsers" />
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
     <UserAttributesConfigModal :show="showAttributesModal" @close="handleAttributesModalClose" />
+    <TotpStepUpDialog :controller="roleStepUp" />
   </AppLayout>
 </template>
 
@@ -805,8 +835,15 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useTableSelection } from '@/composables/useTableSelection'
+import {
+  isStepUpBlocked,
+  isStepUpCancelled,
+  stepUpBlockReason,
+  useStepUp
+} from '@/composables/useStepUp'
 import { formatDateTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
+import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 
 const { t } = useI18n()
 import { adminAPI } from '@/api/admin'
@@ -841,6 +878,19 @@ import GroupReplaceModal from '@/components/admin/user/GroupReplaceModal.vue'
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const roleStepUp = useStepUp()
+
+const handleRoleStepUpError = (error: unknown): boolean => {
+  if (isStepUpCancelled(error)) return true
+  if (!isStepUpBlocked(error)) return false
+
+  appStore.showError(
+    stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN'
+      ? t('stepUp.adminApiKeyForbidden')
+      : t('stepUp.notEnabled')
+  )
+  return true
+}
 
 const canOperateUser = (user: AdminUser) => authStore.isAdmin || user.role === 'user'
 
@@ -908,7 +958,9 @@ const allColumns = computed<Column[]>(() => [
   { key: 'groups', label: t('admin.users.columns.groups'), sortable: false },
   { key: 'subscriptions', label: t('admin.users.columns.subscriptions'), sortable: false },
   { key: 'balance', label: t('admin.users.columns.balance'), sortable: true },
-  { key: 'balance_platform_quota', label: t('admin.users.columns.balancePlatformQuota'), sortable: false },
+  ...(authStore.isAdmin
+    ? [{ key: 'balance_platform_quota', label: t('admin.users.columns.balancePlatformQuota'), sortable: false }]
+    : []),
   { key: 'usage', label: t('admin.users.columns.usage'), sortable: false },
   { key: 'usage_anthropic', label: t('admin.users.columns.usageAnthropic'), sortable: false },
   { key: 'usage_openai', label: t('admin.users.columns.usageOpenAI'), sortable: false },
@@ -1044,7 +1096,9 @@ const hasVisibleUsageColumn = computed(
   () => !hiddenColumns.has('usage') || PLATFORM_USAGE_COLUMNS.some((k) => !hiddenColumns.has(k))
 )
 const hasVisibleGroupsColumn = computed(() => !hiddenColumns.has('groups'))
-const hasVisiblePlatformQuotaColumn = computed(() => !hiddenColumns.has('balance_platform_quota'))
+const hasVisiblePlatformQuotaColumn = computed(
+  () => authStore.isAdmin && !hiddenColumns.has('balance_platform_quota')
+)
 const hasVisibleAttributeColumns = computed(() =>
   attributeDefinitions.value.some((def) => def.enabled && !hiddenColumns.has(`attr_${def.id}`))
 )
@@ -1368,6 +1422,7 @@ const viewingUser = ref<AdminUser | null>(null)
 const platformQuotaUser = ref<AdminUser | null>(null)
 
 const handlePlatformQuota = (user: AdminUser) => {
+  if (!authStore.isAdmin) return
   platformQuotaUser.value = user
   showPlatformQuotaModal.value = true
 }
@@ -1420,7 +1475,7 @@ const loadUsersSecondaryData = async (
     )
   }
 
-  if (hasVisiblePlatformQuotaColumn.value) {
+  if (authStore.isAdmin && hasVisiblePlatformQuotaColumn.value) {
     tasks.push(
       (async () => {
         try {
@@ -1772,11 +1827,13 @@ const handleToggleStatus = async (user: AdminUser) => {
 
 const handleUpdateRole = async (user: AdminUser, role: 'operator' | 'user') => {
   try {
-    await adminAPI.users.updateRole(user.id, role)
+    await roleStepUp.run(() => adminAPI.users.updateRole(user.id, role))
     appStore.showSuccess(role === 'operator' ? t('admin.users.operatorDelegated') : t('admin.users.operatorRevoked'))
     loadUsers()
-  } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.users.failedToUpdateRole'))
+  } catch (error: unknown) {
+    if (handleRoleStepUpError(error)) return
+    const apiError = error as { response?: { data?: { detail?: string } } }
+    appStore.showError(apiError.response?.data?.detail || t('admin.users.failedToUpdateRole'))
   }
 }
 

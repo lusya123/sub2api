@@ -44,7 +44,10 @@ type FrontendServer struct {
 	overrideDir string // local file override directory
 }
 
-const indexHTMLCacheControl = "no-cache, must-revalidate"
+// index.html contains per-request CSP nonces. It must not be stored by browsers
+// or intermediaries, otherwise a cached body can be paired with a newly
+// generated Content-Security-Policy header whose nonce does not match.
+const indexHTMLCacheControl = "no-store"
 
 // NewFrontendServer creates a new frontend server with settings injection
 func NewFrontendServer(settingsProvider PublicSettingsProvider) (*FrontendServer, error) {
@@ -170,17 +173,9 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	// Check cache first
 	cached := s.cache.Get()
 	if cached != nil {
-		// Check If-None-Match for 304 response
-		if match := c.GetHeader("If-None-Match"); match == cached.ETag {
-			c.Status(http.StatusNotModified)
-			c.Abort()
-			return
-		}
-
 		// Replace nonce placeholder with actual nonce before serving
 		content := replaceNoncePlaceholder(cached.Content, nonce)
 
-		c.Header("ETag", cached.ETag)
 		c.Header("Cache-Control", indexHTMLCacheControl)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 		c.Abort()
@@ -229,10 +224,6 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	// Replace nonce placeholder with actual nonce before serving
 	content := replaceNoncePlaceholder(rendered, nonce)
 
-	cached = s.cache.Get()
-	if cached != nil {
-		c.Header("ETag", cached.ETag)
-	}
 	c.Header("Cache-Control", indexHTMLCacheControl)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()

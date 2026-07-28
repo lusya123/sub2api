@@ -8,7 +8,9 @@ const custom = {
     "modelMarketplace": "Model Marketplace",
     "operations": "Operations",
     "liveGlobe": "Live Globe",
-    "auditLogs": "Audit Logs"
+    "auditLogs": "Audit Logs",
+    "operationAuditLogs": "Operation Audit Logs",
+    "securityAuditLogs": "Security Audit Logs"
   },
   "clientInstallPage": {
     "title": "One-Click Deploy",
@@ -18,7 +20,10 @@ const custom = {
     "selectKeyTitle": "Select API Key",
     "selectKeyDescription": "Choose the API key on the left. The deployment command on the right updates immediately.",
     "searchPlaceholder": "Search by key name, group, or API key",
-    "panelDescription": "Current group: {group}"
+    "panelDescription": "Current group: {group}",
+    "loadErrorTitle": "Could not load deployment settings",
+    "loadErrorDescription": "Your API keys or public settings could not be loaded. Please try again.",
+    "retry": "Retry"
   },
   "auth": {
     "errors": {
@@ -598,6 +603,8 @@ const custom = {
       "result": "Result",
       "duration": "Duration",
       "ip": "IP Address",
+      "authMethod": "Authentication method",
+      "credentialMasked": "Credential (masked)",
       "failedToLoad": "Failed to load audit logs",
       "success": "Success",
       "failed": "Failed",

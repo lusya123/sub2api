@@ -26,18 +26,20 @@ func (r *adminAuditRepository) Insert(ctx context.Context, input *service.AdminA
 	}
 	const q = `
 INSERT INTO admin_audit_logs (
-	created_at, actor_user_id, actor_email, actor_role, method, route_template, path,
+	created_at, actor_user_id, actor_email, actor_role, auth_method, credential_masked, method, route_template, path,
 	module, action, action_type, target_type, target_id, status_code, success,
 	error_code, error_message, ip_address, user_agent, summary, query_params,
 	request_body, duration_ms
 ) VALUES (
-	$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21::jsonb,$22
+	$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::jsonb,$23::jsonb,$24
 )`
 	_, err := r.db.ExecContext(ctx, q,
 		input.CreatedAt,
 		input.ActorUserID,
 		input.ActorEmail,
 		input.ActorRole,
+		input.AuthMethod,
+		input.CredentialMasked,
 		input.Method,
 		input.RouteTemplate,
 		input.Path,
@@ -73,7 +75,7 @@ func (r *adminAuditRepository) List(ctx context.Context, filter *service.AdminAu
 	offset := (page - 1) * pageSize
 	args = append(args, pageSize, offset)
 	querySQL := `
-SELECT id, created_at, actor_user_id, actor_email, actor_role, method, route_template, path,
+SELECT id, created_at, actor_user_id, actor_email, actor_role, auth_method, credential_masked, method, route_template, path,
 	module, action, action_type, target_type, target_id, status_code, success,
 	error_code, error_message, ip_address, user_agent, summary,
 	COALESCE(query_params, '{}'::jsonb)::text,
@@ -106,7 +108,7 @@ FROM admin_audit_logs l` + where + fmt.Sprintf(" ORDER BY created_at DESC, id DE
 
 func (r *adminAuditRepository) GetByID(ctx context.Context, id int64) (*service.AdminAuditLog, error) {
 	const q = `
-SELECT id, created_at, actor_user_id, actor_email, actor_role, method, route_template, path,
+SELECT id, created_at, actor_user_id, actor_email, actor_role, auth_method, credential_masked, method, route_template, path,
 	module, action, action_type, target_type, target_id, status_code, success,
 	error_code, error_message, ip_address, user_agent, summary,
 	COALESCE(query_params, '{}'::jsonb)::text,
@@ -230,6 +232,8 @@ func scanAdminAuditLog(scanner adminAuditScanner) (*service.AdminAuditLog, error
 		&item.ActorUserID,
 		&item.ActorEmail,
 		&item.ActorRole,
+		&item.AuthMethod,
+		&item.CredentialMasked,
 		&item.Method,
 		&item.RouteTemplate,
 		&item.Path,

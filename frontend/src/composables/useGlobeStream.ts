@@ -80,6 +80,7 @@ export function useGlobeStream(options: UseGlobeStreamOptions = {}) {
   let pollTimer: number | null = null
   let summaryTimer: number | null = null
   let watchdog: number | null = null
+  let liveFeedStartedAt: number | null = null
 
   // Resolve API base — same origin in production, proxy in dev.
   const base = '/api/public/globe'
@@ -143,6 +144,8 @@ export function useGlobeStream(options: UseGlobeStreamOptions = {}) {
     es?.close()
     es = null
     connected.value = false
+    lastEventAt.value = 0
+    liveFeedStartedAt = null
   }
 
   const stopPolling = () => {
@@ -158,6 +161,7 @@ export function useGlobeStream(options: UseGlobeStreamOptions = {}) {
       return startPolling()
     }
     try {
+      liveFeedStartedAt = Date.now()
       es = new EventSource(`${base}/stream`)
       es.addEventListener('open', () => {
         connected.value = true
@@ -167,9 +171,14 @@ export function useGlobeStream(options: UseGlobeStreamOptions = {}) {
         try {
           const data = normalizeSnapshot(JSON.parse(ev.data))
           if (data) {
+            const receivedAt = Date.now()
             snapshot.value = data
-            lastEventAt.value = Date.now()
+            lastEventAt.value = receivedAt
+            liveFeedStartedAt = receivedAt
             connected.value = true
+            // Polling is only a degraded-mode safety net. Once this SSE
+            // connection recovers, stop the parallel REST interval.
+            stopPolling()
           }
         } catch {
           /* corrupt payload — ignore this frame */
@@ -208,7 +217,8 @@ export function useGlobeStream(options: UseGlobeStreamOptions = {}) {
     // Watchdog: if no 5-minute frame arrives, kick polling as a safety net.
     watchdog = window.setInterval(() => {
       const now = Date.now()
-      if (getMode() === 'live' && lastEventAt.value && now - lastEventAt.value > WATCHDOG_STALE_MS) {
+      const connectionBaseline = Math.max(lastEventAt.value, liveFeedStartedAt ?? 0)
+      if (getMode() === 'live' && liveFeedStartedAt !== null && now - connectionBaseline > WATCHDOG_STALE_MS) {
         startPolling()
       }
     }, 30_000)

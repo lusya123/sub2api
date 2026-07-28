@@ -122,3 +122,18 @@ func TestAdminService_UpdateUserAcceptsValidGroupRates(t *testing.T) {
 	require.True(t, rateRepo.getByUserIDCalled)
 	require.Equal(t, map[int64]float64{10: rate}, user.GroupRates)
 }
+
+func TestAdminService_UpdateUserRejectsDisablingAdminWithoutMutation(t *testing.T) {
+	userRepo := &userRepoStubForUpdateUser{
+		userRepoStub: userRepoStub{user: &User{ID: 1, Email: "admin@example.com", Role: RoleAdmin, Status: StatusActive}},
+	}
+	svc := &adminServiceImpl{userRepo: userRepo}
+
+	got, err := svc.UpdateUser(context.Background(), 1, &UpdateUserInput{Status: StatusDisabled})
+
+	require.Nil(t, got)
+	require.ErrorIs(t, err, ErrAdminUserDisableProtected)
+	require.True(t, infraerrors.IsConflict(err))
+	require.Empty(t, userRepo.updated, "protected admin must not be persisted")
+	require.Equal(t, StatusActive, userRepo.user.Status, "protected admin must remain active in memory")
+}

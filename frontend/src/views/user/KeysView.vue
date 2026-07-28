@@ -1131,6 +1131,7 @@
 	import { useAppStore } from '@/stores/app'
 	import { useOnboardingStore } from '@/stores/onboarding'
 	import { useClipboard } from '@/composables/useClipboard'
+import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
@@ -1184,6 +1185,7 @@ const router = useRouter()
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
+const { refreshBatchImageAccess } = useBatchImageAccess()
 
 const allColumns = computed<Column[]>(() => [
   { key: 'name', label: t('common.name'), sortable: true },
@@ -1601,6 +1603,7 @@ const toggleKeyStatus = async (key: ApiKey) => {
   const newStatus = key.status === 'active' ? 'inactive' : 'active'
   try {
     await keysAPI.toggleStatus(key.id, newStatus)
+    await refreshBatchImageAccess()
     appStore.showSuccess(
       newStatus === 'active' ? t('keys.keyEnabledSuccess') : t('keys.keyDisabledSuccess')
     )
@@ -1648,6 +1651,7 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
 
   try {
     await keysAPI.update(key.id, { group_id: newGroupId })
+    await refreshBatchImageAccess()
     appStore.showSuccess(t('keys.groupChangedSuccess'))
     loadApiKeys()
   } catch (error) {
@@ -1763,6 +1767,7 @@ const handleSubmit = async () => {
         onboardingStore.nextStep(500)
       }
     }
+    await refreshBatchImageAccess()
     closeModals()
     loadApiKeys()
   } catch (error: any) {
@@ -1784,6 +1789,7 @@ const handleDelete = async () => {
 
   try {
     await keysAPI.delete(selectedKey.value.id)
+    await refreshBatchImageAccess()
     appStore.showSuccess(t('keys.keyDeletedSuccess'))
     showDeleteDialog.value = false
     loadApiKeys()
@@ -1838,6 +1844,7 @@ const resetQuotaUsed = async () => {
   showResetQuotaDialog.value = false
   try {
     await keysAPI.update(selectedKey.value.id, { reset_quota: true })
+    await refreshBatchImageAccess()
     appStore.showSuccess(t('keys.quotaResetSuccess'))
     // Update local state
     if (selectedKey.value) {
@@ -1966,6 +1973,7 @@ function formatResetTime(resetAt: string | null): string {
 
 onMounted(() => {
   loadSavedColumns()
+  void refreshBatchImageAccess()
   loadApiKeys()
   loadGroups()
   loadUserGroupRates()

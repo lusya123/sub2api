@@ -7,6 +7,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // RegisterPaymentRoutes registers all payment-related routes:
@@ -18,6 +19,8 @@ func RegisterPaymentRoutes(
 	adminPaymentHandler *admin.PaymentHandler,
 	jwtAuth middleware.JWTAuthMiddleware,
 	adminAuth middleware.AdminAuthMiddleware,
+	adminAuditService *service.AdminAuditService,
+	redisClient *redis.Client,
 	auditLog middleware.AuditLogMiddleware,
 	settingService *service.SettingService,
 ) {
@@ -67,6 +70,8 @@ func RegisterPaymentRoutes(
 
 	// --- Admin payment endpoints (admin auth) ---
 	adminGroup := v1.Group("/admin/payment")
+	adminGroup.Use(middleware.AdminAuditMiddleware(adminAuditService))
+	adminGroup.Use(middleware.AdminAuthFailureRecorder(redisClient))
 	adminGroup.Use(gin.HandlerFunc(adminAuth))
 	adminGroup.Use(middleware.AdminPermissionGuard())
 	adminGroup.Use(gin.HandlerFunc(auditLog))

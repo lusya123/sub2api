@@ -5,6 +5,22 @@
         <div class="h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
       </div>
 
+      <section
+        v-else-if="loadError"
+        role="alert"
+        class="card p-6 text-center sm:p-8"
+      >
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+          {{ t('clientInstallPage.loadErrorTitle') }}
+        </h2>
+        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          {{ loadError }}
+        </p>
+        <button type="button" class="btn btn-primary mt-5" @click="loadData">
+          {{ t('clientInstallPage.retry') }}
+        </button>
+      </section>
+
       <EmptyState
         v-else-if="supportedKeys.length === 0"
         :title="t('clientInstallPage.noKeysTitle')"
@@ -101,11 +117,13 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import ClientInstallPanel from '@/components/keys/ClientInstallPanel.vue'
 import type { ApiKey, PublicSettings } from '@/types'
+import { extractApiErrorMessage } from '@/utils/apiError'
 
 const { t } = useI18n()
 const route = useRoute()
 
 const loading = ref(false)
+const loadError = ref('')
 const search = ref('')
 const apiKeys = ref<ApiKey[]>([])
 const selectedKey = ref<ApiKey | null>(null)
@@ -160,6 +178,7 @@ function syncSelectedKey() {
 
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
     const [keys, settings] = await Promise.all([
       keysAPI.list(1, 200),
@@ -168,6 +187,11 @@ async function loadData() {
     apiKeys.value = keys.items || []
     publicSettings.value = settings
     syncSelectedKey()
+  } catch (error) {
+    apiKeys.value = []
+    publicSettings.value = null
+    selectedKey.value = null
+    loadError.value = extractApiErrorMessage(error, t('clientInstallPage.loadErrorDescription'))
   } finally {
     loading.value = false
   }

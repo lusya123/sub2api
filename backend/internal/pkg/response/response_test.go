@@ -626,6 +626,12 @@ func TestParsePagination(t *testing.T) {
 			wantPageSize: 20,
 		},
 		{
+			name:         "page为负数_使用默认值",
+			query:        "page=-3",
+			wantPage:     1,
+			wantPageSize: 20,
+		},
+		{
 			name:         "page_size超过1000_使用默认值",
 			query:        "page_size=1001",
 			wantPage:     1,
@@ -662,8 +668,20 @@ func TestParsePagination(t *testing.T) {
 			wantPageSize: 20,
 		},
 		{
+			name:         "page_size为负数_使用默认值",
+			query:        "page_size=-10",
+			wantPage:     1,
+			wantPageSize: 20,
+		},
+		{
 			name:         "limit为0_使用默认值",
 			query:        "limit=0",
+			wantPage:     1,
+			wantPageSize: 20,
+		},
+		{
+			name:         "limit为负数_使用默认值",
+			query:        "limit=-10",
 			wantPage:     1,
 			wantPageSize: 20,
 		},

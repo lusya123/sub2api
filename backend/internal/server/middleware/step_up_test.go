@@ -33,10 +33,11 @@ func (s stubStepUpUserReader) GetByID(ctx context.Context, id int64) (*service.U
 
 type stubStepUpSettingReader struct {
 	enabled bool
+	err     error
 }
 
-func (s stubStepUpSettingReader) IsStepUpEnabled(ctx context.Context) bool {
-	return s.enabled
+func (s stubStepUpSettingReader) GetStepUpEnabled(ctx context.Context) (bool, error) {
+	return s.enabled, s.err
 }
 
 // stepUpEnabled 功能开关开启的设置桩，供既有门控分支测试使用。
@@ -88,6 +89,22 @@ func TestEnforceStepUpFailsClosedOnGrantError(t *testing.T) {
 	c.Set(string(ContextKeyUser), AuthSubject{UserID: 1})
 
 	ok := enforceStepUp(c, stubStepUpGrantChecker{err: errors.New("redis down")}, stubStepUpUserReader{user: &service.User{ID: 1, TotpEnabled: true}}, stepUpEnabled)
+
+	require.False(t, ok)
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	require.Contains(t, rec.Body.String(), "STEP_UP_UNAVAILABLE")
+}
+
+func TestEnforceStepUpFailsClosedOnSettingReadError(t *testing.T) {
+	c, rec := newStepUpTestContext(t)
+	c.Set(string(ContextKeyUser), AuthSubject{UserID: 1})
+
+	ok := enforceStepUp(
+		c,
+		stubStepUpGrantChecker{granted: true},
+		stubStepUpUserReader{user: &service.User{ID: 1, TotpEnabled: true}},
+		stubStepUpSettingReader{err: errors.New("settings database down")},
+	)
 
 	require.False(t, ok)
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)

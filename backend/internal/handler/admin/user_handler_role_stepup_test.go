@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -28,10 +30,17 @@ func setupRoleStepUpRouter(t *testing.T) (*gin.Engine, *stubAdminService) {
 		Role:   service.RoleAdmin,
 		Status: service.StatusActive,
 	})
+	adminSvc.users = append(adminSvc.users, service.User{
+		ID:     3,
+		Email:  "operator@example.com",
+		Role:   service.RoleOperator,
+		Status: service.StatusActive,
+	})
 
 	h := NewUserHandler(adminSvc, nil, nil, nil, nil, nil, nil)
 	router.POST("/api/v1/admin/users", h.Create)
 	router.PUT("/api/v1/admin/users/:id", h.Update)
+	router.PUT("/api/v1/admin/users/:id/role", h.UpdateRole)
 	return router, adminSvc
 }
 
@@ -60,6 +69,20 @@ func TestUpdateUserKeepAdminRoleSkipsStepUp(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestUpdateUserDemoteAdminRequiresStepUp(t *testing.T) {
+	router, _ := setupRoleStepUpRouter(t)
+
+	rec := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/2", map[string]any{"role": "user"})
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestUpdateUserAdminPasswordChangeRequiresStepUpWhenRoleOmitted(t *testing.T) {
+	router, _ := setupRoleStepUpRouter(t)
+
+	rec := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/2", map[string]any{"password": "new-pass-123"})
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
 func TestUpdateUserRegularRoleSkipsStepUp(t *testing.T) {
 	router, _ := setupRoleStepUpRouter(t)
 
@@ -83,4 +106,86 @@ func TestCreateRegularUserSkipsStepUp(t *testing.T) {
 		"email": "new-user@example.com", "password": "pass123", "role": "user",
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestDelegateOperatorRequiresStepUp(t *testing.T) {
+	router, _ := setupRoleStepUpRouter(t)
+
+	rec := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/1/role", map[string]any{"role": "operator"})
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestRevokeOperatorSkipsStepUp(t *testing.T) {
+	router, _ := setupRoleStepUpRouter(t)
+
+	rec := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/3/role", map[string]any{"role": "user"})
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestOperatorCannotCreateOrPromoteSuperAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adminSvc := newStubAdminService()
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUserRole), service.RoleOperator)
+		c.Next()
+	})
+	h := NewUserHandler(adminSvc, nil, nil, nil, nil, nil, nil)
+	router.POST("/api/v1/admin/users", h.Create)
+	router.PUT("/api/v1/admin/users/:id", h.Update)
+
+	tests := []struct {
+		name    string
+		method  string
+		path    string
+		payload map[string]any
+	}{
+		{
+			name:   "create super admin",
+			method: http.MethodPost,
+			path:   "/api/v1/admin/users",
+			payload: map[string]any{
+				"email": "operator-created-admin@example.com", "password": "pass123", "role": "admin",
+			},
+		},
+		{
+			name:    "promote regular user",
+			method:  http.MethodPut,
+			path:    "/api/v1/admin/users/1",
+			payload: map[string]any{"role": "admin"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := doJSON(t, router, tt.method, tt.path, tt.payload)
+			require.Equal(t, http.StatusForbidden, rec.Code)
+			var got response.Response
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+			require.Equal(t, "OPERATOR_ROLE_ESCALATION_FORBIDDEN", got.Reason)
+		})
+	}
+}
+
+func TestOperatorCanStillCreateAndEditRegularUsers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adminSvc := newStubAdminService()
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUserRole), service.RoleOperator)
+		c.Next()
+	})
+	h := NewUserHandler(adminSvc, nil, nil, nil, nil, nil, nil)
+	router.POST("/api/v1/admin/users", h.Create)
+	router.PUT("/api/v1/admin/users/:id", h.Update)
+
+	created := doJSON(t, router, http.MethodPost, "/api/v1/admin/users", map[string]any{
+		"email": "operator-created-user@example.com", "password": "pass123", "role": "user",
+	})
+	require.Equal(t, http.StatusOK, created.Code)
+
+	updated := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/1", map[string]any{
+		"role": "user", "username": "operator-edited",
+	})
+	require.Equal(t, http.StatusOK, updated.Code)
 }

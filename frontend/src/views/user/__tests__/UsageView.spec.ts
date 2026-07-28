@@ -95,21 +95,30 @@ vi.mock('vue-i18n', async () => {
 
 const simpleStub = { template: '<div><slot /></div>' }
 const chartStub = { template: '<div />' }
+const userModeChartStub = (name: string, testId: string) => ({
+  name,
+  props: {
+    showStandardCost: { type: Boolean, default: true },
+    enableBreakdown: { type: Boolean, default: true },
+  },
+  template: `<div data-testid="${testId}" :data-show-standard-cost="String(showStandardCost)" :data-enable-breakdown="String(enableBreakdown)" />`,
+})
+const modelChartStub = userModeChartStub('ModelDistributionChart', 'model-chart')
+const groupChartStub = userModeChartStub('GroupDistributionChart', 'group-chart')
 const endpointChartStub = {
   name: 'EndpointDistributionChart',
   props: {
-    showStandardCost: Boolean,
-    enableBreakdown: Boolean,
+    showStandardCost: { type: Boolean, default: true },
+    enableBreakdown: { type: Boolean, default: true },
   },
   template: '<div data-testid="endpoint-chart" :data-show-standard-cost="String(showStandardCost)" :data-enable-breakdown="String(enableBreakdown)" />',
 }
+const trendChartStub = userModeChartStub('TokenUsageTrend', 'trend-chart')
 
 const usageLog = {
   id: 1,
   request_id: 'req-user-export',
   actual_cost: 0.092883,
-  total_cost: 0.092883,
-  rate_multiplier: 1,
   service_tier: 'priority',
   input_cost: 0.020285,
   output_cost: 0.00303,
@@ -146,10 +155,10 @@ function mountUsageView() {
         Icon: true,
         UsageStatsCards: chartStub,
         UsageTable: chartStub,
-        ModelDistributionChart: chartStub,
-        GroupDistributionChart: chartStub,
+        ModelDistributionChart: modelChartStub,
+        GroupDistributionChart: groupChartStub,
         EndpointDistributionChart: endpointChartStub,
-        TokenUsageTrend: chartStub,
+        TokenUsageTrend: trendChartStub,
       },
     },
   })
@@ -175,7 +184,6 @@ describe('user UsageView', () => {
       total_output_tokens: 20,
       total_cache_tokens: 0,
       total_tokens: 30,
-      total_cost: 0.1,
       total_actual_cost: 0.08,
       average_duration_ms: 12,
       endpoints: [],
@@ -183,7 +191,7 @@ describe('user UsageView', () => {
       endpoint_paths: [],
     })
     getDashboardModels.mockResolvedValue({
-      models: [{ model: 'gpt-5.4', requests: 1, input_tokens: 10, output_tokens: 20, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 30, cost: 0.1, actual_cost: 0.08 }],
+      models: [{ model: 'gpt-5.4', requests: 1, input_tokens: 10, output_tokens: 20, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 30, actual_cost: 0.08 }],
       start_date: '2026-03-08',
       end_date: '2026-03-08',
     })
@@ -213,8 +221,14 @@ describe('user UsageView', () => {
     }))
     expect(list).toHaveBeenCalledWith(1, 100)
     expect(getAvailable).toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="model-chart"]').attributes('data-show-standard-cost')).toBe('false')
+    expect(wrapper.get('[data-testid="model-chart"]').attributes('data-enable-breakdown')).toBe('false')
+    expect(wrapper.get('[data-testid="group-chart"]').attributes('data-show-standard-cost')).toBe('false')
+    expect(wrapper.get('[data-testid="group-chart"]').attributes('data-enable-breakdown')).toBe('false')
     expect(wrapper.get('[data-testid="endpoint-chart"]').attributes('data-show-standard-cost')).toBe('false')
     expect(wrapper.get('[data-testid="endpoint-chart"]').attributes('data-enable-breakdown')).toBe('false')
+    expect(wrapper.get('[data-testid="trend-chart"]').attributes('data-show-standard-cost')).toBe('false')
+    expect((wrapper.vm as any).requestedModelStats[0]).not.toHaveProperty('cost')
   })
 
   it('exports csv with current filters and without admin-only fields', async () => {
@@ -249,13 +263,14 @@ describe('user UsageView', () => {
     expect(showSuccess).toHaveBeenCalled()
     expect(csvContent.startsWith('\uFEFF')).toBe(true)
     expect(csvContent.slice(1)).toBe([
-      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)',
-      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,"\'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345',
+      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Billed Cost,First Token (ms),Duration (ms)',
+      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,"\'-",,203.0.113.10,Sync,Token,4057,101,278272,4,0.09288300,12,345',
     ].join('\n'))
     expect(csvContent).toContain('IP Address')
     expect(csvContent).toContain('203.0.113.10')
     expect(csvContent).toContain('Billed Cost')
-    expect(csvContent).toContain('Original Cost')
+    expect(csvContent).not.toContain('Original Cost')
+    expect(csvContent).not.toContain('Rate Multiplier')
     expect(csvContent).not.toContain('Upstream Endpoint')
     expect(csvContent).not.toContain('account_cost')
     expect(csvContent).not.toContain('account_rate_multiplier')
@@ -273,7 +288,6 @@ describe('user UsageView', () => {
           ...usageLog,
           request_id: 'req-user-export-legacy-image',
           actual_cost: 0.2,
-          total_cost: 0.2,
           input_cost: 0,
           output_cost: 0,
           cache_creation_cost: 0,

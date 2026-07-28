@@ -441,6 +441,8 @@ const selectedLogContext = computed(() => {
     route: selectedLog.value.route_template,
     path: selectedLog.value.path,
     method: selectedLog.value.method,
+    auth_method: selectedLog.value.auth_method,
+    credential_masked: selectedLog.value.credential_masked,
     summary: selectedLog.value.summary,
     query_params: selectedLog.value.query_params,
     request_body: selectedLog.value.request_body,
@@ -477,6 +479,7 @@ const operationView = (log: AdminAuditLog): OperationView => {
     return op('admin.auditLogs.operations.users.create', { user: valueOrDash(body.email) }, [
       detail('email', body.email),
       detail('username', body.username),
+	  detail('role', body.role ? roleLabel(String(body.role)) : ''),
       detail('initialBalance', money(body.balance)),
       detail('concurrency', body.concurrency),
       detail('allowedGroups', idList(body.allowed_groups)),
@@ -623,6 +626,7 @@ const plainObject = (value: unknown): Record<string, unknown> => {
 const changedUserDetails = (body: Record<string, unknown>) => [
   detail('email', body.email),
   detail('username', body.username),
+	  detail('role', body.role ? roleLabel(String(body.role)) : ''),
   detail('status', statusLabel(body.status)),
   detail('password', Object.prototype.hasOwnProperty.call(body, 'password') ? t('admin.auditLogs.values.changed') : ''),
   detail('balance', money(body.balance)),
@@ -769,6 +773,8 @@ const detailItems = computed(() => {
     { label: t('admin.auditLogs.columns.time'), value: formatDateTime(selectedLog.value.created_at) },
     { label: t('admin.auditLogs.columns.actor'), value: `${selectedLog.value.actor_email || '-'} (#${selectedLog.value.actor_user_id || '-'})` },
     { label: t('admin.auditLogs.columns.role'), value: roleLabel(selectedLog.value.actor_role) },
+    { label: t('admin.auditLogs.authMethod'), value: selectedLog.value.auth_method || '-' },
+    { label: t('admin.auditLogs.credentialMasked'), value: selectedLog.value.credential_masked || '-' },
     { label: t('admin.auditLogs.columns.module'), value: moduleLabel(selectedLog.value.module) },
     { label: t('admin.auditLogs.columns.action'), value: actionTypeLabel(selectedLog.value.action_type) },
     { label: t('admin.auditLogs.columns.target'), value: formatTarget(selectedLog.value) },

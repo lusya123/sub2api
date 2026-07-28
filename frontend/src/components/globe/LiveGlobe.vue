@@ -57,6 +57,10 @@ import {
   pickUSCityBoundaryTargets,
   type USCityBoundaryFeature,
 } from '@/utils/usCityBoundaries'
+import {
+  GLOBE_WEBGL_CONTEXT_OPTIONS,
+  isWebGLContextCreationError,
+} from '@/utils/webgl'
 
 type FeatureCollection = {
   type: 'FeatureCollection'
@@ -78,6 +82,10 @@ const props = withDefaults(
   }>(),
   { detail: 'public', interactive: false },
 )
+
+const emit = defineEmits<{
+  webglUnavailable: []
+}>()
 
 const container = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -1229,12 +1237,18 @@ async function setup() {
   const w = container.value.clientWidth
   const h = container.value.clientHeight
 
-  renderer = new THREE.WebGLRenderer({
-    canvas: canvas.value,
-    antialias: true,
-    alpha: true,
-    powerPreference: 'high-performance',
-  })
+  try {
+    renderer = new THREE.WebGLRenderer({
+      canvas: canvas.value,
+      ...GLOBE_WEBGL_CONTEXT_OPTIONS,
+    })
+  } catch (error) {
+    // Only context-creation failures trigger the 2D fallback. Import errors,
+    // scene bugs and other unexpected failures must remain visible.
+    if (!isWebGLContextCreationError(error)) throw error
+    emit('webglUnavailable')
+    return
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.setSize(w, h, false)
   renderer.setClearColor(0x000000, 0)

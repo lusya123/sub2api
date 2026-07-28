@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 type GlobalRateLimiter struct {
 	rdb           *redis.Client
 	visitorCookie *VisitorCookieManager
+	now           func() time.Time
 }
 
 type PathLevelRateLimiter struct {
@@ -38,12 +40,22 @@ var defaultPathLimits = map[string]pathLimit{
 	"/":                             {limit: 2000, window: time.Minute},
 }
 
+var defenseRateLimitScript = redis.NewScript(`
+local current = redis.call('INCR', KEYS[1])
+local ttl = redis.call('PTTL', KEYS[1])
+if current == 1 or ttl < 0 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+  ttl = redis.call('PTTL', KEYS[1])
+end
+return {current, ttl}
+`)
+
 func NewGlobalRateLimiter(rdb *redis.Client, visitorCookie ...*VisitorCookieManager) *GlobalRateLimiter {
 	mgr := NewVisitorCookieManager(rdb)
 	if len(visitorCookie) > 0 && visitorCookie[0] != nil {
 		mgr = visitorCookie[0]
 	}
-	return &GlobalRateLimiter{rdb: rdb, visitorCookie: mgr}
+	return &GlobalRateLimiter{rdb: rdb, visitorCookie: mgr, now: time.Now}
 }
 
 func NewPathLevelRateLimiter(rdb *redis.Client) *PathLevelRateLimiter {
@@ -97,20 +109,21 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 			return
 		}
 		if isFrontendDocumentRequest(c) {
-			switch checkVisitorCookie(c, g.visitorCookie) {
+			visitorDecision, visitorRetryAfter := checkVisitorCookie(c, g.visitorCookie)
+			switch visitorDecision {
 			case visitorCookieAllowed:
-				if !g.allowVisitorCookieGlobal(c) {
-					abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (visitor cookie global)")
+				if allowed, retryAfter := g.allowVisitorCookieGlobal(c); !allowed {
+					abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (visitor cookie global)", retryAfter)
 					return
 				}
 				c.Next()
 				return
 			case visitorCookieLimited:
-				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (visitor cookie)")
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (visitor cookie)", visitorRetryAfter)
 				return
 			}
-			if !g.allowFrontendDocumentGlobal(c) {
-				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (frontend global)")
+			if allowed, retryAfter := g.allowFrontendDocumentGlobal(c); !allowed {
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (frontend global)", retryAfter)
 				return
 			}
 			c.Next()
@@ -125,19 +138,21 @@ func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 			return
 		case TierUser:
 			key := "rl:user:" + userRateLimitKey(c)
-			if !g.allow(c.Request.Context(), key, 600, time.Minute) {
-				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (user)")
+			if allowed, retryAfter := g.allow(c.Request.Context(), key, 600, time.Minute); !allowed {
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (user)", retryAfter)
 				return
 			}
 		default:
 			fp := ClientFingerprint(c)
-			if !g.allow(c.Request.Context(), "rl:anon:"+fp, 30, time.Minute) {
-				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (anon)")
+			if allowed, retryAfter := g.allow(c.Request.Context(), "rl:anon:"+fp, 30, time.Minute); !allowed {
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (anon)", retryAfter)
 				return
 			}
-			bucket := time.Now().UTC().Format("20060102150405")
-			if !g.allow(c.Request.Context(), "rl:anon:global:"+bucket, 2000, 2*time.Second) {
-				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (global)")
+			now := g.currentTime()
+			bucket := now.Format("20060102150405")
+			if allowed, retryAfter := g.allow(c.Request.Context(), "rl:anon:global:"+bucket, 2000, 2*time.Second); !allowed {
+				retryAfter = minPositiveDuration(retryAfter, now.Truncate(time.Second).Add(time.Second).Sub(now))
+				abortDefenseRateLimit(c, http.StatusTooManyRequests, "rate limited (global)", retryAfter)
 				return
 			}
 		}
@@ -161,51 +176,80 @@ func globalRateLimitBypassAll(path string) bool {
 	}
 }
 
-func (g *GlobalRateLimiter) allow(ctx context.Context, key string, limit int, window time.Duration) bool {
+func (g *GlobalRateLimiter) allow(ctx context.Context, key string, limit int, window time.Duration) (bool, time.Duration) {
+	return allowDefenseRateLimit(ctx, g.rdb, key, limit, window)
+}
+
+func (g *GlobalRateLimiter) currentTime() time.Time {
+	if g != nil && g.now != nil {
+		return g.now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+func allowDefenseRateLimit(ctx context.Context, rdb *redis.Client, key string, limit int, window time.Duration) (bool, time.Duration) {
+	if rdb == nil || limit <= 0 {
+		return true, 0
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cnt, err := g.rdb.Incr(ctx, key).Result()
-	if err != nil {
-		return true
+	windowMillis := window.Milliseconds()
+	if windowMillis < 1 {
+		windowMillis = 1
 	}
-	if cnt == 1 {
-		_ = g.rdb.Expire(ctx, key, window).Err()
+	values, err := defenseRateLimitScript.Run(ctx, rdb, []string{key}, windowMillis).Int64Slice()
+	if err != nil || len(values) < 2 {
+		// Defense rate limits are deliberately fail-open on Redis/script errors.
+		return true, 0
 	}
-	return cnt <= int64(limit)
+	if values[0] <= int64(limit) {
+		return true, 0
+	}
+	ttlMillis := values[1]
+	if ttlMillis < 1 {
+		ttlMillis = 1
+	}
+	return false, time.Duration(ttlMillis) * time.Millisecond
 }
 
-func (g *GlobalRateLimiter) allowFrontendDocumentGlobal(c *gin.Context) bool {
+func (g *GlobalRateLimiter) allowFrontendDocumentGlobal(c *gin.Context) (bool, time.Duration) {
 	limit := defenseEnvInt("DEFENSE_FRONTEND_DOC_GLOBAL_PER_2S", 2000)
 	if limit <= 0 {
-		return true
+		return true, 0
 	}
 	return g.allowTwoSecondBucket(c, "rl:frontend:global:", limit)
 }
 
-func (g *GlobalRateLimiter) allowVisitorCookieGlobal(c *gin.Context) bool {
+func (g *GlobalRateLimiter) allowVisitorCookieGlobal(c *gin.Context) (bool, time.Duration) {
 	limit := defenseEnvInt("DEFENSE_VISITOR_COOKIE_GLOBAL_PER_2S", 5000)
 	if limit <= 0 {
-		return true
+		return true, 0
 	}
 	return g.allowTwoSecondBucket(c, "rl:visitor:global:", limit)
 }
 
-func (g *GlobalRateLimiter) allowTwoSecondBucket(c *gin.Context, prefix string, limit int) bool {
-	bucket := strconv.FormatInt(time.Now().UTC().Unix()/2, 10)
-	ctx := c.Request.Context()
-	if ctx == nil {
-		ctx = context.Background()
+func (g *GlobalRateLimiter) allowTwoSecondBucket(c *gin.Context, prefix string, limit int) (bool, time.Duration) {
+	now := g.currentTime()
+	bucket := strconv.FormatInt(now.Unix()/2, 10)
+	allowed, retryAfter := g.allow(c.Request.Context(), prefix+bucket, limit, 2*time.Second)
+	if !allowed {
+		retryAfter = minPositiveDuration(retryAfter, now.Truncate(2*time.Second).Add(2*time.Second).Sub(now))
 	}
-	key := prefix + bucket
-	cnt, err := g.rdb.Incr(ctx, key).Result()
-	if err != nil {
-		return true
+	return allowed, retryAfter
+}
+
+func minPositiveDuration(a, b time.Duration) time.Duration {
+	if a <= 0 {
+		return b
 	}
-	if cnt == 1 {
-		_ = g.rdb.Expire(ctx, key, 2*time.Second).Err()
+	if b <= 0 {
+		return a
 	}
-	return cnt <= int64(limit)
+	if b < a {
+		return b
+	}
+	return a
 }
 
 func defenseEnvInt(key string, defaultVal int) int {
@@ -346,6 +390,16 @@ func userRateLimitKey(c *gin.Context) string {
 	return hex.EncodeToString(h[:8])
 }
 
-func abortDefenseRateLimit(c *gin.Context, status int, reason string) {
+func abortDefenseRateLimit(c *gin.Context, status int, reason string, retryAfter time.Duration) {
+	retrySeconds := defenseRetryAfterSeconds(retryAfter)
+	c.Header("Retry-After", strconv.Itoa(retrySeconds))
 	c.AbortWithStatusJSON(status, gin.H{"error": reason})
+}
+
+func defenseRetryAfterSeconds(retryAfter time.Duration) int {
+	retrySeconds := int(math.Ceil(retryAfter.Seconds()))
+	if retrySeconds < 1 {
+		retrySeconds = 1
+	}
+	return retrySeconds
 }

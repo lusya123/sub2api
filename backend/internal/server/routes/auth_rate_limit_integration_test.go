@@ -41,6 +41,10 @@ func TestAuthRegisterRateLimitThresholdHitReturns429(t *testing.T) {
 		}
 		require.Equal(t, http.StatusTooManyRequests, w.Code, "第 6 次请求应命中限流")
 		require.Contains(t, w.Body.String(), "rate limit exceeded")
+		retryAfter, err := strconv.Atoi(w.Header().Get("Retry-After"))
+		require.NoError(t, err)
+		require.Greater(t, retryAfter, 0)
+		require.LessOrEqual(t, retryAfter, 60)
 	}
 }
 

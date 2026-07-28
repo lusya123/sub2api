@@ -5,6 +5,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"math"
@@ -619,6 +620,20 @@ func TestAPIContracts(t *testing.T) {
 					"page": 1,
 					"page_size": 10,
 					"pages": 1
+				}
+			}`,
+		},
+		{
+			name:       "GET /api/v1/admin/settings/web-search-emulation defaults when unset",
+			method:     http.MethodGet,
+			path:       "/api/v1/admin/settings/web-search-emulation",
+			wantStatus: http.StatusOK,
+			wantJSON: `{
+				"code": 0,
+				"message": "success",
+				"data": {
+					"enabled": false,
+					"providers": []
 				}
 			}`,
 		},
@@ -1345,6 +1360,52 @@ func TestAPIContracts(t *testing.T) {
 	}
 }
 
+func TestWebSearchEmulationConfigResponsesAreSanitized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	deps := newContractDeps(t)
+	const secret = "brave-secret-must-not-leak"
+	deps.settingRepo.SetAll(map[string]string{
+		service.SettingKeyWebSearchEmulationConfig: `{"enabled":true,"providers":[{"type":"brave","api_key":"` + secret + `","quota_limit":1000,"proxy_id":null}]}`,
+	})
+
+	wantJSON := `{
+		"code": 0,
+		"message": "success",
+		"data": {
+			"enabled": true,
+			"providers": [{
+				"type": "brave",
+				"api_key_configured": true,
+				"quota_limit": 1000,
+				"proxy_id": null
+			}]
+		}
+	}`
+
+	status, body := doRequest(t, deps.router, http.MethodPut,
+		"/api/v1/admin/settings/web-search-emulation",
+		`{"enabled":true,"providers":[{"type":"brave","api_key":"","quota_limit":1000,"proxy_id":null}]}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	require.Equal(t, http.StatusOK, status)
+	require.JSONEq(t, wantJSON, body)
+	require.NotContains(t, body, secret)
+
+	storedRaw, err := deps.settingRepo.GetValue(context.Background(), service.SettingKeyWebSearchEmulationConfig)
+	require.NoError(t, err)
+	var stored service.WebSearchEmulationConfig
+	require.NoError(t, json.Unmarshal([]byte(storedRaw), &stored))
+	require.Len(t, stored.Providers, 1)
+	require.Equal(t, secret, stored.Providers[0].APIKey,
+		"an empty update key must preserve the existing stored key")
+
+	status, body = doRequest(t, deps.router, http.MethodGet,
+		"/api/v1/admin/settings/web-search-emulation", "", nil)
+	require.Equal(t, http.StatusOK, status)
+	require.JSONEq(t, wantJSON, body)
+	require.NotContains(t, body, secret)
+}
+
 type contractDeps struct {
 	now         time.Time
 	router      http.Handler
@@ -1464,6 +1525,8 @@ func newContractDeps(t *testing.T) *contractDeps {
 	v1Admin := v1.Group("/admin")
 	v1Admin.Use(adminAuth)
 	v1Admin.GET("/settings", adminSettingHandler.GetSettings)
+	v1Admin.GET("/settings/web-search-emulation", adminSettingHandler.GetWebSearchEmulationConfig)
+	v1Admin.PUT("/settings/web-search-emulation", adminSettingHandler.UpdateWebSearchEmulationConfig)
 	v1Admin.POST("/accounts/bulk-update", adminAccountHandler.BulkUpdate)
 
 	return &contractDeps{

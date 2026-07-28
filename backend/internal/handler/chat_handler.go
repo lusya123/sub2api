@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -23,8 +24,8 @@ import (
 // ChatHandler handles browser entry points for the hosted chat experience.
 type ChatHandler struct {
 	cfg               *config.Config
-	authSvc           *service.AuthService
-	userService       *service.UserService
+	authSvc           chatAuthService
+	userService       chatUserService
 	settingSvc        *service.SettingService
 	lobeConfigService *service.LobeConfigService
 	lobeSyncClient    chatHTTPClient
@@ -32,6 +33,15 @@ type ChatHandler struct {
 
 type chatHTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
+}
+
+type chatAuthService interface {
+	GenerateToken(ctx context.Context, user *service.User) (string, error)
+	GetAccessTokenExpiresIn() int
+}
+
+type chatUserService interface {
+	GetByID(ctx context.Context, id int64) (*service.User, error)
 }
 
 type ChatLaunchResponse struct {
@@ -124,7 +134,8 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 
 	target, err := h.chatSignInURLWithPreference(c.Request.Context(), preference, chatPageURL)
 	if err != nil {
-		response.InternalError(c, err.Error())
+		slog.Warn("chat_launch_unavailable", "error", err)
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("CHAT_UNAVAILABLE", "Chat service is not configured or unavailable"))
 		return "", false
 	}
 	if err := h.syncLobeUserConfig(c.Request.Context(), subject.UserID, target); err != nil {

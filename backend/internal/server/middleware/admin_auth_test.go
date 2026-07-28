@@ -87,7 +87,7 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 		admin.Role = service.RoleOperator
 		defer func() { admin.Role = service.RoleAdmin }()
 
-		token, err := authService.GenerateToken(&service.User{
+		token, err := authService.GenerateToken(context.Background(), &service.User{
 			ID:           admin.ID,
 			Email:        admin.Email,
 			Role:         service.RoleOperator,
@@ -101,6 +101,43 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("regular_user_denial_keeps_actor_context_for_audit", func(t *testing.T) {
+		admin.Role = service.RoleUser
+		defer func() { admin.Role = service.RoleAdmin }()
+
+		token, err := authService.GenerateToken(context.Background(), &service.User{
+			ID:           admin.ID,
+			Email:        admin.Email,
+			Role:         service.RoleUser,
+			TokenVersion: admin.TokenVersion,
+		})
+		require.NoError(t, err)
+
+		var capturedSubject AuthSubject
+		var capturedRole, capturedEmail string
+		denialRouter := gin.New()
+		denialRouter.Use(func(c *gin.Context) {
+			c.Next()
+			capturedSubject, _ = GetAuthSubjectFromContext(c)
+			capturedRole, _ = GetUserRoleFromContext(c)
+			capturedEmail, _ = GetUserEmailFromContext(c)
+		})
+		denialRouter.Use(gin.HandlerFunc(NewAdminAuthMiddleware(authService, userService, nil, nil)))
+		denialRouter.GET("/t", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/t", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		denialRouter.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, admin.ID, capturedSubject.UserID)
+		require.Equal(t, service.RoleUser, capturedRole)
+		require.Equal(t, admin.Email, capturedEmail)
 	})
 
 	t.Run("websocket_token_version_mismatch_rejected", func(t *testing.T) {

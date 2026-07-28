@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -166,11 +167,152 @@ func TestGlobalRateLimiterTiers(t *testing.T) {
 	rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, nil)
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Contains(t, rec.Body.String(), "rate limited (anon)")
+	retryAfter, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+	require.NoError(t, err)
+	require.Greater(t, retryAfter, 0)
+	require.LessOrEqual(t, retryAfter, 60)
 
 	rec = performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, func(req *http.Request) {
 		req.Header.Set("x-api-key", "sk-fake")
 	})
 	require.Equal(t, http.StatusTooManyRequests, rec.Code, "fake API key on public path must not bypass anonymous limit")
+}
+
+func TestGlobalRateLimiterRepairsMissingTTLAndReturnsRetryAfter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/api/v1/settings/public", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	for i := 0; i < 30; i++ {
+		rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, nil)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	ctx := context.Background()
+	keys, err := rdb.Keys(ctx, "rl:anon:????????????????").Result()
+	require.NoError(t, err)
+	require.Len(t, keys, 1)
+	persisted, err := rdb.Persist(ctx, keys[0]).Result()
+	require.NoError(t, err)
+	require.True(t, persisted)
+
+	rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, nil)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	retryAfter, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+	require.NoError(t, err)
+	require.Greater(t, retryAfter, 0)
+	require.LessOrEqual(t, retryAfter, 60)
+
+	ttl, err := rdb.PTTL(ctx, keys[0]).Result()
+	require.NoError(t, err)
+	require.Greater(t, ttl, time.Duration(0))
+	require.LessOrEqual(t, ttl, time.Minute)
+}
+
+func TestGlobalRateLimiterRedisFailureRemainsFailOpen(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+	require.NoError(t, rdb.Close())
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/api/v1/settings/public", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, rec.Header().Get("Retry-After"))
+}
+
+func TestDefenseRateLimitTTLDecreasesWithoutRefresh(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() {
+		_ = rdb.Close()
+		redisServer.Close()
+	})
+	ctx := context.Background()
+
+	allowed, retryAfter := allowDefenseRateLimit(ctx, rdb, "rl:test:no-refresh", 10, time.Minute)
+	require.True(t, allowed)
+	require.Zero(t, retryAfter)
+	ttlBefore, err := rdb.PTTL(ctx, "rl:test:no-refresh").Result()
+	require.NoError(t, err)
+	require.Greater(t, ttlBefore, time.Duration(0))
+
+	redisServer.FastForward(10 * time.Second)
+	allowed, retryAfter = allowDefenseRateLimit(ctx, rdb, "rl:test:no-refresh", 10, time.Minute)
+	require.True(t, allowed)
+	require.Zero(t, retryAfter)
+	ttlAfter, err := rdb.PTTL(ctx, "rl:test:no-refresh").Result()
+	require.NoError(t, err)
+	require.Less(t, ttlAfter, ttlBefore)
+	require.LessOrEqual(t, ttlAfter, 50*time.Second)
+}
+
+func TestGlobalRateLimiterUserTierReturnsRetryAfter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.GET("/api/v1/settings/public", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	setUser := func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer jwt-test-token")
+	}
+	for i := 0; i < 600; i++ {
+		rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, setUser)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, setUser)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	retryAfter, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+	require.NoError(t, err)
+	require.Greater(t, retryAfter, 0)
+	require.LessOrEqual(t, retryAfter, 60)
+}
+
+func TestDefenseRetryAfterSecondsRoundsUpAndStaysPositive(t *testing.T) {
+	tests := []struct {
+		name  string
+		delay time.Duration
+		want  int
+	}{
+		{name: "zero", delay: 0, want: 1},
+		{name: "one millisecond", delay: time.Millisecond, want: 1},
+		{name: "one second", delay: time.Second, want: 1},
+		{name: "just over one second", delay: time.Second + time.Millisecond, want: 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, defenseRetryAfterSeconds(tt.delay))
+		})
+	}
 }
 
 func TestGlobalRateLimiterBypassesGatewayAPIKeyTraffic(t *testing.T) {
@@ -397,7 +539,7 @@ func TestGlobalRateLimiterDoesNotBypassUnknownInstallerLikePath(t *testing.T) {
 
 	router := gin.New()
 	router.Use(TrustTierDetector())
-	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb).Middleware())
 	router.GET("/unknown-installer.sh", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -421,7 +563,7 @@ func TestGlobalRateLimiterUsesGlobalOnlyLimitForFrontendDocuments(t *testing.T) 
 
 	router := gin.New()
 	router.Use(TrustTierDetector())
-	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb).Middleware())
 	router.GET("/model-marketplace", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -433,6 +575,7 @@ func TestGlobalRateLimiterUsesGlobalOnlyLimitForFrontendDocuments(t *testing.T) 
 	rec := performDefenseRequest(router, http.MethodGet, "/model-marketplace", nil, nil)
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 	require.Contains(t, rec.Body.String(), "rate limited (frontend global)")
+	require.Equal(t, "1", rec.Header().Get("Retry-After"))
 }
 
 func TestGlobalRateLimiterFrontendDocumentGlobalFailOpen(t *testing.T) {
@@ -451,7 +594,7 @@ func TestGlobalRateLimiterFrontendDocumentGlobalFailOpen(t *testing.T) {
 
 	router := gin.New()
 	router.Use(TrustTierDetector())
-	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb).Middleware())
 	router.GET("/model-marketplace", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -496,7 +639,7 @@ func TestGlobalRateLimiterProtectsFrontendDocumentsWhenSPAProtectDisabled(t *tes
 
 	router := gin.New()
 	router.Use(TrustTierDetector())
-	router.Use(NewGlobalRateLimiter(rdb).Middleware())
+	router.Use(newFixedGlobalRateLimiter(rdb).Middleware())
 	router.GET("/model-marketplace", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -507,6 +650,30 @@ func TestGlobalRateLimiterProtectsFrontendDocumentsWhenSPAProtectDisabled(t *tes
 	}
 	rec := performDefenseRequest(router, http.MethodGet, "/model-marketplace", nil, nil)
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+}
+
+func TestGlobalRateLimiterAnonymousAggregateReturnsBoundaryRetryAfter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+	limiter := newFixedGlobalRateLimiter(rdb)
+	globalKey := "rl:anon:global:" + limiter.currentTime().Format("20060102150405")
+	require.NoError(t, rdb.Set(context.Background(), globalKey, 2000, 2*time.Second).Err())
+
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(limiter.Middleware())
+	router.GET("/api/v1/settings/public", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	rec := performDefenseRequest(router, http.MethodGet, "/api/v1/settings/public", nil, nil)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	require.Contains(t, rec.Body.String(), "rate limited (global)")
+	require.Equal(t, "1", rec.Header().Get("Retry-After"))
 }
 
 func TestBodyFingerprintBlocksAnonymousReplayAndSkipsAPIPaths(t *testing.T) {
@@ -588,6 +755,15 @@ func newDefenseTestRedis(t *testing.T) (*redis.Client, func()) {
 		_ = rdb.Close()
 		s.Close()
 	}
+}
+
+func newFixedGlobalRateLimiter(rdb *redis.Client, visitorCookie ...*VisitorCookieManager) *GlobalRateLimiter {
+	limiter := NewGlobalRateLimiter(rdb, visitorCookie...)
+	limiter.now = func() time.Time {
+		// 250 ms before both the next one-second and two-second bucket boundary.
+		return time.Unix(1_700_000_001, 750_000_000).UTC()
+	}
+	return limiter
 }
 
 func performDefenseRequest(router *gin.Engine, method, path string, body []byte, set func(*http.Request)) *httptest.ResponseRecorder {

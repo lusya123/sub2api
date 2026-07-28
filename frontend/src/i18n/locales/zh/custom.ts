@@ -8,7 +8,9 @@ const custom = {
     "modelMarketplace": "模型广场",
     "operations": "运营看板",
     "liveGlobe": "实时全球看板",
-    "auditLogs": "操作日志"
+    "auditLogs": "操作日志",
+    "operationAuditLogs": "操作审计日志",
+    "securityAuditLogs": "安全审计日志"
   },
   "clientInstallPage": {
     "title": "一键部署",
@@ -18,7 +20,10 @@ const custom = {
     "selectKeyTitle": "选择 API Key",
     "selectKeyDescription": "左侧选择要部署到客户端中的 API Key，右侧会实时生成对应命令。",
     "searchPlaceholder": "搜索密钥名称、分组或 Key",
-    "panelDescription": "当前分组：{group}"
+    "panelDescription": "当前分组：{group}",
+    "loadErrorTitle": "无法加载部署配置",
+    "loadErrorDescription": "API Key 或公开设置加载失败，请重试。",
+    "retry": "重试"
   },
   "auth": {
     "errors": {
@@ -599,6 +604,8 @@ const custom = {
       "result": "执行结果",
       "duration": "耗时",
       "ip": "IP 地址",
+      "authMethod": "认证方式",
+      "credentialMasked": "凭证（掩码）",
       "failedToLoad": "加载操作日志失败",
       "success": "成功",
       "failed": "失败",

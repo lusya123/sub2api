@@ -113,11 +113,13 @@ describe('GroupDistributionChart', () => {
     expect(label).toBe('group-b: $0.900 (90.0%)')
   })
 
-  it('can hide account cost for user usage stats without account_cost', () => {
+  it('hides account and standard cost for user usage stats that omit both fields', () => {
+    const userGroupStats = groupStats.map(({ cost: _adminOnlyCost, ...group }) => group)
     const wrapper = mount(GroupDistributionChart, {
       props: {
-        groupStats,
+        groupStats: userGroupStats,
         showAccountCost: false,
+        showStandardCost: false,
       },
       global: {
         stubs: {
@@ -127,7 +129,8 @@ describe('GroupDistributionChart', () => {
     })
 
     expect(wrapper.text()).not.toContain('Account Cost')
-    expect(wrapper.findAll('thead th')).toHaveLength(5)
-    expect(wrapper.findAll('tbody tr')[0].findAll('td')).toHaveLength(5)
+    expect(wrapper.text()).not.toContain('Standard')
+    expect(wrapper.findAll('thead th')).toHaveLength(4)
+    expect(wrapper.findAll('tbody tr')[0].findAll('td')).toHaveLength(4)
   })
 })

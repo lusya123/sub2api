@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,9 +11,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,6 +90,43 @@ func TestVisitorCookieHandlerRejectsBadPoW(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestVisitorCookieHandlerRateLimitReturnsRetryAfter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_VISITOR_COOKIE_ISSUE_PER_MIN", "1")
+
+	redisServer := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() {
+		_ = rdb.Close()
+		redisServer.Close()
+	})
+
+	mgr := middleware.NewVisitorCookieManagerWithSecret(rdb, "visitor-handler-test-secret")
+	require.True(t, mgr.AllowIssueRequest(context.Background(), "rate-limited-fingerprint"))
+	h := NewVisitorCookieHandler(mgr, nil)
+	router := gin.New()
+	router.POST("/api/public/visitor/issue-cookie", h.IssueCookie)
+
+	challenge := strconv.FormatInt(time.Now().UnixNano(), 36) + ".rate-limit"
+	body, err := json.Marshal(map[string]string{
+		"challenge":   challenge,
+		"nonce":       "unused",
+		"fingerprint": "rate-limited-fingerprint",
+	})
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/public/visitor/issue-cookie", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	retryAfter, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+	require.NoError(t, err)
+	require.Greater(t, retryAfter, 0)
+	require.LessOrEqual(t, retryAfter, 60)
 }
 
 func requestVisitorChallengeForTest(t *testing.T, router *gin.Engine, difficulty int) string {

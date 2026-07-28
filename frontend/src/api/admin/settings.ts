@@ -1390,7 +1390,8 @@ export async function updateBetaPolicySettings(
 
 export interface WebSearchProviderConfig {
   type: "brave" | "tavily";
-  api_key: string;
+  /** Write-only replacement value; successful API responses omit this secret. */
+  api_key?: string;
   api_key_configured: boolean;
   quota_limit: number | null;
   subscribed_at: number | null;

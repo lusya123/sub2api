@@ -96,6 +96,7 @@
                 </span>
                 <button
                   type="button"
+                  data-testid="admin-api-key-create"
                   @click="createAdminApiKey"
                   :disabled="adminApiKeyOperating"
                   class="btn btn-primary btn-sm"
@@ -146,6 +147,7 @@
                   <div class="flex gap-2">
                     <button
                       type="button"
+                      data-testid="admin-api-key-regenerate"
                       @click="regenerateAdminApiKey"
                       :disabled="adminApiKeyOperating"
                       class="btn btn-secondary btn-sm"
@@ -158,6 +160,7 @@
                     </button>
                     <button
                       type="button"
+                      data-testid="admin-api-key-delete"
                       @click="deleteAdminApiKey"
                       :disabled="adminApiKeyOperating"
                       class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
@@ -7853,10 +7856,23 @@ import {
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
-// 关闭 step-up 开关是敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 码重试
+// 敏感管理设置操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 码重试
 const settingsStepUp = useStepUp();
 const adminSettingsStore = useAdminSettingsStore();
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
+
+function handleSettingsStepUpError(error: unknown): boolean {
+  // 用户取消验证是一次正常的放弃操作，不应当作请求失败。
+  if (isStepUpCancelled(error)) return true;
+  if (!isStepUpBlocked(error)) return false;
+
+  appStore.showError(
+    stepUpBlockReason(error) === "STEP_UP_ADMIN_API_KEY_FORBIDDEN"
+      ? t("stepUp.adminApiKeyForbidden")
+      : t("stepUp.notEnabled"),
+  );
+  return true;
+}
 
 function localText(zh: string, en: string): string {
   return isZhLocale.value ? zh : en;
@@ -9055,7 +9071,13 @@ async function loadWebSearchConfig() {
     ]);
     if (resp) {
       webSearchConfig.enabled = resp.enabled || false;
-      webSearchConfig.providers = resp.providers || [];
+      webSearchConfig.providers = (resp.providers || []).map((provider) => ({
+        ...provider,
+        // The backend intentionally omits secrets from responses. Keep the
+        // editable form controlled and send an empty value to preserve the
+        // existing key unless the administrator enters a replacement.
+        api_key: provider.api_key ?? "",
+      }));
     }
     webSearchProxies.value = proxiesResp.items || [];
   } catch (err: unknown) {
@@ -10336,18 +10358,7 @@ async function saveSettings() {
       appStore.showSuccess(t("admin.settings.settingsSaved"));
     }
   } catch (error: unknown) {
-    // 用户取消 step-up 验证：静默返回，不弹错误
-    if (isStepUpCancelled(error)) {
-      return;
-    }
-    if (isStepUpBlocked(error)) {
-      appStore.showError(
-        stepUpBlockReason(error) === "STEP_UP_ADMIN_API_KEY_FORBIDDEN"
-          ? t("stepUp.adminApiKeyForbidden")
-          : t("stepUp.notEnabled"),
-      );
-      return;
-    }
+    if (handleSettingsStepUpError(error)) return;
     // 开启 step-up 开关但本人未启用 2FA：给出可操作的专用提示
     if (
       (error as { reason?: string })?.reason === "STEP_UP_ENABLE_REQUIRES_TOTP"
@@ -10438,13 +10449,16 @@ async function loadAdminApiKey() {
 async function createAdminApiKey() {
   adminApiKeyOperating.value = true;
   try {
-    const result = await adminAPI.settings.regenerateAdminApiKey();
+    const result = await settingsStepUp.run(() =>
+      adminAPI.settings.regenerateAdminApiKey(),
+    );
     newAdminApiKey.value = result.key;
     adminApiKeyExists.value = true;
     adminApiKeyMasked.value =
       result.key.substring(0, 10) + "..." + result.key.slice(-4);
     appStore.showSuccess(t("admin.settings.adminApiKey.keyGenerated"));
   } catch (error: unknown) {
+    if (handleSettingsStepUpError(error)) return;
     appStore.showError(extractApiErrorMessage(error, t("common.error")));
   } finally {
     adminApiKeyOperating.value = false;
@@ -10460,12 +10474,13 @@ async function deleteAdminApiKey() {
   if (!confirm(t("admin.settings.adminApiKey.deleteConfirm"))) return;
   adminApiKeyOperating.value = true;
   try {
-    await adminAPI.settings.deleteAdminApiKey();
+    await settingsStepUp.run(() => adminAPI.settings.deleteAdminApiKey());
     adminApiKeyExists.value = false;
     adminApiKeyMasked.value = "";
     newAdminApiKey.value = "";
     appStore.showSuccess(t("admin.settings.adminApiKey.keyDeleted"));
   } catch (error: unknown) {
+    if (handleSettingsStepUpError(error)) return;
     appStore.showError(extractApiErrorMessage(error, t("common.error")));
   } finally {
     adminApiKeyOperating.value = false;

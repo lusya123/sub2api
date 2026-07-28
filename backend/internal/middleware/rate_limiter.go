@@ -35,27 +35,32 @@ elseif ttl == -1 then
   redis.call('PEXPIRE', KEYS[1], ARGV[1])
   repaired = 1
 end
-return {current, repaired}
+ttl = redis.call('PTTL', KEYS[1])
+return {current, repaired, ttl}
 `)
 
 // rateLimitRun 允许测试覆写脚本执行逻辑
-var rateLimitRun = func(ctx context.Context, client *redis.Client, key string, windowMillis int64) (int64, bool, error) {
+var rateLimitRun = func(ctx context.Context, client *redis.Client, key string, windowMillis int64) (int64, bool, int64, error) {
 	values, err := rateLimitScript.Run(ctx, client, []string{key}, windowMillis).Slice()
 	if err != nil {
-		return 0, false, err
+		return 0, false, 0, err
 	}
-	if len(values) < 2 {
-		return 0, false, fmt.Errorf("rate limit script returned %d values", len(values))
+	if len(values) < 3 {
+		return 0, false, 0, fmt.Errorf("rate limit script returned %d values", len(values))
 	}
 	count, err := parseInt64(values[0])
 	if err != nil {
-		return 0, false, err
+		return 0, false, 0, err
 	}
 	repaired, err := parseInt64(values[1])
 	if err != nil {
-		return 0, false, err
+		return 0, false, 0, err
 	}
-	return count, repaired == 1, nil
+	ttlMillis, err := parseInt64(values[2])
+	if err != nil {
+		return 0, false, 0, err
+	}
+	return count, repaired == 1, ttlMillis, nil
 }
 
 // RateLimiter Redis 速率限制器
@@ -96,11 +101,11 @@ func (r *RateLimiter) LimitWithOptions(key string, limit int, window time.Durati
 		windowMillis := windowTTLMillis(window)
 
 		// 使用 Lua 脚本原子操作增加计数并设置过期
-		count, repaired, err := rateLimitRun(ctx, r.redis, redisKey, windowMillis)
+		count, repaired, ttlMillis, err := rateLimitRun(ctx, r.redis, redisKey, windowMillis)
 		if err != nil {
 			log.Printf("[RateLimit] redis error: key=%s mode=%s err=%v", redisKey, failureModeLabel(failureMode), err)
 			if failureMode == RateLimitFailClose {
-				abortRateLimit(c)
+				abortRateLimit(c, windowMillis)
 				return
 			}
 			// Redis 错误时放行，避免影响正常服务
@@ -113,7 +118,7 @@ func (r *RateLimiter) LimitWithOptions(key string, limit int, window time.Durati
 
 		// 超过限制
 		if count > int64(limit) {
-			abortRateLimit(c)
+			abortRateLimit(c, ttlMillis)
 			return
 		}
 
@@ -129,11 +134,19 @@ func windowTTLMillis(window time.Duration) int64 {
 	return ttl
 }
 
-func abortRateLimit(c *gin.Context) {
+func abortRateLimit(c *gin.Context, retryAfterMillis int64) {
+	c.Header("Retry-After", strconv.FormatInt(retryAfterSeconds(retryAfterMillis), 10))
 	c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 		"error":   "rate limit exceeded",
 		"message": "Too many requests, please try again later",
 	})
+}
+
+func retryAfterSeconds(remainingMillis int64) int64 {
+	if remainingMillis <= 0 {
+		return 1
+	}
+	return (remainingMillis + 999) / 1000
 }
 
 func failureModeLabel(mode RateLimitFailureMode) string {

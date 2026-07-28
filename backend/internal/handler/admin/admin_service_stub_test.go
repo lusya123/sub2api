@@ -29,6 +29,8 @@ type stubAdminService struct {
 	updatedProxies                      []*service.UpdateProxyInput
 	testedProxyIDs                      []int64
 	getUserErr                          error
+	updateUserErr                       error
+	deleteUserErr                       error
 	createAccountErr                    error
 	createSparkShadowErr                error
 	updateAccountErr                    error
@@ -179,12 +181,15 @@ func (s *stubAdminService) CreateUser(ctx context.Context, input *service.Create
 }
 
 func (s *stubAdminService) UpdateUser(ctx context.Context, id int64, input *service.UpdateUserInput) (*service.User, error) {
+	if s.updateUserErr != nil {
+		return nil, s.updateUserErr
+	}
 	user := service.User{ID: id, Email: "updated@example.com", Status: service.StatusActive}
 	return &user, nil
 }
 
 func (s *stubAdminService) DeleteUser(ctx context.Context, id int64) error {
-	return nil
+	return s.deleteUserErr
 }
 
 func (s *stubAdminService) UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string) (*service.User, error) {

@@ -15,6 +15,7 @@ const {
   showSuccess,
   isCurrentStep,
   nextStep,
+  refreshBatchImageAccess,
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   getAllGroups: vi.fn(),
@@ -26,6 +27,7 @@ const {
   showSuccess: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
+  refreshBatchImageAccess: vi.fn(),
 }))
 
 const messages: Record<string, string> = {
@@ -74,6 +76,10 @@ vi.mock('@/stores/onboarding', () => ({
     isCurrentStep,
     nextStep,
   }),
+}))
+
+vi.mock('@/composables/useBatchImageAccess', () => ({
+  useBatchImageAccess: () => ({ refreshBatchImageAccess }),
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -232,6 +238,7 @@ describe('admin GroupsView column settings', () => {
     showSuccess.mockReset()
     isCurrentStep.mockReset()
     nextStep.mockReset()
+    refreshBatchImageAccess.mockReset()
 
     listGroups.mockResolvedValue({
       items: [createGroup()],
@@ -246,6 +253,7 @@ describe('admin GroupsView column settings', () => {
     getCapacitySummary.mockResolvedValue([])
     listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     isCurrentStep.mockReturnValue(false)
+    refreshBatchImageAccess.mockResolvedValue(false)
   })
 
   afterEach(() => {

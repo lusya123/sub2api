@@ -35,6 +35,7 @@ export const SUPER_ADMIN_ROUTE_PATHS = new Set([
   '/admin/promo-codes',
   '/admin/settings',
   '/admin/risk-control',
+  '/admin/prompt-audit',
   '/admin/affiliates/invites',
   '/admin/affiliates/rebates',
   '/admin/affiliates/transfers',

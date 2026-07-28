@@ -17,6 +17,7 @@
         :server-point="serverPoint"
         :detail="detail"
         :interactive="interactive"
+        @webgl-unavailable="handleWebGLUnavailable"
       />
     </KeepAlive>
 
@@ -25,6 +26,7 @@
         type="button"
         class="toggle-btn"
         :class="{ active: mode === '3d' }"
+        :disabled="webGLAvailable === false"
         @click="setMode('3d')"
         :title="t3DTooltip"
       >
@@ -73,11 +75,12 @@
  * one keeps its last frame.
  */
 
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import LiveGlobe from './LiveGlobe.vue'
 import LiveMap2D from './LiveMap2D.vue'
 import type { GlobeSnapshot, ServerPoint } from '@/composables/useGlobeStream'
+import { canCreateGlobeWebGLContext } from '@/utils/webgl'
 
 type Mode = '3d' | '2d'
 
@@ -114,44 +117,65 @@ const route = useRoute()
 const router = useRouter()
 
 const STORAGE_KEY = 'sub2api.globe.mode'
-const mode = ref<Mode>(props.defaultMode)
+// null means WebGL has not been probed yet. A stage explicitly starting in 2D
+// should not allocate a GPU context merely to render an inactive toggle.
+const webGLAvailable = ref<boolean | null>(null)
 
-const t3DTooltip = computed(() => '立体地球视图')
-const t2DTooltip = computed(() => '平面地图视图')
+function availableMode(requested: Mode): Mode {
+  if (requested !== '3d') return requested
+  if (webGLAvailable.value === null) {
+    webGLAvailable.value = canCreateGlobeWebGLContext()
+  }
+  return webGLAvailable.value ? '3d' : '2d'
+}
 
-onMounted(() => {
+function requestedInitialMode(): Mode {
   // Query param wins — but only when this stage is the page's main artefact.
   if (props.syncToUrl) {
     const q = route.query.view
-    if (q === '2d' || q === '3d') {
-      mode.value = q
-      return
-    }
+    if (q === '2d' || q === '3d') return q
   }
+
   // Storage second.
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved === '2d' || saved === '3d') {
-      mode.value = saved
-      return
-    }
+    if (saved === '2d' || saved === '3d') return saved
   } catch {
     /* storage may be blocked; default applies */
   }
-  mode.value = props.defaultMode
-})
+
+  return props.defaultMode
+}
+
+const mode = ref<Mode>(availableMode(requestedInitialMode()))
+
+const t3DTooltip = computed(() =>
+  webGLAvailable.value !== false
+    ? '立体地球视图'
+    : '当前浏览器无法使用 WebGL 2，已切换到平面地图',
+)
+const t2DTooltip = computed(() => '平面地图视图')
 
 function setMode(next: Mode) {
-  if (mode.value === next) return
-  mode.value = next
+  const availableNext = availableMode(next)
+  if (mode.value === availableNext) return
+  mode.value = availableNext
   try {
-    localStorage.setItem(STORAGE_KEY, next)
+    localStorage.setItem(STORAGE_KEY, availableNext)
   } catch {
     /* storage may be blocked */
   }
-  if (props.syncToUrl && route.query.view !== next) {
-    router.replace({ query: { ...route.query, view: next } }).catch(() => {})
+  if (props.syncToUrl && route.query.view !== availableNext) {
+    router.replace({ query: { ...route.query, view: availableNext } }).catch(() => {})
   }
+}
+
+function handleWebGLUnavailable() {
+  // The preflight can succeed and the real context can still disappear
+  // before Three.js mounts. Keep the user's stored preference intact, but
+  // fail this stage over to the existing 2D implementation immediately.
+  webGLAvailable.value = false
+  mode.value = '2d'
 }
 
 // Reflect external query-param changes (e.g. user edits URL) back into mode —
@@ -161,7 +185,7 @@ watch(
   () => route.query.view,
   (v) => {
     if (!props.syncToUrl) return
-    if (v === '2d' || v === '3d') mode.value = v
+    if (v === '2d' || v === '3d') mode.value = availableMode(v)
   },
 )
 </script>
@@ -216,6 +240,10 @@ watch(
 }
 .toggle-btn.active {
   color: #ffd87a;
+}
+.toggle-btn:disabled {
+  color: rgba(184, 200, 220, 0.25);
+  cursor: not-allowed;
 }
 .toggle-btn svg {
   width: 14px;

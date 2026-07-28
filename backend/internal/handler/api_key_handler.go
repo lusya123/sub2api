@@ -31,17 +31,17 @@ func NewAPIKeyHandler(apiKeyService *service.APIKeyService) *APIKeyHandler {
 // CreateAPIKeyRequest represents the create API key request payload
 type CreateAPIKeyRequest struct {
 	Name          string   `json:"name" binding:"required"`
-	GroupID       *int64   `json:"group_id"`        // nullable
-	CustomKey     *string  `json:"custom_key"`      // 可选的自定义key
-	IPWhitelist   []string `json:"ip_whitelist"`    // IP 白名单
-	IPBlacklist   []string `json:"ip_blacklist"`    // IP 黑名单
-	Quota         *float64 `json:"quota"`           // 配额限制 (USD)
-	ExpiresInDays *int     `json:"expires_in_days"` // 过期天数
+	GroupID       *int64   `json:"group_id"`                                           // nullable
+	CustomKey     *string  `json:"custom_key"`                                         // 可选的自定义key
+	IPWhitelist   []string `json:"ip_whitelist"`                                       // IP 白名单
+	IPBlacklist   []string `json:"ip_blacklist"`                                       // IP 黑名单
+	Quota         *float64 `json:"quota" binding:"omitempty,gte=0"`                    // 配额限制 (USD), 0 = 无限制
+	ExpiresInDays *int     `json:"expires_in_days" binding:"omitempty,min=1,max=3650"` // 过期天数；不提供表示永不过期
 
 	// Rate limit fields (0 = unlimited)
-	RateLimit5h *float64 `json:"rate_limit_5h"`
-	RateLimit1d *float64 `json:"rate_limit_1d"`
-	RateLimit7d *float64 `json:"rate_limit_7d"`
+	RateLimit5h *float64 `json:"rate_limit_5h" binding:"omitempty,gte=0"`
+	RateLimit1d *float64 `json:"rate_limit_1d" binding:"omitempty,gte=0"`
+	RateLimit7d *float64 `json:"rate_limit_7d" binding:"omitempty,gte=0"`
 }
 
 // UpdateAPIKeyRequest represents the update API key request payload
@@ -49,16 +49,16 @@ type UpdateAPIKeyRequest struct {
 	Name        string   `json:"name"`
 	GroupID     *int64   `json:"group_id"`
 	Status      string   `json:"status" binding:"omitempty,oneof=active inactive"`
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
-	Quota       *float64 `json:"quota"`        // 配额限制 (USD), 0=无限制
-	ExpiresAt   *string  `json:"expires_at"`   // 过期时间 (ISO 8601)
-	ResetQuota  *bool    `json:"reset_quota"`  // 重置已用配额
+	IPWhitelist []string `json:"ip_whitelist"`                    // IP 白名单
+	IPBlacklist []string `json:"ip_blacklist"`                    // IP 黑名单
+	Quota       *float64 `json:"quota" binding:"omitempty,gte=0"` // 配额限制 (USD), 0=无限制
+	ExpiresAt   *string  `json:"expires_at"`                      // 过期时间 (ISO 8601)
+	ResetQuota  *bool    `json:"reset_quota"`                     // 重置已用配额
 
 	// Rate limit fields (nil = no change, 0 = unlimited)
-	RateLimit5h         *float64 `json:"rate_limit_5h"`
-	RateLimit1d         *float64 `json:"rate_limit_1d"`
-	RateLimit7d         *float64 `json:"rate_limit_7d"`
+	RateLimit5h         *float64 `json:"rate_limit_5h" binding:"omitempty,gte=0"`
+	RateLimit1d         *float64 `json:"rate_limit_1d" binding:"omitempty,gte=0"`
+	RateLimit7d         *float64 `json:"rate_limit_7d" binding:"omitempty,gte=0"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // 重置限速用量
 }
 
@@ -81,10 +81,7 @@ func (h *APIKeyHandler) List(c *gin.Context) {
 
 	// Parse filter parameters
 	var filters service.APIKeyListFilters
-	if search := strings.TrimSpace(c.Query("search")); search != "" {
-		if len(search) > 100 {
-			search = search[:100]
-		}
+	if search := normalizeAPIKeySearch(c.Query("search")); search != "" {
 		filters.Search = search
 	}
 	filters.Status = c.Query("status")
@@ -106,6 +103,14 @@ func (h *APIKeyHandler) List(c *gin.Context) {
 		out = append(out, *dto.APIKeyFromService(&keys[i]))
 	}
 	response.Paginated(c, out, result.Total, page, pageSize)
+}
+
+func normalizeAPIKeySearch(raw string) string {
+	search := strings.TrimSpace(raw)
+	if runes := []rune(search); len(runes) > 100 {
+		return string(runes[:100])
+	}
+	return search
 }
 
 // GetByID handles getting a single API key

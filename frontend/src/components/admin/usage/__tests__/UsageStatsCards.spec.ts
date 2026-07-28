@@ -64,4 +64,23 @@ describe('UsageStatsCards', () => {
     expect(text).toContain('Cache Read')
     expect(text).toContain('22')
   })
+
+  it('omits standard cost when used with user statistics', () => {
+    const { total_cost: _adminOnlyTotalCost, total_account_cost: _adminOnlyAccountCost, ...userStats } = stats
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats: userStats,
+        showAccountCost: false,
+        showStandardCost: false,
+      },
+      global: {
+        stubs: {
+          Icon: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Total Cost')
+    expect(wrapper.text()).not.toContain('Standard')
+  })
 })

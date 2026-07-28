@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -573,8 +574,8 @@ func TestAdminService_DeleteUser_AdminGuard(t *testing.T) {
 	svc := &adminServiceImpl{userRepo: repo}
 
 	err := svc.DeleteUser(context.Background(), 1)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "cannot delete admin user")
+	require.ErrorIs(t, err, ErrAdminUserDeleteProtected)
+	require.True(t, infraerrors.IsConflict(err))
 	require.Empty(t, repo.deletedIDs)
 }
 

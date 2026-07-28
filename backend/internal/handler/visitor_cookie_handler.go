@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -57,7 +58,12 @@ func (h *VisitorCookieHandler) IssueCookie(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid challenge"})
 		return
 	}
-	if !h.mgr.AllowIssueRequest(c.Request.Context(), req.Fingerprint) {
+	if allowed, retryAfter := h.mgr.AllowIssueRequestWithRetry(c.Request.Context(), req.Fingerprint); !allowed {
+		retrySeconds := int(math.Ceil(retryAfter.Seconds()))
+		if retrySeconds < 1 {
+			retrySeconds = 1
+		}
+		c.Header("Retry-After", strconv.Itoa(retrySeconds))
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "visitor cookie issue rate limited"})
 		return
 	}

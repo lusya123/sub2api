@@ -4,12 +4,30 @@ package service
 
 import (
 	"context"
+	"math"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNormalizeAPIKeyNameUsesCharacterLimit(t *testing.T) {
+	name100 := strings.Repeat("界", MaxAPIKeyNameRunes)
+	got, err := normalizeAPIKeyName(name100)
+	require.NoError(t, err)
+	require.True(t, utf8.ValidString(got))
+	require.Equal(t, name100, got)
+
+	_, err = normalizeAPIKeyName(name100 + "尾")
+	require.ErrorIs(t, err, ErrInvalidAPIKeyName)
+
+	_, err = normalizeAPIKeyName("")
+	require.ErrorIs(t, err, ErrInvalidAPIKeyName)
+}
 
 type quotaStateRepoStub struct {
 	quotaBaseAPIKeyRepoStub
@@ -197,4 +215,76 @@ func TestAPIKeyService_Update_ReactivatesQuotaExhaustedWhenQuotaUnlimited(t *tes
 	require.Len(t, repo.updatedKeys, 1)
 	require.Equal(t, StatusActive, repo.updatedKeys[0].Status)
 	require.Equal(t, 0.0, repo.updatedKeys[0].Quota)
+}
+
+func TestAPIKeyService_CreateRejectsInvalidLimitsBeforeRepositoryAccess(t *testing.T) {
+	negative := -0.01
+	zeroDays := 0
+	tooManyDays := 3651
+	tests := []struct {
+		name string
+		req  CreateAPIKeyRequest
+		want error
+	}{
+		{name: "negative quota", req: CreateAPIKeyRequest{Quota: negative}, want: ErrInvalidAPIKeyQuota},
+		{name: "NaN quota", req: CreateAPIKeyRequest{Quota: math.NaN()}, want: ErrInvalidAPIKeyQuota},
+		{name: "infinite quota", req: CreateAPIKeyRequest{Quota: math.Inf(1)}, want: ErrInvalidAPIKeyQuota},
+		{name: "negative 5h rate limit", req: CreateAPIKeyRequest{RateLimit5h: negative}, want: ErrInvalidRateLimit5h},
+		{name: "negative daily rate limit", req: CreateAPIKeyRequest{RateLimit1d: negative}, want: ErrInvalidRateLimit1d},
+		{name: "negative 7d rate limit", req: CreateAPIKeyRequest{RateLimit7d: negative}, want: ErrInvalidRateLimit7d},
+		{name: "zero expiry days", req: CreateAPIKeyRequest{ExpiresInDays: &zeroDays}, want: ErrInvalidAPIKeyExpiry},
+		{name: "expiry days too large", req: CreateAPIKeyRequest{ExpiresInDays: &tooManyDays}, want: ErrInvalidAPIKeyExpiry},
+		{name: "name exceeds 100 characters", req: CreateAPIKeyRequest{Name: strings.Repeat("界", MaxAPIKeyNameRunes+1)}, want: ErrInvalidAPIKeyName},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := (&APIKeyService{}).Create(context.Background(), 7, tt.req)
+			require.Nil(t, got)
+			require.ErrorIs(t, err, tt.want)
+			require.True(t, infraerrors.IsBadRequest(err))
+		})
+	}
+}
+
+func TestAPIKeyService_UpdateRejectsInvalidLimitsBeforeRepositoryAccess(t *testing.T) {
+	negative := -0.01
+	longName := strings.Repeat("界", MaxAPIKeyNameRunes+1)
+	tests := []struct {
+		name string
+		req  UpdateAPIKeyRequest
+		want error
+	}{
+		{name: "negative quota", req: UpdateAPIKeyRequest{Quota: &negative}, want: ErrInvalidAPIKeyQuota},
+		{name: "negative 5h rate limit", req: UpdateAPIKeyRequest{RateLimit5h: &negative}, want: ErrInvalidRateLimit5h},
+		{name: "negative daily rate limit", req: UpdateAPIKeyRequest{RateLimit1d: &negative}, want: ErrInvalidRateLimit1d},
+		{name: "negative 7d rate limit", req: UpdateAPIKeyRequest{RateLimit7d: &negative}, want: ErrInvalidRateLimit7d},
+		{name: "name exceeds 100 characters", req: UpdateAPIKeyRequest{Name: &longName}, want: ErrInvalidAPIKeyName},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &quotaBaseAPIKeyRepoStub{}
+			got, err := (&APIKeyService{apiKeyRepo: repo}).Update(context.Background(), 11, 7, tt.req)
+			require.Nil(t, got)
+			require.ErrorIs(t, err, tt.want)
+			require.True(t, infraerrors.IsBadRequest(err))
+			require.Zero(t, repo.getByIDCalls, "invalid limits must be rejected before repository access")
+		})
+	}
+}
+
+func TestAPIKeyLimitValidationPreservesZeroAsUnlimited(t *testing.T) {
+	oneDay := 1
+	maxDays := 3650
+	require.NoError(t, validateCreateAPIKeyLimits(CreateAPIKeyRequest{}))
+	require.NoError(t, validateCreateAPIKeyLimits(CreateAPIKeyRequest{ExpiresInDays: &oneDay}))
+	require.NoError(t, validateCreateAPIKeyLimits(CreateAPIKeyRequest{ExpiresInDays: &maxDays}))
+	zero := 0.0
+	require.NoError(t, validateUpdateAPIKeyLimits(UpdateAPIKeyRequest{
+		Quota:       &zero,
+		RateLimit5h: &zero,
+		RateLimit1d: &zero,
+		RateLimit7d: &zero,
+	}))
 }

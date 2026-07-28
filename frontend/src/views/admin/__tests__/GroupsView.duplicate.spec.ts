@@ -12,7 +12,8 @@ const {
   getUsageSummary,
   getCapacitySummary,
   showSuccess,
-  showError
+  showError,
+  refreshBatchImageAccess
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
@@ -20,7 +21,8 @@ const {
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   showSuccess: vi.fn(),
-  showError: vi.fn()
+  showError: vi.fn(),
+  refreshBatchImageAccess: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -53,6 +55,10 @@ vi.mock('@/stores/onboarding', () => ({
     isCurrentStep: vi.fn(() => false),
     nextStep: vi.fn()
   })
+}))
+
+vi.mock('@/composables/useBatchImageAccess', () => ({
+  useBatchImageAccess: () => ({ refreshBatchImageAccess })
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -167,7 +173,8 @@ describe('GroupsView duplicate action', () => {
       getUsageSummary,
       getCapacitySummary,
       showSuccess,
-      showError
+      showError,
+      refreshBatchImageAccess
     ]) {
       fn.mockReset()
     }
@@ -188,6 +195,7 @@ describe('GroupsView duplicate action', () => {
     getModelsListCandidates.mockResolvedValue([])
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
+    refreshBatchImageAccess.mockResolvedValue(false)
   })
 
   afterEach(() => {
