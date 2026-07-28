@@ -14,6 +14,40 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestResolveOpenAIWSUpstreamModelHonorsAutomaticPassthrough(t *testing.T) {
+	t.Run("ignores stale account mapping", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra:    map[string]any{"openai_passthrough": true},
+			Credentials: map[string]any{
+				"model_mapping": map[string]any{"public-alias": "stale-target"},
+			},
+		}
+		require.Equal(t, "public-alias", resolveOpenAIWSUpstreamModel(account, " public-alias "))
+	})
+
+	t.Run("does not normalize OAuth aliases", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+			Extra:    map[string]any{"openai_passthrough": true},
+		}
+		require.Equal(t, "gpt-5.6", resolveOpenAIWSUpstreamModel(account, "gpt-5.6"))
+	})
+
+	t.Run("regular account still applies mapping", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Credentials: map[string]any{
+				"model_mapping": map[string]any{"public-alias": "gpt-5.6-sol"},
+			},
+		}
+		require.Equal(t, "gpt-5.6-sol", resolveOpenAIWSUpstreamModel(account, "public-alias"))
+	})
+}
+
 func TestIsOpenAIWSClientDisconnectError(t *testing.T) {
 	t.Parallel()
 

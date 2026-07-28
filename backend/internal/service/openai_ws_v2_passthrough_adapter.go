@@ -30,6 +30,10 @@ type openAIWSClientFrameConn struct {
 	restoreResponseModel func([]byte) []byte
 }
 
+func openAIWSIsJSONDataFrame(msgType coderws.MessageType) bool {
+	return msgType == coderws.MessageText || msgType == coderws.MessageBinary
+}
+
 // openAIWSPolicyEnforcingFrameConn wraps a client-side FrameConn and runs
 // every client→upstream frame through the OpenAI Fast Policy. It is the
 // passthrough-relay equivalent of the parseClientPayload integration in the
@@ -87,9 +91,8 @@ func (c *openAIWSPolicyEnforcingFrameConn) Close() error {
 
 // openAIWSPassthroughPolicyModelForFrame returns the upstream-perspective
 // model name that should be passed to evaluateOpenAIFastPolicy for a single
-// passthrough WS frame. Mirrors the HTTP-side normalization
-// (account.GetMappedModel + normalizeOpenAIModelForUpstream) so the WS path
-// matches model whitelists identically.
+// passthrough WS frame. It mirrors the HTTP-side account transform, including
+// the automatic-passthrough exception that preserves the requested model.
 func openAIWSPassthroughPolicyModelForFrame(account *Account, payload []byte) string {
 	if account == nil || len(payload) == 0 {
 		return ""
@@ -98,7 +101,7 @@ func openAIWSPassthroughPolicyModelForFrame(account *Account, payload []byte) st
 	if original == "" {
 		return ""
 	}
-	return normalizeOpenAIModelForUpstream(account, account.GetMappedModel(original))
+	return resolveOpenAIWSUpstreamModel(account, original)
 }
 
 // openAIWSPassthroughPolicyModelFromSessionFrame returns the upstream model
@@ -130,7 +133,7 @@ func openAIWSPassthroughPolicyModelFromSessionFrame(account *Account, payload []
 	if original == "" {
 		return ""
 	}
-	return normalizeOpenAIModelForUpstream(account, account.GetMappedModel(original))
+	return resolveOpenAIWSUpstreamModel(account, original)
 }
 
 type openAIWSPassthroughUsageMeta struct {
@@ -216,6 +219,14 @@ func (m *openAIWSPassthroughUsageMeta) turnModels(fallback string) (string, stri
 		upstreamModel = strings.TrimSpace(*current)
 	}
 	return requestModel, upstreamModel
+}
+
+// currentTurnSchedulingModel returns the same requested-model key used by
+// scheduler eligibility and the handler's success path. It intentionally does
+// not key transient health by the channel/account-transformed upstream model.
+func (m *openAIWSPassthroughUsageMeta) currentTurnSchedulingModel(account *Account, fallback string) string {
+	requestModel, _ := m.turnModels(fallback)
+	return ResolveOpenAIWSAccountSchedulingModel(account, requestModel)
 }
 
 func openAIWSTrimmedStringPtr(value string) *string {
@@ -453,7 +464,7 @@ func (c *openAIWSPassthroughFirstOutputFrameConn) WriteFrame(ctx context.Context
 		return errOpenAIWSConnClosed
 	}
 	generation := uint64(0)
-	if msgType == coderws.MessageText && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
+	if openAIWSIsJSONDataFrame(msgType) && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
 		generation = c.armDeadline(payload)
 	}
 	if err := c.inner.WriteFrame(ctx, msgType, payload); err != nil {
@@ -848,7 +859,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			statusCode,
 			truncateOpenAIWSLogValue(err.Error(), openAIWSLogValueMaxLen),
 		)
-		s.handleOpenAIWSDialTransientFailure(ctx, account, capturedSessionModel, dialErr)
+		s.handleOpenAIWSDialTransientFailure(
+			ctx,
+			account,
+			ResolveOpenAIWSAccountSchedulingModel(account, initialRequestModel),
+			dialErr,
+		)
 		if statusCode == http.StatusTooManyRequests {
 			s.persistOpenAIWSRateLimitSignal(ctx, account, handshakeHeaders, nil, "rate_limit_exceeded", "rate_limit_error", strings.TrimSpace(err.Error()))
 			return &UpstreamFailoverError{
@@ -924,7 +940,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		// capturedSessionModel 的读写都发生在该 goroutine 内，因此无需
 		// 加锁/原子化。
 		filter: func(msgType coderws.MessageType, payload []byte) (out []byte, blocked *OpenAIFastBlockedError, filterErr error) {
-			if msgType != coderws.MessageText {
+			if !openAIWSIsJSONDataFrame(msgType) {
 				return payload, nil, nil
 			}
 			eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
@@ -1060,7 +1076,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			if readErr != nil {
 				return msgType, payload, readErr
 			}
-			if msgType == coderws.MessageText && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
+			if openAIWSIsJSONDataFrame(msgType) && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
 				return msgType, payload, nil
 			}
 			if writeErr := upstreamFrameConn.WriteFrame(readCtx, msgType, payload); writeErr != nil {
@@ -1158,11 +1174,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return nil
 				}
 				eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
+				turnSchedulingModel := usageMeta.currentTurnSchedulingModel(account, initialRequestModel)
 				if isOpenAIWSTerminalEvent(eventType) {
-					s.handleOpenAIWSTerminalTransientFailure(ctx, account, capturedSessionModel, handshakeHeaders, payload)
+					s.handleOpenAIWSTerminalTransientFailure(ctx, account, turnSchedulingModel, handshakeHeaders, payload)
 				}
 				if eventType == "error" {
-					s.handleOpenAIWSErrorEventTransientFailure(ctx, account, capturedSessionModel, handshakeHeaders, payload)
+					s.handleOpenAIWSErrorEventTransientFailure(ctx, account, turnSchedulingModel, handshakeHeaders, payload)
 				}
 				if wroteDownstream || eventType != "error" {
 					return nil

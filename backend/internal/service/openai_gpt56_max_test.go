@@ -99,6 +99,73 @@ func TestNormalizeOpenAICodexCompactReasoningEffortForAccountScopesCompatibility
 	}
 }
 
+func TestNormalizeOpenAICodexCompactReasoningEffortUsesFinalCompactMappedModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		requestedModel string
+		passthrough    bool
+		modelMapping   map[string]any
+		compactMapping map[string]any
+		changed        bool
+		wantEffort     string
+	}{
+		{
+			name:           "mapping into GPT56 downgrades max",
+			requestedModel: "gpt-5.5",
+			compactMapping: map[string]any{"gpt-5.5": "gpt-5.6-sol"},
+			changed:        true,
+			wantEffort:     "xhigh",
+		},
+		{
+			name:           "mapping out of GPT56 preserves max",
+			requestedModel: "gpt-5.6-sol",
+			compactMapping: map[string]any{"gpt-5.6-sol": "gpt-5.5"},
+			wantEffort:     "max",
+		},
+		{
+			name:           "passthrough ignores stale mapping out of GPT56",
+			requestedModel: "gpt-5.6-sol",
+			passthrough:    true,
+			modelMapping:   map[string]any{"gpt-5.6-sol": "gpt-5.5"},
+			changed:        true,
+			wantEffort:     "xhigh",
+		},
+		{
+			name:           "passthrough ignores stale mapping into GPT56",
+			requestedModel: "gpt-5.5",
+			passthrough:    true,
+			modelMapping:   map[string]any{"gpt-5.5": "gpt-5.6-sol"},
+			wantEffort:     "max",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses/compact", nil)
+			account := &Account{
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeOAuth,
+				Credentials: map[string]any{
+					"compact_model_mapping": tt.compactMapping,
+					"model_mapping":         tt.modelMapping,
+				},
+				Extra: map[string]any{"openai_passthrough": tt.passthrough},
+			}
+			body := []byte(`{"model":"` + tt.requestedModel + `","input":"compact me","reasoning":{"effort":"max"}}`)
+
+			normalized, changed, err := normalizeOpenAICodexCompactReasoningEffortForAccount(c, account, body)
+
+			require.NoError(t, err)
+			require.Equal(t, tt.changed, changed)
+			require.Equal(t, tt.wantEffort, gjson.GetBytes(normalized, "reasoning.effort").String())
+		})
+	}
+}
+
 func TestOpenAIGatewayServiceForwardPreservesGPT56MaxEffort(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	upstream := &httpUpstreamRecorder{

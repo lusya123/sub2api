@@ -214,7 +214,11 @@ func normalizeOpenAICodexCompactReasoningEffortForAccount(c *gin.Context, accoun
 	}
 
 	requestedModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
-	effectiveModel := account.GetMappedModel(requestedModel)
+	effectiveModel := requestedModel
+	if !account.IsOpenAIPassthroughEnabled() {
+		effectiveModel = account.GetMappedModel(requestedModel)
+	}
+	effectiveModel = resolveOpenAICompactForwardModel(account, effectiveModel)
 	return normalizeOpenAICodexCompactReasoningEffort(body, effectiveModel)
 }
 

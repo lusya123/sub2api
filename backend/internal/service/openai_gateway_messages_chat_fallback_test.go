@@ -82,6 +82,37 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 			mapped:     "gpt-5.6-luna",
 			wantEffort: "medium",
 		},
+		{
+			name:       "GPT56 xhigh suffix remains xhigh",
+			model:      "gpt-5.6-luna-xhigh",
+			mapped:     "gpt-5.6-luna",
+			wantEffort: "xhigh",
+		},
+		{
+			name:       "GPT56 max suffix remains max",
+			model:      "gpt-5.6-max",
+			mapped:     "gpt-5.6-sol",
+			wantEffort: "max",
+		},
+		{
+			name:       "explicit low overrides GPT56 xhigh suffix",
+			model:      "gpt-5.6-luna-xhigh",
+			mapped:     "gpt-5.6-luna",
+			effortJSON: `,"output_config":{"effort":"low"}`,
+			wantEffort: "low",
+		},
+		{
+			name:       "older model xhigh suffix remains xhigh",
+			model:      "gpt-5.4-xhigh",
+			mapped:     "gpt-5.4",
+			wantEffort: "xhigh",
+		},
+		{
+			name:       "older model max suffix maps to xhigh",
+			model:      "gpt-5.4-max",
+			mapped:     "gpt-5.4",
+			wantEffort: "xhigh",
+		},
 	}
 
 	for _, tt := range tests {
@@ -100,7 +131,9 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 				)),
 			}}
 			account := forceChatMessagesFallbackAccount()
-			account.Credentials["model_mapping"] = map[string]any{tt.model: tt.mapped}
+			modelMapping := map[string]any{tt.model: tt.mapped}
+			modelMapping[NormalizeOpenAICompatRequestedModel(tt.model)] = tt.mapped
+			account.Credentials["model_mapping"] = modelMapping
 
 			svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
 			result, err := svc.ForwardAsAnthropic(context.Background(), c, account, []byte(body), "", "")

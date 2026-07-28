@@ -276,7 +276,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	if originalModel != "" {
 		mappedModel = strings.TrimSpace(gjson.GetBytes(body, "model").String())
 		if mappedModel == "" {
-			mappedModel = normalizeOpenAIModelForUpstream(account, account.GetMappedModel(originalModel))
+			mappedModel = resolveOpenAIWSUpstreamModel(account, originalModel)
 		}
 		needModelReplace = mappedModel != "" && mappedModel != originalModel
 		if needModelReplace {
@@ -463,7 +463,7 @@ func resolveGrokWSUpstreamModel(account *Account, body []byte, originalModel str
 	// body model differs from the client-facing model. Only resolve from the
 	// original model when the body still carries that original value.
 	if account != nil && originalModel != "" && (upstreamModel == "" || upstreamModel == originalModel) {
-		if mappedModel := normalizeOpenAIModelForUpstream(account, account.GetMappedModel(originalModel)); mappedModel != "" {
+		if mappedModel := resolveOpenAIWSUpstreamModel(account, originalModel); mappedModel != "" {
 			upstreamModel = mappedModel
 		}
 	}

@@ -84,6 +84,14 @@ func splitOpenAICompatReasoningModel(model string) (normalizedModel string, reas
 		reasoningEffort = last
 	case "xhigh", "extrahigh":
 		reasoningEffort = "xhigh"
+	case "max":
+		// "max" is also part of older concrete Codex model names such as
+		// gpt-5.1-codex-max; those must remain model names rather than being
+		// reinterpreted as a reasoning suffix.
+		if strings.HasSuffix(codexModelLookupKey(modelID), "-codex-max") {
+			return trimmed, "", false
+		}
+		reasoningEffort = "max"
 	default:
 		return trimmed, "", false
 	}
@@ -97,6 +105,8 @@ func openAIReasoningEffortToClaudeOutputEffort(effort string) string {
 		return effort
 	case "xhigh":
 		return "max"
+	case "max":
+		return "max"
 	default:
 		return ""
 	}
@@ -105,8 +115,24 @@ func openAIReasoningEffortToClaudeOutputEffort(effort string) string {
 // openAICompatAnthropicReasoningEffort resolves the effort emitted by the
 // Anthropic bridge after the final upstream model is known. Anthropic's max is
 // normally translated to OpenAI xhigh, but GPT-5.6 accepts the original max
-// value on Responses and Chat Completions.
-func openAICompatAnthropicReasoningEffort(req *apicompat.AnthropicRequest, upstreamModel, convertedEffort string) string {
+// value on Responses and Chat Completions. Model suffixes are re-read from the
+// original request so a derived xhigh is not mistaken for an explicit max.
+func openAICompatAnthropicReasoningEffort(
+	req *apicompat.AnthropicRequest,
+	originalModel string,
+	hadExplicitOutputEffort bool,
+	upstreamModel string,
+	convertedEffort string,
+) string {
+	if !hadExplicitOutputEffort {
+		_, derivedEffort, ok := splitOpenAICompatReasoningModel(originalModel)
+		if ok && derivedEffort != "" {
+			if normalized := normalizeOpenAIReasoningEffortForModel(derivedEffort, upstreamModel); normalized != "" {
+				return normalized
+			}
+		}
+		return convertedEffort
+	}
 	if req == nil || req.OutputConfig == nil || !strings.EqualFold(strings.TrimSpace(req.OutputConfig.Effort), "max") {
 		return convertedEffort
 	}

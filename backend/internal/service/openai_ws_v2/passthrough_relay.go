@@ -167,7 +167,8 @@ func Relay(
 		return upstreamConn.WriteFrame(writeCtx, msgType, payload)
 	}
 	writeClientFrameUpstream := func(msgType coderws.MessageType, payload []byte) error {
-		if msgType == coderws.MessageText && strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
+		if (msgType == coderws.MessageText || msgType == coderws.MessageBinary) &&
+			strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
 			state.setRequestModel(strings.TrimSpace(gjson.GetBytes(payload, "model").String()))
 		}
 		return writeUpstream(msgType, payload)

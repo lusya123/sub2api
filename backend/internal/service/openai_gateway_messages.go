@@ -48,6 +48,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 	anthropicDigestReq := cloneAnthropicRequestForDigest(&anthropicReq)
 	originalModel := anthropicReq.Model
+	hadExplicitOutputEffort := anthropicReq.OutputConfig != nil &&
+		strings.TrimSpace(anthropicReq.OutputConfig.Effort) != ""
 	applyOpenAICompatModelNormalization(&anthropicReq)
 	normalizedModel := anthropicReq.Model
 	clientStream := anthropicReq.Stream // client's original stream preference
@@ -111,7 +113,13 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	responsesReq.Model = upstreamModel
 	if responsesReq.Reasoning != nil {
-		responsesReq.Reasoning.Effort = openAICompatAnthropicReasoningEffort(&anthropicReq, upstreamModel, responsesReq.Reasoning.Effort)
+		responsesReq.Reasoning.Effort = openAICompatAnthropicReasoningEffort(
+			&anthropicReq,
+			originalModel,
+			hadExplicitOutputEffort,
+			upstreamModel,
+			responsesReq.Reasoning.Effort,
+		)
 	}
 	if previousResponseID != "" {
 		responsesReq.PreviousResponseID = previousResponseID

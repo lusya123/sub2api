@@ -76,6 +76,9 @@ func TestNormalizeOpenAICompatRequestedModel(t *testing.T) {
 		want  string
 	}{
 		{name: "gpt reasoning alias strips xhigh", input: "gpt-5.4-xhigh", want: "gpt-5.4"},
+		{name: "GPT56 bare max alias routes to Sol", input: "gpt-5.6-max", want: "gpt-5.6-sol"},
+		{name: "GPT56 concrete max alias strips effort", input: "gpt-5.6-terra-max", want: "gpt-5.6-terra"},
+		{name: "older GPT max alias strips effort", input: "gpt-5.4-max", want: "gpt-5.4"},
 		{name: "gpt reasoning alias strips none", input: "gpt-5.4-none", want: "gpt-5.4"},
 		{name: "codex max model stays intact", input: "gpt-5.1-codex-max", want: "gpt-5.1-codex-max"},
 		{name: "non openai model unchanged", input: "claude-opus-4-6", want: "claude-opus-4-6"},
@@ -99,6 +102,25 @@ func TestApplyOpenAICompatModelNormalization(t *testing.T) {
 		require.Equal(t, "gpt-5.4", req.Model)
 		require.NotNil(t, req.OutputConfig)
 		require.Equal(t, "max", req.OutputConfig.Effort)
+	})
+
+	t.Run("derives max from GPT56 model suffix", func(t *testing.T) {
+		req := &apicompat.AnthropicRequest{Model: "gpt-5.6-max"}
+
+		applyOpenAICompatModelNormalization(req)
+
+		require.Equal(t, "gpt-5.6-sol", req.Model)
+		require.NotNil(t, req.OutputConfig)
+		require.Equal(t, "max", req.OutputConfig.Effort)
+	})
+
+	t.Run("does not reinterpret older concrete max model as effort", func(t *testing.T) {
+		req := &apicompat.AnthropicRequest{Model: "gpt-5.1-codex-max"}
+
+		applyOpenAICompatModelNormalization(req)
+
+		require.Equal(t, "gpt-5.1-codex-max", req.Model)
+		require.Nil(t, req.OutputConfig)
 	})
 
 	t.Run("explicit output config wins over model suffix", func(t *testing.T) {
@@ -277,6 +299,35 @@ func TestForwardAsAnthropic_PreservesMaxForFinalGPT56ResponsesModel(t *testing.T
 			model:      "gpt-5.6-sol",
 			wantModel:  "gpt-5.6-sol",
 			wantEffort: "medium",
+		},
+		{
+			name:       "GPT56 xhigh suffix remains xhigh",
+			account:    rawGPT56ResponsesAPIKeyAccount("gpt-5.6-sol", "gpt-5.6-sol"),
+			model:      "gpt-5.6-sol-xhigh",
+			wantModel:  "gpt-5.6-sol",
+			wantEffort: "xhigh",
+		},
+		{
+			name:       "GPT56 max suffix remains max",
+			account:    rawGPT56ResponsesAPIKeyAccount("gpt-5.6-sol", "gpt-5.6-sol"),
+			model:      "gpt-5.6-max",
+			wantModel:  "gpt-5.6-sol",
+			wantEffort: "max",
+		},
+		{
+			name:       "explicit low overrides GPT56 xhigh suffix",
+			account:    rawGPT56ResponsesAPIKeyAccount("gpt-5.6-sol", "gpt-5.6-sol"),
+			model:      "gpt-5.6-sol-xhigh",
+			effort:     "low",
+			wantModel:  "gpt-5.6-sol",
+			wantEffort: "low",
+		},
+		{
+			name:       "older GPT max suffix maps to xhigh",
+			account:    rawGPT56ResponsesAPIKeyAccount("gpt-5.4", "gpt-5.4"),
+			model:      "gpt-5.4-max",
+			wantModel:  "gpt-5.4",
+			wantEffort: "xhigh",
 		},
 	}
 

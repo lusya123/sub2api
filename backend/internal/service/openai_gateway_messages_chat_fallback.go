@@ -47,6 +47,8 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return nil, fmt.Errorf("missing model in request")
 	}
+	hadExplicitOutputEffort := anthropicReq.OutputConfig != nil &&
+		strings.TrimSpace(anthropicReq.OutputConfig.Effort) != ""
 	applyOpenAICompatModelNormalization(&anthropicReq)
 	clientStream := anthropicReq.Stream
 
@@ -60,7 +62,13 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	billingModel := resolveOpenAIForwardModel(account, anthropicReq.Model, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
 	chatReq.Model = upstreamModel
-	chatReq.ReasoningEffort = openAICompatAnthropicReasoningEffort(&anthropicReq, upstreamModel, chatReq.ReasoningEffort)
+	chatReq.ReasoningEffort = openAICompatAnthropicReasoningEffort(
+		&anthropicReq,
+		originalModel,
+		hadExplicitOutputEffort,
+		upstreamModel,
+		chatReq.ReasoningEffort,
+	)
 	chatReq.Stream = clientStream
 	if clientStream {
 		chatReq.StreamOptions = &apicompat.ChatStreamOptions{IncludeUsage: true}

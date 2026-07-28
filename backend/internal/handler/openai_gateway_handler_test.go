@@ -1378,6 +1378,62 @@ func TestOpenAIResponsesWebSocket_PassthroughTracksModelPerTurn(t *testing.T) {
 		"each turn must be billed with its own channel-mapped model")
 }
 
+func TestOpenAIResponsesWebSocket_PassthroughBinaryTurnUsesFullModelPipeline(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:        `{"type":"response.create","model":"sol","stream":false}`,
+		secondPayload:       `{"type":"response.create","model":"terra","stream":false}`,
+		secondPayloadBinary: true,
+		channelMapping: map[string]string{
+			"sol":   "sol-channel",
+			"terra": "terra-channel",
+		},
+		accountModelMapping: map[string]any{
+			"sol":           "gpt-5.6-sol",
+			"terra":         "gpt-5.6-terra",
+			"sol-channel":   "gpt-5.6-sol",
+			"terra-channel": "gpt-5.6-terra",
+		},
+	})
+
+	require.Len(t, got.upstreamPayloads, 2)
+	require.Equal(t, "gpt-5.6-sol", gjson.GetBytes(got.upstreamPayloads[0], "model").String())
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(got.upstreamPayloads[1], "model").String())
+	require.Len(t, got.clientEvents, 2)
+	require.Equal(t, "sol", gjson.GetBytes(got.clientEvents[0], "response.model").String())
+	require.Equal(t, "terra", gjson.GetBytes(got.clientEvents[1], "response.model").String())
+	require.Len(t, got.logs, 2)
+	require.Equal(t, "terra", got.logs[1].RequestedModel)
+	require.NotNil(t, got.logs[1].UpstreamModel)
+	require.Equal(t, "gpt-5.6-terra", *got.logs[1].UpstreamModel)
+	require.NotNil(t, got.logs[1].ModelMappingChain)
+	require.Equal(t, "terra→terra-channel→gpt-5.6-terra", *got.logs[1].ModelMappingChain)
+}
+
+func TestOpenAIResponsesWebSocket_AccountPassthroughIgnoresStaleModelMapping(t *testing.T) {
+	for _, mode := range []string{
+		service.OpenAIWSIngressModePassthrough,
+		service.OpenAIWSIngressModeCtxPool,
+	} {
+		t.Run(mode, func(t *testing.T) {
+			got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+				firstPayload:       `{"type":"response.create","model":"public-alias","stream":false}`,
+				ingressMode:        mode,
+				accountPassthrough: true,
+				accountModelMapping: map[string]any{
+					"public-alias": "stale-model-target",
+				},
+			})
+
+			require.Len(t, got.upstreamPayloads, 1)
+			require.Equal(t, "public-alias", gjson.GetBytes(got.upstreamPayloads[0], "model").String())
+			require.Len(t, got.clientEvents, 1)
+			require.Equal(t, "public-alias", gjson.GetBytes(got.clientEvents[0], "response.model").String())
+			require.Equal(t, "public-alias", got.log.RequestedModel)
+			require.Nil(t, got.log.ModelMappingChain)
+		})
+	}
+}
+
 func TestOpenAIResponsesWebSocket_UnchangedChannelTargetOutsideAccountMappingKeysRemainsValid(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
 		firstPayload:  `{"type":"response.create","model":"public-alias","stream":false}`,
@@ -1709,11 +1765,13 @@ func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject
 type openAIResponsesWSUsageLogCase struct {
 	firstPayload              string
 	secondPayload             string
+	secondPayloadBinary       bool
 	userAgent                 *string
 	ingressMode               string
 	channelMapping            map[string]string
 	billingModelSource        string
 	accountModelMapping       map[string]any
+	accountPassthrough        bool
 	afterFirstUpstreamRequest func(channelSvc *service.ChannelService) error
 }
 
@@ -2457,6 +2515,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		Extra: map[string]any{
 			"openai_apikey_responses_websockets_v2_enabled": true,
 			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
+			"openai_passthrough":                            tc.accountPassthrough,
 		},
 	}
 	if strings.TrimSpace(tc.ingressMode) != "" {
@@ -2582,7 +2641,11 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	readCompleted()
 	if turnCount == 2 {
 		writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
-		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.secondPayload))
+		secondMessageType := coderws.MessageText
+		if tc.secondPayloadBinary {
+			secondMessageType = coderws.MessageBinary
+		}
+		err = clientConn.Write(writeCtx, secondMessageType, []byte(tc.secondPayload))
 		cancelWrite()
 		require.NoError(t, err)
 		readCompleted()

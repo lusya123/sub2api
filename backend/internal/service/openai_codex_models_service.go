@@ -508,6 +508,7 @@ func codexModelsManifestBodyETag(body []byte) string {
 }
 
 var apiKeyCodexModelsWithoutResponsesLite = map[string]struct{}{
+	"gpt-5.6":       {},
 	"gpt-5.6-sol":   {},
 	"gpt-5.6-terra": {},
 	"gpt-5.6-luna":  {},

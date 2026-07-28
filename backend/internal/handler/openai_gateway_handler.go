@@ -1916,10 +1916,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
 					h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(ctx, account.ID, result.ResponseHeaders)
 				}
-				scheduleModel := turnUpstreamModel
-				if scheduleModel == "" {
-					scheduleModel = turnRequestedModel
-				}
+				// Model-scoped transient failures are recorded and queried by the
+				// requested turn model (plus account mapping), not by the channel-
+				// transformed upstream slug. Clear that exact key on success so a
+				// channel mapping cannot leave a stale failure streak behind.
+				scheduleModel := service.ResolveOpenAIWSAccountSchedulingModel(account, turnRequestedModel)
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, scheduleModel, openAIForwardSucceededForScheduling(result), result.FirstTokenMs)
 				inboundEndpoint := GetInboundEndpoint(c)
 				upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)

@@ -14,6 +14,28 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+// resolveOpenAIWSUpstreamModel applies the account-level model transform used
+// by WS ingress. Automatic passthrough accounts are the exception: their
+// contract is to preserve model semantics and only replace authentication, so
+// stale model_mapping entries must not rewrite the payload after scheduling.
+func resolveOpenAIWSUpstreamModel(account *Account, requestedModel string) string {
+	requestedModel = strings.TrimSpace(requestedModel)
+	if account != nil && account.IsOpenAIPassthroughEnabled() {
+		return requestedModel
+	}
+	if account == nil {
+		return normalizeOpenAIModelForUpstream(nil, requestedModel)
+	}
+	return normalizeOpenAIModelForUpstream(account, account.GetMappedModel(requestedModel))
+}
+
+// ResolveOpenAIWSAccountSchedulingModel returns the model key used for
+// model-scoped account health. Both WS error accounting and successful-turn
+// cleanup must call this with the client-facing model for that turn.
+func ResolveOpenAIWSAccountSchedulingModel(account *Account, requestedModel string) string {
+	return canonicalOpenAIAccountSchedulingModel(account, requestedModel)
+}
+
 func (s *OpenAIGatewayService) isOpenAIWSGeneratePrewarmEnabled() bool {
 	return s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.PrewarmGenerateEnabled
 }
