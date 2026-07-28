@@ -1939,7 +1939,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						RequestPayloadHash: requestPayloadHash,
 						APIKeyService:      h.apiKeyService,
 						QuotaPlatform:      quotaPlatform,
-						SessionID:          sessionID,
 						ChannelUsageFields: turnUsageFields,
 						CyberBlocked:       cyberBlocked,
 					}); err != nil {
