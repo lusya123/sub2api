@@ -63,10 +63,10 @@ describe('PlazaModelPricingTable', () => {
     expect(text).toContain('1x')
   })
 
-  it('倍率 ≠ 1 时价格列为折后实付价,官方价列保持原价', () => {
+  it('倍率 ≠ 1 时价格列为按展示倍率计算的参考价,官方价列保持原价', () => {
     const wrapper = mountTable([tokenModel()], 0.5)
     const text = wrapper.text()
-    // 实付 = 3 × 0.5 / 15 × 0.5
+    // 参考价 = 3 × 0.5 / 15 × 0.5
     expect(text).toContain('$1.50')
     expect(text).toContain('$7.50')
     // 官方价原值仍在(官方列不乘倍率)
@@ -78,7 +78,7 @@ describe('PlazaModelPricingTable', () => {
   it('用户专属倍率覆盖分组倍率,并划线展示原倍率', () => {
     const wrapper = mountTable([tokenModel()], 1, 0.8)
     const text = wrapper.text()
-    // 实付按 0.8:3 × 0.8 = 2.4
+    // 参考价按 0.8:3 × 0.8 = 2.4
     expect(text).toContain('$2.40')
     expect(text).toContain('$12.00')
     // 倍率列:原倍率划线 + 专属倍率
@@ -128,12 +128,12 @@ describe('PlazaModelPricingTable', () => {
     expect(rows[1].text()).toContain('openai')
   })
 
-  it('两级表头:实付区与官方区各拆输入/输出/缓存列', () => {
+  it('两级表头:参考价区与官方区各拆输入/输出/缓存列', () => {
     const wrapper = mountTable([tokenModel()], 1)
     const text = wrapper.text()
     expect(text).toContain('modelPlaza.table.paidPrice')
     expect(text).toContain('modelPlaza.table.officialPrice')
-    // token 行:模型 + 实付 3 列 + 官方 3 列 + 倍率
+    // token 行:模型 + 参考价 3 列 + 官方 3 列 + 倍率
     expect(wrapper.findAll('tbody td')).toHaveLength(8)
   })
 
@@ -215,7 +215,7 @@ describe('PlazaModelPricingTable', () => {
     // 区间标签按 token 数生成
     expect(text).toContain('≤200K')
     expect(text).toContain('>200K')
-    // 折后:输入 1.5 / 3,输出 7.5 / 15
+    // 展示倍率折算:输入 1.5 / 3,输出 7.5 / 15
     expect(text).toContain('$1.50')
     expect(text).toContain('$7.50')
     expect(text).toContain('$15.00')

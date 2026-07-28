@@ -107,7 +107,7 @@ export const FeatureFlags = {
   modelMarketplace: defineFlag({
     key: 'model_health_page_enabled',
     mode: 'opt-out',
-    label: 'Model Marketplace',
+    label: 'Model Status',
   }),
   modelPlaza: defineFlag({
     key: 'model_plaza_enabled',

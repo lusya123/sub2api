@@ -593,7 +593,7 @@ describe('路由守卫逻辑', () => {
   })
 })
 
-describe('模型广场路由开关', () => {
+describe('模型状态路由开关', () => {
   it('forces a fresh public settings fetch before allowing /model-marketplace', () => {
     const routerSource = readFileSync(
       'src/router/index.ts',

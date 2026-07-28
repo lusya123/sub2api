@@ -22,6 +22,11 @@
       {{ t('modelPlaza.anonymousHint') }}
     </p>
 
+    <p class="flex items-start gap-1.5 text-xs text-gray-500 dark:text-dark-400">
+      <Icon name="infoCircle" size="xs" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      {{ t('modelPlaza.priceDisclaimer') }}
+    </p>
+
     <!-- 加载/错误/空 -->
     <div v-if="loading" class="flex min-h-[240px] items-center justify-center">
       <div class="h-8 w-8 animate-spin rounded-full border-2 border-primary-600/25 border-t-primary-600 dark:border-primary-400/25 dark:border-t-primary-400"></div>

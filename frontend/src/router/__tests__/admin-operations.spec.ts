@@ -10,12 +10,13 @@ describe('admin operations route', () => {
     expect(route?.meta.requiresSuperAdmin).toBeUndefined()
   })
 
-  it('registers the user model status page on channel monitor logic', () => {
+  it('registers the user channel status page on channel monitor logic', () => {
     const route = router.getRoutes().find((item) => item.path === '/status')
 
     expect(route?.name).toBe('Status')
     expect(route?.meta.requiresAuth).toBe(true)
     expect(route?.meta.requiresAdmin).toBe(false)
+    expect(route?.meta.titleKey).toBe('nav.channelStatus')
   })
 
   it('registers the public and admin live globe pages', () => {
@@ -28,13 +29,14 @@ describe('admin operations route', () => {
     expect(adminRoute?.meta.requiresAdmin).toBe(true)
   })
 
-  it('registers the admin model marketplace and legacy model-health redirect', () => {
+  it('registers the admin model monitoring config and legacy model-health redirect', () => {
     const marketplace = router.getRoutes().find((item) => item.path === '/admin/model-marketplace')
     const modelHealth = router.getRoutes().find((item) => item.path === '/admin/model-health')
 
     expect(marketplace?.meta.requiresAuth).toBe(true)
     expect(marketplace?.meta.requiresAdmin).toBe(true)
     expect(marketplace?.meta.requiresSuperAdmin).toBe(true)
+    expect(marketplace?.meta.titleKey).toBe('admin.modelMarketplaceMonitor.title')
     expect(modelHealth?.redirect).toBe('/admin/model-marketplace')
   })
 })

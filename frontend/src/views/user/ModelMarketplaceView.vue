@@ -4,11 +4,14 @@
       <div class="mx-auto max-w-[1500px] space-y-8">
         <section class="mx-auto max-w-3xl pt-2 text-center md:pt-6">
           <h1 class="text-4xl font-black text-gray-950 dark:text-white md:text-5xl">
-            {{ t('modelMarketplaceStatus.squareHeading', 'Model Square') }}
+            {{ t('modelMarketplaceStatus.squareHeading', 'Model Status') }}
           </h1>
           <p class="mx-auto mt-4 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">
             {{ t('modelMarketplaceStatus.description') }}
             {{ t('modelMarketplaceStatus.totalModels', { count: modelCards.length }, `${modelCards.length} models`) }}
+          </p>
+          <p class="mx-auto mt-2 max-w-2xl text-xs leading-5 text-amber-700 dark:text-amber-300">
+            {{ t('modelMarketplaceStatus.priceDisclaimer') }}
           </p>
 
           <div class="relative mx-auto mt-7 w-full max-w-2xl">
@@ -258,7 +261,7 @@
                       </div>
                       <div class="flex shrink-0 items-center gap-1.5">
                         <span class="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-dark-800 dark:text-gray-300">
-                          ×{{ formatRate(channel.effectiveRate ?? 1) }}
+                          {{ t('modelMarketplaceStatus.channels.rate') }} ×{{ formatRate(channel.effectiveRate ?? 1) }}
                         </span>
                         <span class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold" :class="statusBadgeClass(channel.status)">
                           {{ statusLabel(channel.status) }}
@@ -1043,13 +1046,13 @@ function modelPriceItems(card: MarketplaceModelChannel): Array<{ label: string, 
   if (!pricing) return []
   if (pricing.billing_mode === BILLING_MODE_PER_REQUEST && pricing.per_request_price != null) {
     return [{
-      label: t('modelMarketplaceStatus.officialRequestPrice', '官方请求价'),
+      label: t('modelMarketplaceStatus.officialRequestPrice', 'Reference request price'),
       value: `${formatScaled(pricing.per_request_price, 1)}${t('availableChannels.pricing.unitPerRequest')}`,
     }]
   }
   if (pricing.billing_mode === BILLING_MODE_IMAGE && pricing.image_output_price != null) {
     return [{
-      label: t('modelMarketplaceStatus.officialImagePrice', '官方图片价'),
+      label: t('modelMarketplaceStatus.officialImagePrice', 'Reference image price'),
       value: `${formatScaled(pricing.image_output_price, 1)}${t('availableChannels.pricing.unitPerRequest')}`,
     }]
   }
@@ -1060,11 +1063,11 @@ function modelPriceItems(card: MarketplaceModelChannel): Array<{ label: string, 
     : t('modelMarketplaceStatus.unitPerThousandTokens')
   return [
     pricing.input_price == null ? null : {
-      label: t('modelMarketplaceStatus.officialInputPrice', '官方输入价'),
+      label: t('modelMarketplaceStatus.officialInputPrice', 'Reference input price'),
       value: `${formatScaled(pricing.input_price, scale)}${unit}`,
     },
     pricing.output_price == null ? null : {
-      label: t('modelMarketplaceStatus.officialOutputPrice', '官方输出价'),
+      label: t('modelMarketplaceStatus.officialOutputPrice', 'Reference output price'),
       value: `${formatScaled(pricing.output_price, scale)}${unit}`,
     },
   ].filter((item): item is { label: string, value: string } => item != null)

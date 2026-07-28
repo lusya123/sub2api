@@ -533,11 +533,12 @@ export default {
     empty: '暂无可展示的分组',
     loadFailed: '加载模型广场失败',
     noSearchResult: '没有匹配的模型',
-    anonymousHint: '登录后可查看你的专属分组与专属倍率',
+    anonymousHint: '登录后可查看你的专属分组与专属展示倍率',
+    priceDisclaimer: '展示价按渠道配置价（缺失时可能使用 LiteLLM 参考价）与当前展示倍率估算；高峰及其他结算规则可能另行调整，最终以使用记录或账单为准。',
     filters: {
       platformLabel: '平台',
       groupLabel: '分组',
-      rateLabel: '倍率',
+      rateLabel: '展示倍率',
       modelLabel: '模型',
       searchPlaceholder: '搜索模型名称',
       all: '全部'
@@ -549,7 +550,7 @@ export default {
     detail: {
       noModels: '该分组暂未配置模型',
       noPricing: '未配置定价',
-      peakNote: '高峰时段 {window} 计费倍率 ×{multiplier}'
+      peakNote: '高峰时段 {window} 计费倍率 ×{multiplier}；表内基础展示价未计入该倍率'
     },
     table: {
       model: '模型',
@@ -558,9 +559,9 @@ export default {
       cache: '缓存',
       cacheWrite: '写入',
       cacheRead: '读取',
-      paidPrice: '实付价格(折后)',
-      officialPrice: '官方价格',
-      rate: '折扣倍率',
+      paidPrice: '基础展示价（未含动态计费）',
+      officialPrice: 'LiteLLM 参考价',
+      rate: '展示倍率',
       unitPerMillion: '$ / 1M token',
       perUnitRequest: '/ 次',
       perUnitImage: '/ 张',

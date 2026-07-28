@@ -187,8 +187,8 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Status',
-      titleKey: 'nav.modelStatus'
+      title: 'Channel Status',
+      titleKey: 'nav.channelStatus'
     }
   },
   {
@@ -199,7 +199,7 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
       requiresAuth: true,
       requiresAdmin: false,
       requiresModelMarketplace: true,
-      title: 'Model Marketplace',
+      title: 'Model Status',
       titleKey: 'modelMarketplaceStatus.title',
       descriptionKey: 'modelMarketplaceStatus.description'
     }
@@ -549,8 +549,8 @@ const routes: RouteRecordRaw[] = applyAdminAccessPolicy([
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Model Marketplace',
-      titleKey: 'admin.modelMarketplace.title'
+      title: 'Model Monitoring',
+      titleKey: 'admin.modelMarketplaceMonitor.title'
     }
   },
   {

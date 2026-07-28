@@ -81,7 +81,7 @@
             </div>
           </td>
 
-          <!-- token 计费:输入 / 输出(阶梯内联)/ 缓存(写/读) -->
+          <!-- token 计费参考价:输入 / 输出(阶梯内联)/ 缓存(写/读) -->
           <template v-if="billingMode(m) === BILLING_MODE_TOKEN">
             <td class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
@@ -91,10 +91,10 @@
                   class="whitespace-nowrap text-xs leading-5"
                 >
                   <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
-                  {{ paidPerMillion(iv.input_price) }}
+                  {{ previewPerMillion(iv.input_price) }}
                 </div>
               </template>
-              <template v-else>{{ paidPerMillion(m.pricing?.input_price) }}</template>
+              <template v-else>{{ previewPerMillion(m.pricing?.input_price) }}</template>
             </td>
             <td class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
@@ -104,10 +104,10 @@
                   class="whitespace-nowrap text-xs leading-5"
                 >
                   <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
-                  {{ paidPerMillion(iv.output_price) }}
+                  {{ previewPerMillion(iv.output_price) }}
                 </div>
               </template>
-              <template v-else>{{ paidPerMillion(m.pricing?.output_price) }}</template>
+              <template v-else>{{ previewPerMillion(m.pricing?.output_price) }}</template>
             </td>
             <td class="pz-cell px-3 py-2.5 align-middle">
               <div
@@ -116,18 +116,18 @@
               >
                 <div>
                   <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.cacheWrite') }}</span>
-                  {{ paidPerMillion(m.pricing?.cache_write_price) }}
+                  {{ previewPerMillion(m.pricing?.cache_write_price) }}
                 </div>
                 <div>
                   <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.cacheRead') }}</span>
-                  {{ paidPerMillion(m.pricing?.cache_read_price) }}
+                  {{ previewPerMillion(m.pricing?.cache_read_price) }}
                 </div>
               </div>
               <span v-else class="text-gray-400 dark:text-dark-500">-</span>
             </td>
           </template>
 
-          <!-- 按次 / 按图片计费:实付区整体合并,阶梯芯片或单一按次价 -->
+          <!-- 按次 / 按图片计费:参考价区整体合并,阶梯芯片或单一按次价 -->
           <template v-else>
             <td colspan="3" class="pz-cell px-3 py-2.5 align-middle">
               <div
@@ -140,13 +140,13 @@
                   class="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-800 dark:bg-dark-700/60 dark:text-gray-200"
                 >
                   <span class="font-sans text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
-                  {{ paidRequestPrice(iv.per_request_price)
+                  {{ previewRequestPrice(iv.per_request_price)
                   }}<span class="font-sans text-gray-400 dark:text-dark-500">{{ perUnitSuffix(m) }}</span>
                 </span>
               </div>
               <template v-else-if="m.pricing?.per_request_price != null">
                 <span class="font-mono font-semibold text-gray-900 dark:text-gray-50">
-                  {{ paidRequestPrice(m.pricing.per_request_price) }}
+                  {{ previewRequestPrice(m.pricing.per_request_price) }}
                 </span>
                 <span class="ml-1 text-xs text-gray-400 dark:text-dark-500">{{ perUnitSuffix(m) }}</span>
               </template>
@@ -184,7 +184,7 @@
             <span v-else class="text-gray-400 dark:text-dark-500">-</span>
           </td>
 
-          <!-- 折扣倍率(专属倍率划线展示原倍率) -->
+          <!-- 展示倍率(专属倍率划线展示原倍率) -->
           <td
             class="border-l border-gray-100 py-2.5 pl-3 pr-1 text-right align-middle font-mono text-xs dark:border-dark-700/60"
           >
@@ -215,17 +215,17 @@ import type { UserPricingInterval } from '@/api/channels'
 
 const props = defineProps<{
   models: PlazaModel[]
-  /** 分组平台;实付分区底色随平台着色,未知平台回退品牌青。 */
+  /** 分组平台;参考价分区底色随平台着色,未知平台回退品牌青。 */
   platform?: string
   /** 分组默认倍率。 */
   rateMultiplier: number
-  /** 用户专属倍率;与默认不同,实付价按此计算并划线展示原倍率。 */
+  /** 用户专属展示倍率;与默认不同,参考价按此计算并划线展示原倍率。 */
   userRateMultiplier?: number | null
 }>()
 
 const { t } = useI18n()
 
-/** 实付分区只从平台拿一个主色,浅底/标题/下划线全部由 scoped CSS 用 color-mix 派生。 */
+/** 参考价分区只从平台拿一个主色,浅底/标题/下划线全部由 scoped CSS 用 color-mix 派生。 */
 const accentStyle = computed(() => ({ '--plaza-accent': platformAccentColor(props.platform ?? '') }))
 
 const PER_MILLION = 1_000_000
@@ -261,19 +261,19 @@ function billingModeLabel(m: PlazaModel): string {
 /** 价格统一保底 2 位小数,更长的有效小数原样保留。 */
 const MIN_DECIMALS = 2
 
-/** 实付价 = 渠道单价 × 生效倍率,按 $/1M token 展示。 */
-function paidPerMillion(value: number | null | undefined): string {
+/** 参考价 = 渠道单价 × 展示倍率,按 $/1M token 展示。 */
+function previewPerMillion(value: number | null | undefined): string {
   if (value == null) return '-'
   return formatScaled(value * effectiveRate.value, PER_MILLION, MIN_DECIMALS)
 }
 
-/** 按次 / 按图片单价(乘生效倍率,不换算 1M)。 */
-function paidRequestPrice(value: number | null | undefined): string {
+/** 按次 / 按图片参考价(乘展示倍率,不换算 1M)。 */
+function previewRequestPrice(value: number | null | undefined): string {
   if (value == null) return '-'
   return formatScaled(value * effectiveRate.value, 1, MIN_DECIMALS)
 }
 
-/** 官方参考价不乘倍率。 */
+/** LiteLLM 参考价不乘展示倍率。 */
 function official(value: number | null | undefined): string {
   if (value == null) return '-'
   return formatScaled(value, PER_MILLION, MIN_DECIMALS)
@@ -325,7 +325,7 @@ function trimZero(n: number): string {
 </script>
 
 <style scoped>
-/* 实付分区配色统一从 --plaza-accent(平台主色)派生,新增平台无需扩展样式 */
+/* 参考价分区配色统一从 --plaza-accent(平台主色)派生,新增平台无需扩展样式 */
 .plaza-pricing-table {
   --pz-title: color-mix(in srgb, var(--plaza-accent) 88%, black);
   --pz-bg: color-mix(in srgb, var(--plaza-accent) 7%, transparent);

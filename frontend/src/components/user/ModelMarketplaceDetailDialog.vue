@@ -65,7 +65,7 @@
 
                   <div class="min-w-0 rounded-lg bg-white p-3 ring-1 ring-gray-200/80 dark:bg-dark-900/70 dark:ring-dark-700">
                     <div class="mb-1 text-xs font-semibold text-gray-400">
-                      {{ t('modelMarketplaceStatus.originalPrice', 'Original') }}
+                      {{ t('modelMarketplaceStatus.originalPrice', 'Reference price') }}
                     </div>
                     <div v-if="modelOriginalPriceLines.length > 0" class="flex flex-wrap gap-x-4 gap-y-1">
                       <span
@@ -81,7 +81,7 @@
 
                   <div class="min-w-0 rounded-lg bg-white p-3 ring-1 ring-gray-200/80 dark:bg-dark-900/70 dark:ring-dark-700">
                     <div class="mb-1 text-xs font-semibold text-gray-400">
-                      {{ t('modelMarketplaceStatus.exchangeDiscount', 'Exchange discount') }}
+                      {{ t('modelMarketplaceStatus.exchangeDiscount', 'Exchange conversion factor') }}
                     </div>
                     <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span class="font-mono text-sm font-bold text-gray-900 dark:text-gray-100">
@@ -99,8 +99,8 @@
                 <div class="hidden grid-cols-[minmax(150px,1.2fr)_minmax(160px,1fr)_88px_minmax(180px,1.2fr)_104px] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-500 dark:border-dark-700 dark:bg-dark-900/70 dark:text-gray-400 md:grid">
                   <div>{{ t('modelMarketplaceStatus.channel', 'Channel') }}</div>
                   <div>{{ t('modelMarketplaceStatus.channels.title', 'Channel health') }}</div>
-                  <div>{{ t('modelMarketplaceStatus.discount', 'Discount') }}</div>
-                  <div>{{ t('modelMarketplaceStatus.channelFinalPrice', 'Channel price') }}</div>
+                  <div>{{ t('modelMarketplaceStatus.discount', 'Display rate') }}</div>
+                  <div>{{ t('modelMarketplaceStatus.channelFinalPrice', 'Monitoring display price') }}</div>
                   <div>{{ t('modelMarketplaceStatus.availability7d', '7d') }}</div>
                 </div>
 
@@ -148,22 +148,22 @@
 
                   <div>
                     <div class="mb-1 text-xs font-semibold text-gray-400 md:hidden">
-                      {{ t('modelMarketplaceStatus.discount', 'Discount') }}
+                      {{ t('modelMarketplaceStatus.discount', 'Display rate') }}
                     </div>
                     <div class="font-mono text-sm font-bold text-gray-900 dark:text-gray-100">
                       ×{{ formatRate(channel.effectiveRate ?? 1) }}
                     </div>
                     <div class="mt-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                      {{ t('modelMarketplaceStatus.rateDiscountValue', { discount: discountFold(channel.effectiveRate ?? 1) }, `Rate ${discountFold(channel.effectiveRate ?? 1)}/10`) }}
+                      {{ t('modelMarketplaceStatus.rateDiscountValue', { discount: discountFold(channel.effectiveRate ?? 1) }, `Display rate ${discountFold(channel.effectiveRate ?? 1)}/10`) }}
                     </div>
                     <div class="mt-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">
-                      {{ t('modelMarketplaceStatus.finalDiscountValue', { discount: finalDiscountFold(channel.effectiveRate ?? 1) }, `Final ${finalDiscountFold(channel.effectiveRate ?? 1)}/10`) }}
+                      {{ t('modelMarketplaceStatus.finalDiscountValue', { discount: finalDiscountFold(channel.effectiveRate ?? 1) }, `Combined display factor ${finalDiscountFold(channel.effectiveRate ?? 1)}/10`) }}
                     </div>
                   </div>
 
                   <div class="min-w-0">
                     <div class="mb-1 flex items-center justify-between gap-2 text-xs md:hidden">
-                      <span class="font-semibold text-gray-400">{{ t('modelMarketplaceStatus.channelFinalPrice', 'Channel price') }}</span>
+                      <span class="font-semibold text-gray-400">{{ t('modelMarketplaceStatus.channelFinalPrice', 'Monitoring display price') }}</span>
                       <span v-if="finalSavingLabel(channel.effectiveRate ?? 1)" class="text-emerald-600 dark:text-emerald-300">
                         {{ finalSavingLabel(channel.effectiveRate ?? 1) }}
                       </span>
@@ -325,7 +325,7 @@ const exchangeDiscountLabel = computed(() => {
   return t(
     'modelMarketplaceStatus.exchangeDiscountValue',
     { discount: discountFold(exchangeDiscountRate.value) },
-    `${discountFold(exchangeDiscountRate.value)}/10 exchange price`,
+    `Exchange factor ${discountFold(exchangeDiscountRate.value)}/10`,
   )
 })
 const modelCallModel = computed(() => primaryChannel.value?.callModel || primaryChannel.value?.model || titleFallback.value)
@@ -420,7 +420,7 @@ function finalSavingLabel(rate: number): string {
   const finalRate = channelFinalRate(rate)
   if (!Number.isFinite(finalRate) || finalRate >= 1) return ''
   const saving = Number(((1 - finalRate) * 100).toFixed(1)).toString()
-  return t('modelMarketplaceStatus.officialSavingValue', { saving }, `Save ${saving}%`)
+  return t('modelMarketplaceStatus.officialSavingValue', { saving }, `${saving}% below reference`)
 }
 
 function channelFinalRate(rate: number | null | undefined): number {

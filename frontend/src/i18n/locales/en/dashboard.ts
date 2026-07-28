@@ -528,11 +528,12 @@ export default {
     empty: 'No groups to display',
     loadFailed: 'Failed to load model plaza',
     noSearchResult: 'No matching models',
-    anonymousHint: 'Sign in to see your exclusive groups and personal rates',
+    anonymousHint: 'Sign in to see your exclusive groups and personal display rates',
+    priceDisclaimer: 'Display prices are estimates from configured channel prices (or a LiteLLM reference fallback) and the visible rate. Peak and other billing rules may apply; usage records or invoices are authoritative.',
     filters: {
       platformLabel: 'Platform',
       groupLabel: 'Group',
-      rateLabel: 'Rate',
+      rateLabel: 'Display rate',
       modelLabel: 'Model',
       searchPlaceholder: 'Search models',
       all: 'All'
@@ -544,7 +545,7 @@ export default {
     detail: {
       noModels: 'No models configured for this group',
       noPricing: 'Pricing not configured',
-      peakNote: 'Peak hours {window}: billing rate ×{multiplier}'
+      peakNote: 'Peak hours {window}: billing rate ×{multiplier}; base display prices do not include this rate'
     },
     table: {
       model: 'Model',
@@ -553,9 +554,9 @@ export default {
       cache: 'Cache',
       cacheWrite: 'Write',
       cacheRead: 'Read',
-      paidPrice: 'Your Price (Discounted)',
-      officialPrice: 'Official Price',
-      rate: 'Rate',
+      paidPrice: 'Base Display Price (Excludes Dynamic Billing)',
+      officialPrice: 'LiteLLM Reference',
+      rate: 'Display Rate',
       unitPerMillion: '$ / 1M tokens',
       perUnitRequest: '/ request',
       perUnitImage: '/ image',

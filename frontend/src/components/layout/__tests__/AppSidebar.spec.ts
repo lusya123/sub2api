@@ -85,3 +85,16 @@ describe('AppSidebar audit entries', () => {
     expect(enLocaleSource).toContain('"securityAuditLogs": "Security Audit Logs"')
   })
 })
+
+describe('AppSidebar model navigation labels', () => {
+  it('keeps channel status, model status, and model monitoring distinct', () => {
+    expect(componentSource).toContain("path: '/status', label: t('nav.channelStatus')")
+    expect(componentSource).toContain(
+      "path: '/admin/model-marketplace', label: t('admin.modelMarketplaceMonitor.title')",
+    )
+    expect(componentSource).not.toContain("path: '/status', label: t('nav.modelStatus')")
+    expect(componentSource).not.toContain(
+      "path: '/admin/model-marketplace', label: t('nav.modelMarketplace')",
+    )
+  })
+})

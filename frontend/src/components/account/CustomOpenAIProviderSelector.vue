@@ -4,7 +4,7 @@
       <div>
         <label class="input-label mb-0">自定义厂商</label>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          选择模型广场里的厂商 Logo，账号仍按 OpenAI 兼容接口调用。
+          选择模型监控配置中的厂商 Logo，账号仍按 OpenAI 兼容接口调用。
         </p>
       </div>
       <button

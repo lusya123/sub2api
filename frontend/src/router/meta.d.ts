@@ -68,7 +68,7 @@ declare module 'vue-router' {
     requiresChatPage?: boolean
 
     /**
-     * Whether this route requires the user-facing model marketplace to be enabled
+     * Whether this route requires the user-facing Model Status page to be enabled
      * @default false
      */
     requiresModelMarketplace?: boolean

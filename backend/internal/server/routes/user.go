@@ -150,7 +150,7 @@ func RegisterUserRoutes(
 			monitors.GET("/:id/status", h.ChannelMonitor.GetStatus)
 		}
 
-		// 模型广场（用户只读，独立于渠道监控）
+		// 模型状态（用户只读，基于独立的模型监控配置）
 		marketplace := authenticated.Group("/model-marketplace", middleware.ModelHealthPageGuard(settingService))
 		{
 			marketplace.GET("", h.ModelMarketplace.List)
