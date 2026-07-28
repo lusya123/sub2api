@@ -89,6 +89,7 @@ const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
 	OpenAIEndpointCapabilityAlphaSearch     OpenAIEndpointCapability = "alpha_search"
+	OpenAIEndpointCapabilityLive            OpenAIEndpointCapability = "live"
 	// OpenAIEndpointCapabilityGrokMediaGeneration keeps image/video generation
 	// away from Grok accounts that are explicitly disabled or whose billing
 	// entitlement probe was forbidden. Video status lookups intentionally do not
@@ -133,6 +134,18 @@ type TempUnschedulableRule struct {
 
 func (a *Account) IsActive() bool {
 	return a.Status == StatusActive
+}
+
+// IsSyntheticUITest reports whether the account belongs to an isolated UI load-test
+// dataset. Production accounts never receive this marker. It lets the dedicated
+// test instance exercise interactive quota and connection-test controls without
+// sending fake credentials to an upstream provider.
+func (a *Account) IsSyntheticUITest() bool {
+	if a == nil || a.Extra == nil {
+		return false
+	}
+	enabled, ok := a.Extra["synthetic_ui_test"].(bool)
+	return ok && enabled
 }
 
 // BillingRateMultiplier 返回账号计费倍率。
@@ -1442,6 +1455,11 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	}
 	switch capability {
 	case OpenAIEndpointCapabilityChatCompletions:
+	case OpenAIEndpointCapabilityLive:
+		return a.Platform == PlatformOpenAI &&
+			a.Type == AccountTypeOAuth &&
+			!a.IsOpenAIPersonalAccessToken() &&
+			!a.IsOpenAIAgentIdentity()
 	case OpenAIEndpointCapabilityResponses:
 		// Responses 支持状态由 accounts.extra 的自动探测标记决定，而非
 		// credentials 能力集。已探测确认不支持 /v1/responses 的 APIKey 上游

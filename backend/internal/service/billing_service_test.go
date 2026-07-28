@@ -669,6 +669,41 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 
 		// ---- 月之暗面 Kimi ----
 		{
+			name:              "kimi k3 flagship",
+			model:             "kimi-k3",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(15e-6),
+			expectedCacheRead: floatPtr(0.30e-6),
+		},
+		{
+			name:              "kimi code bare alias k3",
+			model:             "k3",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(15e-6),
+			expectedCacheRead: floatPtr(0.30e-6),
+		},
+		{
+			name:              "kimi code bare alias k3-256k",
+			model:             "k3-256k",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(15e-6),
+			expectedCacheRead: floatPtr(0.30e-6),
+		},
+		{
+			name:              "kimi k3 path suffix moonshot",
+			model:             "moonshot/kimi-k3",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(15e-6),
+			expectedCacheRead: floatPtr(0.30e-6),
+		},
+		{
+			name:              "kimi code bare path suffix",
+			model:             "kimi-code/k3",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(15e-6),
+			expectedCacheRead: floatPtr(0.30e-6),
+		},
+		{
 			name:              "kimi k2.6 flagship",
 			model:             "kimi-k2.6",
 			expectedInput:     0.95e-6,
@@ -820,6 +855,8 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "unknown glm vision fails closed", model: "glm-6v-turbo", expectNilPricing: true},
 		{name: "glm image is not text fallback", model: "glm-image", expectNilPricing: true},
 		{name: "embedded glm substring fails closed", model: "not-glm-5.2-wrapper", expectNilPricing: true},
+		{name: "unknown gemini 3.6 flash tier fails closed", model: "gemini-3.6-flash-ultra", expectNilPricing: true},
+		{name: "embedded gemini 3.6 flash substring fails closed", model: "not-gemini-3.6-flash-wrapper", expectNilPricing: true},
 		{name: "unknown minimax version fails closed", model: "minimax-m4", expectNilPricing: true},
 		{name: "embedded minimax substring fails closed", model: "not-minimax-m2.7-wrapper", expectNilPricing: true},
 		{name: "kimi k2.7 unknown no fallback", model: "kimi-k2.7", expectNilPricing: true},
@@ -827,6 +864,16 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "embedded kimi substring no fallback", model: "not-kimi-k2.6-wrapper", expectNilPricing: true},
 		{name: "kimi k2-0905 unpriced no fallback", model: "kimi-k2-0905-preview", expectNilPricing: true},
 		{name: "kimi k2-0711 unpriced no fallback", model: "kimi-k2-0711", expectNilPricing: true},
+		// bare k3 仅精确/后缀匹配：相似未知型号不得因含 "k3" 误命中。
+		{name: "k3-like unknown no fallback", model: "foo-k3-bar", expectNilPricing: true},
+		// 路径最后一段不是 /k3：foo-k3 不得因 HasSuffix("/k3") 或 Contains 误命中。
+		{name: "path segment not bare k3 no fallback", model: "vendor/foo-k3", expectNilPricing: true},
+		// kimi-k3 非 Contains：kimi-k30 / 内嵌 foo-kimi-k3-bar 不得误命中。
+		{name: "kimi-k30 unknown no fallback", model: "kimi-k30", expectNilPricing: true},
+		{name: "embedded kimi-k3 unknown no fallback", model: "foo-kimi-k3-bar", expectNilPricing: true},
+		// kimi-k3[1m] 是 Claude Code 上下文选择语法，不是 Kimi API 模型 ID，不命中 fallback。
+		{name: "kimi-k3[1m] not an API model id no fallback", model: "kimi-k3[1m]", expectNilPricing: true},
+		{name: "path kimi-k3[1m] not an API model id no fallback", model: "moonshot/kimi-k3[1m]", expectNilPricing: true},
 	}
 
 	for _, tt := range tests {

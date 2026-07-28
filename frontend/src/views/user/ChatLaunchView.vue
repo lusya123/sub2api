@@ -4,7 +4,7 @@
       <div class="use-token-topbar__left">
         <router-link :to="consolePath" class="use-token-brand" :title="siteName">
           <span class="use-token-brand__logo" v-if="settingsLoaded">
-            <img :src="siteLogo || '/logo.png'" :alt="siteName" />
+            <img :src="siteLogo || '/logo.svg'" :alt="siteName" />
           </span>
           <span class="use-token-brand__name">{{ siteName }}</span>
         </router-link>

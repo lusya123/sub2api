@@ -7,6 +7,7 @@ import GroupsView from '../GroupsView.vue'
 const {
   listGroups,
   getAllGroups,
+  getLiveCapability,
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   getAllGroups: vi.fn(),
+  getLiveCapability: vi.fn(),
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock('@/api/admin', () => ({
     groups: {
       list: listGroups,
       getAll: getAllGroups,
+      getLiveCapability,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
@@ -230,6 +233,7 @@ describe('admin GroupsView column settings', () => {
 
     listGroups.mockReset()
     getAllGroups.mockReset()
+    getLiveCapability.mockReset()
     getModelsListCandidates.mockReset()
     getUsageSummary.mockReset()
     getCapacitySummary.mockReset()
@@ -248,6 +252,7 @@ describe('admin GroupsView column settings', () => {
       pages: 1,
     })
     getAllGroups.mockResolvedValue([])
+    getLiveCapability.mockResolvedValue({ supported: false })
     getModelsListCandidates.mockResolvedValue([])
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])

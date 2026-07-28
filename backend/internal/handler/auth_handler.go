@@ -130,21 +130,34 @@ func ensureLoginUserActive(user *service.User) error {
 // respondWithTokenPair 生成 Token 对并返回认证响应
 // 如果 Token 对生成失败，回退到只返回 Access Token（向后兼容）
 func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
+	respondWithTokenPairUsingCookieSetter(c, h.authService, user, h.setSPAProtectTokenCookie)
+}
+
+func respondWithTokenPair(c *gin.Context, authService *service.AuthService, user *service.User) {
+	respondWithTokenPairUsingCookieSetter(c, authService, user, setSPAProtectTokenCookie)
+}
+
+func respondWithTokenPairUsingCookieSetter(
+	c *gin.Context,
+	authService *service.AuthService,
+	user *service.User,
+	setTokenCookie func(*gin.Context, int, ...string),
+) {
 	if err := ensureLoginUserActive(user); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	tokenPair, err := h.authService.GenerateTokenPair(c.Request.Context(), user, "")
+	tokenPair, err := authService.GenerateTokenPair(c.Request.Context(), user, "")
 	if err != nil {
 		slog.Error("failed to generate token pair", "error", err, "user_id", user.ID)
 		// 回退到只返回Access Token
-		token, tokenErr := h.authService.GenerateToken(c.Request.Context(), user)
+		token, tokenErr := authService.GenerateToken(c.Request.Context(), user)
 		if tokenErr != nil {
 			response.InternalError(c, "Failed to generate token")
 			return
 		}
-		h.setSPAProtectTokenCookie(c, 0, token)
+		setTokenCookie(c, 0, token)
 		response.Success(c, AuthResponse{
 			AccessToken: token,
 			TokenType:   "Bearer",
@@ -152,7 +165,7 @@ func (h *AuthHandler) respondWithTokenPair(c *gin.Context, user *service.User) {
 		})
 		return
 	}
-	h.setSPAProtectTokenCookie(c, tokenPair.ExpiresIn, tokenPair.AccessToken)
+	setTokenCookie(c, tokenPair.ExpiresIn, tokenPair.AccessToken)
 	response.Success(c, AuthResponse{
 		AccessToken:  tokenPair.AccessToken,
 		RefreshToken: tokenPair.RefreshToken,

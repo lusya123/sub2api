@@ -15,7 +15,7 @@ type userRepoStubForUpdateUser struct {
 	updated []*User
 }
 
-func (s *userRepoStubForUpdateUser) Update(_ context.Context, user *User) error {
+func (s *userRepoStubForUpdateUser) Update(_ context.Context, user *User, _ UserUpdateFields) error {
 	clone := *user
 	s.updated = append(s.updated, &clone)
 	return nil

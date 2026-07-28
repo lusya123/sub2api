@@ -25,6 +25,7 @@ func SetupRouter(
 	r *gin.Engine,
 	handlers *handler.Handlers,
 	jwtAuth middleware2.JWTAuthMiddleware,
+	optionalJWTAuth middleware2.OptionalJWTAuthMiddleware,
 	adminAuth middleware2.AdminAuthMiddleware,
 	apiKeyAuth middleware2.APIKeyAuthMiddleware,
 	auditLog middleware2.AuditLogMiddleware,
@@ -34,6 +35,7 @@ func SetupRouter(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	adminAuditService *service.AdminAuditService,
+	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 	redisClient *redis.Client,
 ) *gin.Engine {
@@ -59,7 +61,7 @@ func SetupRouter(
 	r.Use(middleware2.AdminAuthFastPath(redisClient))
 	r.Use(middleware2.RequestLogger())
 	// 将客户端 IP + UA 注入 request context，供 token 签发/会话绑定/审计日志统一读取。
-	// IP 取值与 API Key IP 限制共用 server.trusted_proxies 信任链。
+	// 解析模式按请求快照：兼容开关开启时信任原始转发头，关闭时使用 server.trusted_proxies。
 	r.Use(middleware2.SessionBindingContext(cfg))
 	r.Use(middleware2.Logger())
 	r.Use(middleware2.CORS(cfg.CORS))
@@ -106,8 +108,8 @@ func SetupRouter(
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {
-		frontendServer, err := web.NewFrontendServer(settingService)
-		if err != nil {
+		frontendServer, err := web.NewFrontendServer(settingService) //nolint:staticcheck // SA4023: the !embed stub always errors; embed builds can return nil
+		if err != nil {                                              //nolint:staticcheck // SA4023: see above
 			log.Printf("Warning: Failed to create frontend server with settings injection: %v, using legacy mode", err)
 			r.Use(web.ServeEmbeddedFrontend())
 			settingService.SetOnUpdateCallback(func() {
@@ -142,7 +144,7 @@ func SetupRouter(
 	}
 
 	// 注册路由
-	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, adminAuditService, cfg, redisClient)
+	registerRoutes(r, handlers, jwtAuth, optionalJWTAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, adminAuditService, compositeResolver, cfg, redisClient)
 
 	return r
 }
@@ -152,6 +154,7 @@ func registerRoutes(
 	r *gin.Engine,
 	h *handler.Handlers,
 	jwtAuth middleware2.JWTAuthMiddleware,
+	optionalJWTAuth middleware2.OptionalJWTAuthMiddleware,
 	adminAuth middleware2.AdminAuthMiddleware,
 	apiKeyAuth middleware2.APIKeyAuthMiddleware,
 	auditLog middleware2.AuditLogMiddleware,
@@ -161,6 +164,7 @@ func registerRoutes(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	adminAuditService *service.AdminAuditService,
+	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 	redisClient *redis.Client,
 ) {
@@ -173,12 +177,17 @@ func registerRoutes(
 	// API v1
 	v1 := r.Group("/api/v1")
 
+	// 面板 API 限流器：认证接口按用户 ID、公开接口按安全客户端 IP，
+	// 防止高频刷管理面接口打爆数据库（阈值可在系统设置中调整）。
+	panelRateLimiter := middleware2.NewPanelRateLimiter(redisClient, settingService)
+
 	// 注册各模块路由
-	routes.RegisterAuthRoutes(v1, h, jwtAuth, auditLog, redisClient, settingService)
-	routes.RegisterUserRoutes(v1, h, jwtAuth, auditLog, settingService)
-	routes.RegisterAdminRoutes(v1, h, adminAuth, adminAuditService, redisClient, auditLog, stepUpAuth, settingService)
-	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, cfg)
-	routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, adminAuditService, redisClient, auditLog, settingService)
+	routes.RegisterAuthRoutes(v1, h, jwtAuth, auditLog, redisClient, settingService, panelRateLimiter)
+	routes.RegisterUserRoutes(v1, h, jwtAuth, auditLog, settingService, panelRateLimiter)
+	routes.RegisterModelPlazaRoutes(v1, h, optionalJWTAuth, settingService, panelRateLimiter)
+	routes.RegisterAdminRoutes(v1, h, adminAuth, adminAuditService, redisClient, auditLog, stepUpAuth, settingService, panelRateLimiter)
+	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg)
+	routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, adminAuditService, redisClient, auditLog, settingService, panelRateLimiter)
 
 	handler.RegisterPageRoutes(v1, cfg.Pricing.DataDir, gin.HandlerFunc(jwtAuth), gin.HandlerFunc(adminAuth), settingService)
 }

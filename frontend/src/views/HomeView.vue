@@ -28,7 +28,7 @@
       <div class="nav-inner">
         <div class="brand">
           <div class="brand-logo">
-            <img :src="siteLogo || '/logo.png'" alt="" />
+            <img :src="siteLogo || '/logo.svg'" alt="" />
           </div>
           <span class="brand-name">{{ siteName }}</span>
         </div>

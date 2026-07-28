@@ -7,7 +7,7 @@
           v-if="!hideSidebar"
           type="button"
           class="app-topbar-menu-btn"
-          aria-label="Toggle menu"
+          :aria-label="t('common.toggleMenu') === 'common.toggleMenu' ? 'Toggle menu' : t('common.toggleMenu')"
           @click="toggleMobileSidebar"
         >
           <Icon name="menu" size="sm" />
@@ -19,7 +19,7 @@
           :title="siteName"
         >
           <span class="app-brand__logo">
-            <img v-if="settingsLoaded" :src="siteLogo || '/logo.png'" :alt="siteName" />
+            <img v-if="settingsLoaded" :src="siteLogo || '/logo.svg'" :alt="siteName" />
           </span>
           <span class="app-brand__name">{{ siteName }}</span>
         </router-link>
@@ -66,6 +66,16 @@
           <Icon name="book" size="sm" />
           <span class="app-topbar__docs-label hidden sm:inline">{{ t('nav.docs') }}</span>
         </a>
+
+        <!-- Model Plaza Entry -->
+        <router-link
+          v-if="user && modelPlazaEnabled"
+          :to="{ path: '/model-plaza', query: { embedded: '1' } }"
+          class="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white sm:flex"
+        >
+          <Icon name="grid" size="sm" />
+          <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
+        </router-link>
 
         <!-- Language Switcher -->
         <div class="app-topbar__locale">
@@ -130,7 +140,7 @@
           <button
             @click="toggleDropdown"
             class="app-topbar__user-button flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
-            aria-label="User Menu"
+            :aria-label="t('common.userMenu') === 'common.userMenu' ? 'User Menu' : t('common.userMenu')"
           >
             <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
               <img
@@ -365,6 +375,7 @@ const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
 const siteName = computed(() => appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => sanitizeUrl(appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
+const modelPlazaEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
 const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
 const availableBalance = computed(() => Number(user.value?.balance || 0))
 const frozenBalance = computed(() => Number(user.value?.frozen_balance || 0))
