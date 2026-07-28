@@ -465,10 +465,10 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "glm known upstream model wins before generic fallback", model: "glm-4.6", expectedInput: 0.6e-6},
 		{name: "minimax m2.5 standard", model: "minimax-m2.5", expectedInput: 0.3e-6},
 		{name: "minimax m2.5 highspeed exact", model: "minimax-m2.5-highspeed", expectedInput: 0.6e-6},
-		{name: "minimax m3 uses its official family price", model: "minimax-m3", expectedInput: 0.6e-6},
+		{name: "minimax m3 uses its discounted base price", model: "minimax-m3", expectedInput: 0.3e-6},
 		// 计费安全：未知 highspeed 衍生型号必须走高速价（避免少收 50%）
 		{name: "minimax highspeed suffix variant uses highspeed price", model: "minimax-m2.5-highspeed-2026", expectedInput: 0.6e-6},
-		{name: "minimax m3 highspeed uses highspeed price", model: "minimax-m3-highspeed", expectedInput: 0.6e-6},
+		{name: "minimax unsupported m3 highspeed fails closed", model: "minimax-m3-highspeed", expectNilPricing: true},
 		{
 			name:              "deepseek v4 pro",
 			model:             "deepseek-v4-pro",
@@ -652,18 +652,18 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 
 		// ---- MiniMax M 系列 ----
 		{
-			name:              "minimax m3",
+			name:              "minimax m3 discounted base tier",
 			model:             "minimax-m3",
-			expectedInput:     0.60e-6,
-			expectedOutput:    floatPtr(2.40e-6),
-			expectedCacheRead: floatPtr(0.12e-6),
+			expectedInput:     0.30e-6,
+			expectedOutput:    floatPtr(1.20e-6),
+			expectedCacheRead: floatPtr(0.06e-6),
 		},
 		{
-			name:              "minimax m3 long ctx boundary keep standard tier",
-			model:             "minimax-m3-long", // 仍按 standard tier (≤512K)
-			expectedInput:     0.60e-6,
-			expectedOutput:    floatPtr(2.40e-6),
-			expectedCacheRead: floatPtr(0.12e-6),
+			name:              "minimax m3 provider-qualified",
+			model:             "minimax/minimax-m3",
+			expectedInput:     0.30e-6,
+			expectedOutput:    floatPtr(1.20e-6),
+			expectedCacheRead: floatPtr(0.06e-6),
 		},
 		{
 			name:              "minimax m2.7",
@@ -796,6 +796,120 @@ func TestCalculateCost_MiniMaxM25_StandardVsHighspeed(t *testing.T) {
 	// 高速版 input/output 严格是标准版的 2 倍
 	require.InDelta(t, std.InputCost*2, hs.InputCost, 1e-10)
 	require.InDelta(t, std.OutputCost*2, hs.OutputCost, 1e-10)
+}
+
+func TestCalculateCost_MiniMaxM3OfficialContextTiers(t *testing.T) {
+	svc := newTestBillingService()
+
+	pricing, err := svc.GetModelPricing("minimax-m3")
+	require.NoError(t, err)
+	require.Equal(t, miniMaxM3LongContextInputThreshold, pricing.LongContextInputThreshold)
+	require.InDelta(t, miniMaxM3LongContextMultiplier, pricing.LongContextInputMultiplier, 1e-12)
+	require.InDelta(t, miniMaxM3LongContextMultiplier, pricing.LongContextOutputMultiplier, 1e-12)
+
+	// MiniMax 将普通输入、cache write 与 cache read 一起计入输入上下文。
+	// 恰好 512K 仍使用折扣后的标准档。
+	baseTokens := UsageTokens{
+		InputTokens:         256000,
+		CacheCreationTokens: 128000,
+		CacheReadTokens:     128000,
+		OutputTokens:        1000000,
+	}
+	base, err := svc.CalculateCost("minimax-m3", baseTokens, 1)
+	require.NoError(t, err)
+	require.False(t, base.LongContextBillingApplied)
+	require.InDelta(t, 256000*0.30e-6, base.InputCost, 1e-12)
+	require.InDelta(t, 128000*0.30e-6, base.CacheCreationCost, 1e-12)
+	require.InDelta(t, 128000*0.06e-6, base.CacheReadCost, 1e-12)
+	require.InDelta(t, 1.20, base.OutputCost, 1e-12)
+
+	// 多一个输入 token 即让整次请求进入 >512K 档，所有输入侧费用与输出均为 2x。
+	longTokens := baseTokens
+	longTokens.InputTokens++
+	longCost, err := svc.CalculateCost("minimax-m3", longTokens, 1)
+	require.NoError(t, err)
+	require.True(t, longCost.LongContextBillingApplied)
+	require.InDelta(t, 256001*0.60e-6, longCost.InputCost, 1e-12)
+	require.InDelta(t, 128000*0.60e-6, longCost.CacheCreationCost, 1e-12)
+	require.InDelta(t, 128000*0.12e-6, longCost.CacheReadCost, 1e-12)
+	require.InDelta(t, 2.40, longCost.OutputCost, 1e-12)
+}
+
+func TestCalculateCost_MiniMaxM3PriorityIsOnePointFiveTimesEachContextTier(t *testing.T) {
+	svc := newTestBillingService()
+	baseTokens := UsageTokens{
+		InputTokens:         256000,
+		CacheCreationTokens: 128000,
+		CacheReadTokens:     128000,
+		OutputTokens:        1000000,
+	}
+
+	tests := []struct {
+		name             string
+		tokens           UsageTokens
+		inputPrice       float64
+		cacheCreatePrice float64
+		cacheReadPrice   float64
+		outputCost       float64
+		longContext      bool
+	}{
+		{
+			name:             "exactly 512K",
+			tokens:           baseTokens,
+			inputPrice:       0.45e-6,
+			cacheCreatePrice: 0.45e-6,
+			cacheReadPrice:   0.09e-6,
+			outputCost:       1.80,
+		},
+		{
+			name: "above 512K",
+			tokens: func() UsageTokens {
+				tokens := baseTokens
+				tokens.InputTokens++
+				return tokens
+			}(),
+			inputPrice:       0.90e-6,
+			cacheCreatePrice: 0.90e-6,
+			cacheReadPrice:   0.18e-6,
+			outputCost:       3.60,
+			longContext:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cost, err := svc.CalculateCostWithServiceTier("minimax-m3", tt.tokens, 1, "priority")
+			require.NoError(t, err)
+			require.Equal(t, tt.longContext, cost.LongContextBillingApplied)
+			require.InDelta(t, float64(tt.tokens.InputTokens)*tt.inputPrice, cost.InputCost, 1e-12)
+			require.InDelta(t, float64(tt.tokens.CacheCreationTokens)*tt.cacheCreatePrice, cost.CacheCreationCost, 1e-12)
+			require.InDelta(t, float64(tt.tokens.CacheReadTokens)*tt.cacheReadPrice, cost.CacheReadCost, 1e-12)
+			require.InDelta(t, tt.outputCost, cost.OutputCost, 1e-12)
+		})
+	}
+}
+
+func TestApplyModelSpecificPricingPolicy_MiniMaxM3CacheCreationFallback(t *testing.T) {
+	svc := newTestBillingService()
+	source := &ModelPricing{
+		InputPricePerToken:     0.30e-6,
+		OutputPricePerToken:    1.20e-6,
+		CacheReadPricePerToken: 0.06e-6,
+	}
+
+	pricing := svc.applyModelSpecificPricingPolicy("minimax/minimax-m3", source)
+	require.NotSame(t, source, pricing)
+	require.InDelta(t, 0.30e-6, pricing.CacheCreationPricePerToken, 1e-12)
+	require.InDelta(t, 0.45e-6, pricing.CacheCreationPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 0.45e-6, pricing.InputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 1.80e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 0.09e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
+
+	explicit := *source
+	explicit.CacheCreationPriceExplicit = true
+	explicitPricing := svc.applyModelSpecificPricingPolicy("minimax-m3", &explicit)
+	require.Zero(t, explicitPricing.CacheCreationPricePerToken)
+	require.Zero(t, explicitPricing.CacheCreationPricePerTokenPriority)
 }
 
 func TestCalculateCost_GLMMinimax_RateMultiplierApplied(t *testing.T) {

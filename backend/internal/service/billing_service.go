@@ -114,10 +114,21 @@ const (
 	openAIGPT54LongContextInputThreshold   = 272000
 	openAIGPT54LongContextInputMultiplier  = 2.0
 	openAIGPT54LongContextOutputMultiplier = 1.5
+	miniMaxM3LongContextInputThreshold     = 512000
+	miniMaxM3LongContextMultiplier         = 2.0
+	miniMaxM3PriorityMultiplier            = 1.5
 )
 
 func normalizeBillingServiceTier(serviceTier string) string {
 	return strings.ToLower(strings.TrimSpace(serviceTier))
+}
+
+func isMiniMaxM3Model(model string) bool {
+	modelID := strings.ToLower(strings.TrimSpace(model))
+	if idx := strings.LastIndexAny(modelID, "/:"); idx >= 0 {
+		modelID = modelID[idx+1:]
+	}
+	return modelID == "minimax-m3"
 }
 
 func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bool {
@@ -502,14 +513,24 @@ func (s *BillingService) initFallbackPricing() {
 	}
 
 	// ---- MiniMax M 系列 ----
-	// Source: https://platform.minimax.io/docs/guides/pricing-paygo
-	// 注意：MiniMax M3 在 >512K context 时价格翻倍，本兜底采用 ≤512K 标准 tier（保守口径，对用户有利）。
-	// 如需支持长上下文 multiplier，可后续参考 GPT-5.4 模式扩展 LongContextXxx 字段。
+	// Sources:
+	//   - https://platform.minimax.io/docs/guides/pricing-paygo
+	//   - https://platform.minimax.io/docs/api-reference/anthropic-api-compatible-cache
+	// M3 未公布独立 cache-write 价格，也未列入显式缓存支持模型。若仍收到
+	// cache_creation tokens，按对应档普通输入价计费，避免按 0 少计。
 	s.fallbackPrices["minimax-m3"] = &ModelPricing{
-		InputPricePerToken:     0.60e-6, // $0.60 per MTok (≤512K standard tier, 含 50% 永久折扣前原价 $1.20)
-		OutputPricePerToken:    2.40e-6,
-		CacheReadPricePerToken: 0.12e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:                 0.30e-6,
+		InputPricePerTokenPriority:         0.45e-6,
+		OutputPricePerToken:                1.20e-6,
+		OutputPricePerTokenPriority:        1.80e-6,
+		CacheCreationPricePerToken:         0.30e-6,
+		CacheCreationPricePerTokenPriority: 0.45e-6,
+		CacheReadPricePerToken:             0.06e-6,
+		CacheReadPricePerTokenPriority:     0.09e-6,
+		SupportsCacheBreakdown:             false,
+		LongContextInputThreshold:          miniMaxM3LongContextInputThreshold,
+		LongContextInputMultiplier:         miniMaxM3LongContextMultiplier,
+		LongContextOutputMultiplier:        miniMaxM3LongContextMultiplier,
 	}
 	s.fallbackPrices["minimax-m2.7"] = &ModelPricing{
 		InputPricePerToken:     0.30e-6, // $0.30 per MTok
@@ -703,7 +724,7 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 
 	// MiniMax M 系列（M3 / M2.7 / M2.5 / M2.1 / M2；含 highspeed 变体）
-	if strings.Contains(modelLower, "minimax-m3") {
+	if isMiniMaxM3Model(modelLower) {
 		return s.fallbackPrices["minimax-m3"]
 	}
 	if strings.Contains(modelLower, "minimax-m2.7-highspeed") || strings.Contains(modelLower, "minimax-m2-7-highspeed") {
@@ -1171,14 +1192,22 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	normalized := normalizeKnownOpenAICodexModel(model)
 	isGPT56 := isOpenAIGPT56Model(normalized)
 	usesLegacyLongContextPricing := usesOpenAILegacyLongContextPricing(normalized)
-	if !isGPT56 && !usesLegacyLongContextPricing {
+	isMiniMaxM3 := isMiniMaxM3Model(model)
+	if !isGPT56 && !usesLegacyLongContextPricing && !isMiniMaxM3 {
 		return pricing
 	}
 	needsLongContextPolicy := (isGPT56 || usesLegacyLongContextPricing) &&
 		(pricing.LongContextInputThreshold <= 0 || pricing.LongContextInputMultiplier <= 0 || pricing.LongContextOutputMultiplier <= 0)
 	needsCacheCreationPolicy := isGPT56 && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
 		(pricing.InputPricePerTokenPriority > 0 && pricing.CacheCreationPricePerTokenPriority <= 0))
-	if !needsLongContextPolicy && !needsCacheCreationPolicy {
+	needsMiniMaxM3Policy := isMiniMaxM3 && (pricing.LongContextInputThreshold != miniMaxM3LongContextInputThreshold ||
+		pricing.LongContextInputMultiplier != miniMaxM3LongContextMultiplier ||
+		pricing.LongContextOutputMultiplier != miniMaxM3LongContextMultiplier ||
+		pricing.InputPricePerTokenPriority <= 0 || pricing.OutputPricePerTokenPriority <= 0 ||
+		pricing.CacheReadPricePerTokenPriority <= 0 ||
+		(!pricing.CacheCreationPriceExplicit &&
+			(pricing.CacheCreationPricePerToken <= 0 || pricing.CacheCreationPricePerTokenPriority <= 0)))
+	if !needsLongContextPolicy && !needsCacheCreationPolicy && !needsMiniMaxM3Policy {
 		return pricing
 	}
 	cloned := *pricing
@@ -1199,6 +1228,30 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 		}
 		if cloned.LongContextOutputMultiplier <= 0 {
 			cloned.LongContextOutputMultiplier = openAIGPT54LongContextOutputMultiplier
+		}
+	}
+	if isMiniMaxM3 {
+		// M3 的 512K 分档是供应商固有价格；输入上下文由普通输入、
+		// cache write 和 cache read 三部分共同组成。
+		cloned.LongContextInputThreshold = miniMaxM3LongContextInputThreshold
+		cloned.LongContextInputMultiplier = miniMaxM3LongContextMultiplier
+		cloned.LongContextOutputMultiplier = miniMaxM3LongContextMultiplier
+		if cloned.InputPricePerTokenPriority <= 0 {
+			cloned.InputPricePerTokenPriority = cloned.InputPricePerToken * miniMaxM3PriorityMultiplier
+		}
+		if cloned.OutputPricePerTokenPriority <= 0 {
+			cloned.OutputPricePerTokenPriority = cloned.OutputPricePerToken * miniMaxM3PriorityMultiplier
+		}
+		if cloned.CacheReadPricePerTokenPriority <= 0 {
+			cloned.CacheReadPricePerTokenPriority = cloned.CacheReadPricePerToken * miniMaxM3PriorityMultiplier
+		}
+		if !cloned.CacheCreationPriceExplicit {
+			if cloned.CacheCreationPricePerToken <= 0 {
+				cloned.CacheCreationPricePerToken = cloned.InputPricePerToken
+			}
+			if cloned.CacheCreationPricePerTokenPriority <= 0 {
+				cloned.CacheCreationPricePerTokenPriority = cloned.InputPricePerTokenPriority
+			}
 		}
 	}
 	return &cloned
