@@ -197,7 +197,11 @@ func buildPlatformSections(
 
 	sections := make([]userChannelPlatformSection, 0, len(platforms))
 	for _, platform := range platforms {
-		platformSet := map[string]struct{}{platform: {}}
+		matchingPlatforms := service.MatchingPlatformsForGroup(platform)
+		platformSet := make(map[string]struct{}, len(matchingPlatforms))
+		for _, matchingPlatform := range matchingPlatforms {
+			platformSet[matchingPlatform] = struct{}{}
+		}
 		sections = append(sections, userChannelPlatformSection{
 			Platform:        platform,
 			Groups:          groupsByPlatform[platform],

@@ -13,18 +13,37 @@ on:
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: custom-image-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  ci:
+    uses: ./.github/workflows/backend-ci.yml
+    permissions:
+      contents: read
+
+  security:
+    uses: ./.github/workflows/security-scan.yml
+    permissions:
+      contents: read
+
   build-and-push:
+    needs:
+      - ci
+      - security
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -39,18 +58,29 @@ jobs:
       - name: Set lowercase image name
         id: meta
         run: |
-          echo "image=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          echo "date=$(date -u +%Y%m%d%H%M%S)" >> $GITHUB_OUTPUT
-          echo "sha=$(echo '${{ github.sha }}' | cut -c1-7)" >> $GITHUB_OUTPUT
+          image=$(echo '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')
+          sha=$(echo '${{ github.sha }}' | cut -c1-7)
+          {
+            echo "image=${image}"
+            echo "sha=${sha}"
+            echo "tags<<EOF"
+            echo "${image}:custom-${sha}"
+            if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/custom" ]]; then
+              echo "${image}:custom"
+            fi
+            if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/custom-* ]]; then
+              safe_ref=$(printf '%s' "$GITHUB_REF_NAME" | tr '/:@ ' '-')
+              echo "${image}:${safe_ref}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            ${{ steps.meta.outputs.image }}:custom
-            ${{ steps.meta.outputs.image }}:custom-${{ steps.meta.outputs.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |

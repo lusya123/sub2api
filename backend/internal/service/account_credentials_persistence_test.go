@@ -9,33 +9,49 @@ import (
 func TestCloneCredentialsDetachesNestedReferenceValues(t *testing.T) {
 	t.Parallel()
 
+	originalRelayHeaders := []string{"first", "second"}
+	originalModels := []any{"gpt-5", "gpt-5-mini"}
 	original := map[string]any{
 		"header_overrides": map[string]any{
-			"x-relay": []string{"first", "second"},
+			"x-relay": originalRelayHeaders,
 		},
 		"rules": []any{
-			map[string]any{"models": []any{"gpt-5", "gpt-5-mini"}},
+			map[string]any{"models": originalModels},
 		},
 	}
 
 	cloned := cloneCredentials(original)
-	cloned["header_overrides"].(map[string]any)["x-relay"].([]string)[0] = "changed"
-	cloned["rules"].([]any)[0].(map[string]any)["models"].([]any)[0] = "changed"
+	clonedHeaderOverrides, ok := cloned["header_overrides"].(map[string]any)
+	require.True(t, ok)
+	clonedRelayHeaders, ok := clonedHeaderOverrides["x-relay"].([]string)
+	require.True(t, ok)
+	clonedRelayHeaders[0] = "changed"
 
-	require.Equal(t, "first", original["header_overrides"].(map[string]any)["x-relay"].([]string)[0])
-	require.Equal(t, "gpt-5", original["rules"].([]any)[0].(map[string]any)["models"].([]any)[0])
+	clonedRules, ok := cloned["rules"].([]any)
+	require.True(t, ok)
+	clonedFirstRule, ok := clonedRules[0].(map[string]any)
+	require.True(t, ok)
+	clonedModels, ok := clonedFirstRule["models"].([]any)
+	require.True(t, ok)
+	clonedModels[0] = "changed"
+
+	require.Equal(t, "first", originalRelayHeaders[0])
+	require.Equal(t, "gpt-5", originalModels[0])
 }
 
 func TestCloneCredentialsPreservesConcreteTypes(t *testing.T) {
 	t.Parallel()
 
+	type namedModelMapping map[string]string
+	type namedLimits []int64
+
 	original := map[string]any{
-		"model_mapping": map[string]string{"alias": "target"},
-		"limits":        []int64{1, 2},
+		"model_mapping": namedModelMapping{"alias": "target"},
+		"limits":        namedLimits{1, 2},
 	}
 
 	cloned := cloneCredentials(original)
 
-	require.IsType(t, map[string]string{}, cloned["model_mapping"])
-	require.IsType(t, []int64{}, cloned["limits"])
+	require.IsType(t, namedModelMapping{}, cloned["model_mapping"])
+	require.IsType(t, namedLimits{}, cloned["limits"])
 }

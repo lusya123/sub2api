@@ -107,6 +107,54 @@ func TestListPlazaGroups_PlatformIsolation(t *testing.T) {
 	require.Equal(t, "gpt-5", byName["g-gpt"][0].Name)
 }
 
+func TestListPlazaGroups_CompositeIncludesConcretePlatformModels(t *testing.T) {
+	ch := plazaPricedChannel(1, "openai", []int64{10}, PlatformOpenAI, "gpt-5")
+	groups := []Group{{
+		ID:             10,
+		Name:           "composite",
+		Platform:       PlatformComposite,
+		RateMultiplier: 1,
+	}}
+
+	svc := newPlazaChannelService([]Channel{ch}, groups, nil)
+	out, err := svc.ListPlazaGroups(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Equal(t, PlatformComposite, out[0].Platform)
+	require.Len(t, out[0].Models, 1)
+	require.Equal(t, "gpt-5", out[0].Models[0].Name)
+	require.Equal(t, PlatformOpenAI, out[0].Models[0].Platform)
+}
+
+func TestListPlazaGroups_CompositeKeepsSameModelNameAcrossPlatforms(t *testing.T) {
+	openAI := plazaPricedChannel(1, "openai", []int64{10}, PlatformOpenAI, "shared-model")
+	anthropic := plazaPricedChannel(2, "anthropic", []int64{10}, PlatformAnthropic, "shared-model")
+	*openAI.ModelPricing[0].InputPrice = 2e-6
+	*anthropic.ModelPricing[0].InputPrice = 3e-6
+	groups := []Group{{
+		ID:             10,
+		Name:           "composite",
+		Platform:       PlatformComposite,
+		RateMultiplier: 1,
+	}}
+
+	svc := newPlazaChannelService([]Channel{openAI, anthropic}, groups, nil)
+	out, err := svc.ListPlazaGroups(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Len(t, out[0].Models, 2)
+	byPlatform := make(map[string]PlazaModel, len(out[0].Models))
+	for _, model := range out[0].Models {
+		byPlatform[model.Platform] = model
+	}
+	require.Equal(t, "shared-model", byPlatform[PlatformAnthropic].Name)
+	require.InDelta(t, 3e-6, *byPlatform[PlatformAnthropic].Pricing.InputPrice, 1e-12)
+	require.Equal(t, "shared-model", byPlatform[PlatformOpenAI].Name)
+	require.InDelta(t, 2e-6, *byPlatform[PlatformOpenAI].Pricing.InputPrice, 1e-12)
+}
+
 func TestListPlazaGroups_InactiveChannelSkipped(t *testing.T) {
 	inactive := plazaPricedChannel(1, "off", []int64{10}, "anthropic", "claude-sonnet")
 	inactive.Status = "inactive"

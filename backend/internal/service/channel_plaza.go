@@ -49,7 +49,8 @@ type PlazaGroup struct {
 // 聚合口径与 ListAvailable 一致（Active 渠道、SupportedModels ∪ 全局定价回落、
 // 平台隔离），仅把顶层从渠道换成分组：
 //   - 渠道按 lower(name) 排序后遍历，保证同名模型去重结果确定；
-//   - 同分组同名模型「先见者胜」，仅当已存条目无定价而新条目有定价时升级替换；
+//   - 具体平台分组按模型名去重；复合分组按「平台 + 模型名」去重，避免跨平台同名模型互相覆盖；
+//   - 同一去重键「先见者胜」，仅当已存条目无定价而新条目有定价时升级替换；
 //   - 每个模型附带 LiteLLM 官方参考价（查不到为 nil）；
 //   - 只返回 Models 非空的分组；分组按 RateMultiplier 升序（同倍率按名称），
 //     组内模型按名称排序。
@@ -89,7 +90,9 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 		order = append(order, g.ID)
 	}
 
-	// modelIdx[groupID][modelName] = index into byGroup[groupID].Models
+	// modelIdx[groupID][dedupeKey] = index into byGroup[groupID].Models.
+	// Composite groups include the concrete platform in the key because the same
+	// public model name may legitimately carry provider-specific pricing.
 	modelIdx := make(map[int64]map[string]int, len(groups))
 	for i := range channels {
 		ch := &channels[i]
@@ -112,17 +115,21 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 			}
 			for j := range supported {
 				m := supported[j]
-				if m.Platform != pg.Platform {
+				if !isPlatformPricingMatch(pg.Platform, m.Platform) {
 					continue
 				}
-				if at, seen := idx[m.Name]; seen {
+				dedupeKey := strings.ToLower(strings.TrimSpace(m.Name))
+				if pg.Platform == PlatformComposite {
+					dedupeKey = strings.ToLower(strings.TrimSpace(m.Platform)) + "\x00" + dedupeKey
+				}
+				if at, seen := idx[dedupeKey]; seen {
 					// 先见者胜；仅当已存条目无定价而新条目有定价时升级。
 					if pg.Models[at].Pricing == nil && m.Pricing != nil {
 						pg.Models[at].Pricing = m.Pricing
 					}
 					continue
 				}
-				idx[m.Name] = len(pg.Models)
+				idx[dedupeKey] = len(pg.Models)
 				pg.Models = append(pg.Models, PlazaModel{
 					Name:     m.Name,
 					Platform: m.Platform,
@@ -139,7 +146,14 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 		if len(pg.Models) == 0 {
 			continue
 		}
-		sort.SliceStable(pg.Models, func(i, j int) bool { return pg.Models[i].Name < pg.Models[j].Name })
+		sort.SliceStable(pg.Models, func(i, j int) bool {
+			leftName := strings.ToLower(pg.Models[i].Name)
+			rightName := strings.ToLower(pg.Models[j].Name)
+			if leftName != rightName {
+				return leftName < rightName
+			}
+			return pg.Models[i].Platform < pg.Models[j].Platform
+		})
 		for j := range pg.Models {
 			pg.Models[j].OfficialPricing = s.lookupOfficialPricing(pg.Models[j].Name, officialMemo)
 		}

@@ -40,7 +40,11 @@ func cloneCredentials(in map[string]any) map[string]any {
 	if in == nil {
 		return map[string]any{}
 	}
-	return cloneCredentialValue(reflect.ValueOf(in)).Interface().(map[string]any)
+	cloned, ok := cloneCredentialValue(reflect.ValueOf(in)).Interface().(map[string]any)
+	if !ok {
+		panic("cloneCredentials: cloned value is not a map[string]any")
+	}
+	return cloned
 }
 
 func cloneCredentialValue(value reflect.Value) reflect.Value {

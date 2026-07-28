@@ -2,7 +2,12 @@ name: Security Scan
 
 on:
   push:
+    branches-ignore:
+      - custom
+    tags-ignore:
+      - 'custom-*'
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -35,7 +40,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 10.12.4
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:

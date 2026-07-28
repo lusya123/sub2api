@@ -1208,6 +1208,38 @@ func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillingDisabledByDefaul
 	require.Equal(t, 1, userRepo.deductCalls)
 }
 
+func TestOpenAIGatewayServiceRecordUsage_MiniMaxM3LongContextIsProviderIntrinsic(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	subRepo := &openAIRecordUsageSubRepoStub{}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID: "resp_minimax_m3_long_context",
+			Usage: OpenAIUsage{
+				InputTokens:  512001,
+				OutputTokens: 1000000,
+			},
+			Model:    "minimax-m3",
+			Duration: time.Second,
+		},
+		APIKey:  &APIKey{ID: 3016},
+		User:    &User{ID: 4016},
+		Account: &Account{ID: 5016, Platform: PlatformOpenAI},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	expectedInput := 512001 * 0.60e-6
+	expectedOutput := 2.40
+	require.InDelta(t, expectedInput, usageRepo.lastLog.InputCost, 1e-10)
+	require.InDelta(t, expectedOutput, usageRepo.lastLog.OutputCost, 1e-10)
+	require.InDelta(t, expectedInput+expectedOutput, usageRepo.lastLog.TotalCost, 1e-10)
+	require.True(t, usageRepo.lastLog.LongContextBillingApplied)
+	require.Equal(t, 1, userRepo.deductCalls)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillingEnabledPerAccount(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}

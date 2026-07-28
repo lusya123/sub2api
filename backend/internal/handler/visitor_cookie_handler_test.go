@@ -14,11 +14,18 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
+
+type rateLimitedVisitorCookieManager struct {
+	*middleware.VisitorCookieManager
+	retryAfter time.Duration
+}
+
+func (m *rateLimitedVisitorCookieManager) AllowIssueRequestWithRetry(context.Context, string) (bool, time.Duration) {
+	return false, m.retryAfter
+}
 
 func TestVisitorCookieHandlerIssuesCookieAfterPoW(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -94,18 +101,12 @@ func TestVisitorCookieHandlerRejectsBadPoW(t *testing.T) {
 
 func TestVisitorCookieHandlerRateLimitReturnsRetryAfter(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("DEFENSE_VISITOR_COOKIE_ISSUE_PER_MIN", "1")
 
-	redisServer := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
-	t.Cleanup(func() {
-		_ = rdb.Close()
-		redisServer.Close()
-	})
-
-	mgr := middleware.NewVisitorCookieManagerWithSecret(rdb, "visitor-handler-test-secret")
-	require.True(t, mgr.AllowIssueRequest(context.Background(), "rate-limited-fingerprint"))
-	h := NewVisitorCookieHandler(mgr, nil)
+	mgr := &rateLimitedVisitorCookieManager{
+		VisitorCookieManager: middleware.NewVisitorCookieManagerWithSecret(nil, "visitor-handler-test-secret"),
+		retryAfter:           1500 * time.Millisecond,
+	}
+	h := &VisitorCookieHandler{mgr: mgr}
 	router := gin.New()
 	router.POST("/api/public/visitor/issue-cookie", h.IssueCookie)
 
@@ -123,10 +124,7 @@ func TestVisitorCookieHandlerRateLimitReturnsRetryAfter(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	retryAfter, err := strconv.Atoi(rec.Header().Get("Retry-After"))
-	require.NoError(t, err)
-	require.Greater(t, retryAfter, 0)
-	require.LessOrEqual(t, retryAfter, 60)
+	require.Equal(t, "2", rec.Header().Get("Retry-After"))
 }
 
 func requestVisitorChallengeForTest(t *testing.T, router *gin.Engine, difficulty int) string {

@@ -123,6 +123,10 @@ func normalizeBillingServiceTier(serviceTier string) string {
 	return strings.ToLower(strings.TrimSpace(serviceTier))
 }
 
+func isMiniMaxM3Model(model string) bool {
+	return matchesFallbackModelSKU(fallbackModelIdentifier(model), "minimax-m3")
+}
+
 func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bool {
 	if pricing == nil || normalizeBillingServiceTier(serviceTier) != "priority" {
 		return false
@@ -895,7 +899,7 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 
 	// MiniMax M 系列：精确 SKU 匹配；未知模型 fail closed，防止未来型号
 	// 被 M2.5 的通用价格少计。
-	if matchesFallbackModelSKU(modelID, "minimax-m3") {
+	if isMiniMaxM3Model(model) {
 		return s.fallbackPrices["minimax-m3"]
 	}
 	if matchesFallbackModelSKU(modelID, "minimax-m2.7-highspeed", "minimax-m2-7-highspeed") {
@@ -1151,7 +1155,9 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	// 长上下文定价仅在无区间定价时应用（区间定价已包含上下文分层）
 	applyLongCtx := len(resolved.Intervals) == 0
 	if input.LongContextBillingEnabled != nil {
-		applyLongCtx = applyLongCtx && *input.LongContextBillingEnabled
+		// The account flag controls optional OpenAI tiers only. MiniMax M3's
+		// >512K tier is provider-intrinsic and must not be disabled by it.
+		applyLongCtx = applyLongCtx && (*input.LongContextBillingEnabled || isMiniMaxM3Model(input.Model))
 	}
 
 	return s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier, applyLongCtx), nil
@@ -1356,7 +1362,10 @@ func (s *BillingService) calculateCostInternalWithPolicy(
 		return nil, err
 	}
 
-	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, longContextBillingEnabled), nil
+	// MiniMax M3's >512K tier is mandatory provider pricing, independent of
+	// the account-level opt-in used by OpenAI long-context pricing.
+	applyLongCtx := longContextBillingEnabled || isMiniMaxM3Model(model)
+	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, applyLongCtx), nil
 }
 
 func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *ModelPricing) *ModelPricing {
@@ -1366,7 +1375,7 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	normalized := normalizeKnownOpenAICodexModel(model)
 	isGPT56 := isOpenAIGPT56Model(normalized)
 	usesLegacyLongContextPricing := usesOpenAILegacyLongContextPricing(normalized)
-	isMiniMaxM3 := matchesFallbackModelSKU(fallbackModelIdentifier(model), "minimax-m3")
+	isMiniMaxM3 := isMiniMaxM3Model(model)
 	if !isGPT56 && !usesLegacyLongContextPricing && !isMiniMaxM3 {
 		return pricing
 	}
@@ -1379,7 +1388,8 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 		pricing.LongContextOutputMultiplier != miniMaxM3LongContextMultiplier ||
 		pricing.InputPricePerTokenPriority <= 0 || pricing.OutputPricePerTokenPriority <= 0 ||
 		pricing.CacheReadPricePerTokenPriority <= 0 ||
-		(!pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 || pricing.CacheCreationPricePerTokenPriority <= 0)))
+		(!pricing.CacheCreationPriceExplicit &&
+			(pricing.CacheCreationPricePerToken <= 0 || pricing.CacheCreationPricePerTokenPriority <= 0)))
 	if !needsLongContextPolicy && !needsCacheCreationPolicy && !needsMiniMaxM3Policy {
 		return pricing
 	}

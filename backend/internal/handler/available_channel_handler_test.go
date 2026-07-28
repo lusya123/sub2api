@@ -155,3 +155,26 @@ func TestBuildPlatformSections_GroupsByPlatform(t *testing.T) {
 	require.Len(t, sections[0].SupportedModels, 1)
 	require.Equal(t, "claude-sonnet-4-6", sections[0].SupportedModels[0].Name)
 }
+
+func TestBuildPlatformSections_CompositeIncludesConcretePlatforms(t *testing.T) {
+	ch := service.AvailableChannel{
+		Name: "multi",
+		SupportedModels: []service.SupportedModel{
+			{Name: "claude-sonnet-4-6", Platform: service.PlatformAnthropic},
+			{Name: "gpt-5", Platform: service.PlatformOpenAI},
+		},
+	}
+	visible := []userAvailableGroup{{
+		ID:       1,
+		Name:     "composite",
+		Platform: service.PlatformComposite,
+	}}
+
+	sections := buildPlatformSections(ch, visible)
+
+	require.Len(t, sections, 1)
+	require.Equal(t, service.PlatformComposite, sections[0].Platform)
+	require.Len(t, sections[0].SupportedModels, 2)
+	require.Equal(t, "claude-sonnet-4-6", sections[0].SupportedModels[0].Name)
+	require.Equal(t, "gpt-5", sections[0].SupportedModels[1].Name)
+}

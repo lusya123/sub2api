@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,13 +15,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type visitorCookieManager interface {
+	StoreChallenge(ctx context.Context, challenge string, ttl time.Duration)
+	AllowIssueRequestWithRetry(ctx context.Context, fingerprint string) (bool, time.Duration)
+	ConsumeChallenge(ctx context.Context, challenge string) (bool, error)
+	IssueCookieWithFingerprint(fingerprint string) (value string, maxAge int)
+}
+
 type VisitorCookieHandler struct {
-	mgr    *middleware.VisitorCookieManager
+	mgr    visitorCookieManager
 	credit *middleware.CookieCreditSystem
 }
 
 func NewVisitorCookieHandler(mgr *middleware.VisitorCookieManager, credit *middleware.CookieCreditSystem) *VisitorCookieHandler {
-	return &VisitorCookieHandler{mgr: mgr, credit: credit}
+	var manager visitorCookieManager
+	if mgr != nil {
+		manager = mgr
+	}
+	return &VisitorCookieHandler{mgr: manager, credit: credit}
 }
 
 func (h *VisitorCookieHandler) Challenge(c *gin.Context) {

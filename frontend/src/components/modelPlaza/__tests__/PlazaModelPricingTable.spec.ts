@@ -39,9 +39,14 @@ function tokenModel(overrides: Partial<PlazaModel> = {}): PlazaModel {
   }
 }
 
-function mountTable(models: PlazaModel[], rateMultiplier: number, userRateMultiplier?: number | null) {
+function mountTable(
+  models: PlazaModel[],
+  rateMultiplier: number,
+  userRateMultiplier?: number | null,
+  platform?: string
+) {
   return mount(PlazaModelPricingTable, {
-    props: { models, rateMultiplier, userRateMultiplier: userRateMultiplier ?? null }
+    props: { models, rateMultiplier, userRateMultiplier: userRateMultiplier ?? null, platform }
   })
 }
 
@@ -109,6 +114,18 @@ describe('PlazaModelPricingTable', () => {
     const wrapper = mountTable([cheap, noOfficial, expensive], 1)
     const names = wrapper.findAll('tbody tr').map((tr) => tr.find('td').text())
     expect(names).toEqual(['model-expensive', 'model-cheap', 'model-no-official'])
+  })
+
+  it('复合分组保留跨平台同名模型并显示平台标识', () => {
+    const anthropic = tokenModel({ name: 'shared-model', platform: 'anthropic' })
+    const openai = tokenModel({ name: 'shared-model', platform: 'openai' })
+
+    const wrapper = mountTable([openai, anthropic], 1, null, 'composite')
+    const rows = wrapper.findAll('tbody tr')
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain('anthropic')
+    expect(rows[1].text()).toContain('openai')
   })
 
   it('两级表头:实付区与官方区各拆输入/输出/缓存列', () => {

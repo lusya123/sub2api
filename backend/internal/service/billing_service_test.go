@@ -472,6 +472,8 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "minimax m2.5 standard", model: "minimax-m2.5", expectedInput: 0.3e-6},
 		{name: "minimax m2.5 highspeed exact", model: "minimax-m2.5-highspeed", expectedInput: 0.6e-6},
 		{name: "minimax m3 permanent discount", model: "minimax-m3", expectedInput: 0.3e-6},
+		{name: "minimax m3 latest alias", model: "minimax/minimax-m3-latest", expectedInput: 0.3e-6},
+		{name: "minimax m3 immutable release alias", model: "minimax-m3-20260719", expectedInput: 0.3e-6},
 		{name: "minimax highspeed numeric release suffix", model: "minimax-m2.5-highspeed-2026", expectedInput: 0.6e-6},
 		{name: "minimax unsupported m3 highspeed fails closed", model: "minimax-m3-highspeed", expectNilPricing: true},
 		{name: "minimax unknown model fails closed", model: "minimax-future", expectNilPricing: true},
@@ -993,13 +995,79 @@ func TestCalculateCost_MiniMaxM3OfficialContextTiers(t *testing.T) {
 
 func TestCalculateCost_MiniMaxM3PriorityIsOnePointFiveTimesEachContextTier(t *testing.T) {
 	svc := newTestBillingService()
-	tokens := UsageTokens{InputTokens: miniMaxM3LongContextInputThreshold + 1, OutputTokens: 1000000}
+	baseTokens := UsageTokens{
+		InputTokens:         256000,
+		CacheCreationTokens: 128000,
+		CacheReadTokens:     128000,
+		OutputTokens:        1000000,
+	}
 
-	cost, err := svc.CalculateCostWithServiceTier("minimax-m3", tokens, 1, "priority")
-	require.NoError(t, err)
-	require.True(t, cost.LongContextBillingApplied)
-	require.InDelta(t, float64(tokens.InputTokens)*0.90e-6, cost.InputCost, 1e-12)
-	require.InDelta(t, 3.60, cost.OutputCost, 1e-12)
+	tests := []struct {
+		name             string
+		tokens           UsageTokens
+		inputPrice       float64
+		cacheCreatePrice float64
+		cacheReadPrice   float64
+		outputCost       float64
+		longContext      bool
+	}{
+		{
+			name:             "exactly 512K",
+			tokens:           baseTokens,
+			inputPrice:       0.45e-6,
+			cacheCreatePrice: 0.45e-6,
+			cacheReadPrice:   0.09e-6,
+			outputCost:       1.80,
+		},
+		{
+			name: "above 512K",
+			tokens: func() UsageTokens {
+				tokens := baseTokens
+				tokens.InputTokens++
+				return tokens
+			}(),
+			inputPrice:       0.90e-6,
+			cacheCreatePrice: 0.90e-6,
+			cacheReadPrice:   0.18e-6,
+			outputCost:       3.60,
+			longContext:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cost, err := svc.CalculateCostWithServiceTier("minimax-m3", tt.tokens, 1, "priority")
+			require.NoError(t, err)
+			require.Equal(t, tt.longContext, cost.LongContextBillingApplied)
+			require.InDelta(t, float64(tt.tokens.InputTokens)*tt.inputPrice, cost.InputCost, 1e-12)
+			require.InDelta(t, float64(tt.tokens.CacheCreationTokens)*tt.cacheCreatePrice, cost.CacheCreationCost, 1e-12)
+			require.InDelta(t, float64(tt.tokens.CacheReadTokens)*tt.cacheReadPrice, cost.CacheReadCost, 1e-12)
+			require.InDelta(t, tt.outputCost, cost.OutputCost, 1e-12)
+		})
+	}
+}
+
+func TestApplyModelSpecificPricingPolicy_MiniMaxM3CacheCreationFallback(t *testing.T) {
+	svc := newTestBillingService()
+	source := &ModelPricing{
+		InputPricePerToken:     0.30e-6,
+		OutputPricePerToken:    1.20e-6,
+		CacheReadPricePerToken: 0.06e-6,
+	}
+
+	pricing := svc.applyModelSpecificPricingPolicy("minimax/minimax-m3", source)
+	require.NotSame(t, source, pricing)
+	require.InDelta(t, 0.30e-6, pricing.CacheCreationPricePerToken, 1e-12)
+	require.InDelta(t, 0.45e-6, pricing.CacheCreationPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 0.45e-6, pricing.InputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 1.80e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 0.09e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
+
+	explicit := *source
+	explicit.CacheCreationPriceExplicit = true
+	explicitPricing := svc.applyModelSpecificPricingPolicy("minimax-m3", &explicit)
+	require.Zero(t, explicitPricing.CacheCreationPricePerToken)
+	require.Zero(t, explicitPricing.CacheCreationPricePerTokenPriority)
 }
 
 func TestCalculateCost_GLMMinimax_RateMultiplierApplied(t *testing.T) {

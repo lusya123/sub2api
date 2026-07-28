@@ -60,6 +60,25 @@ func TestCalculateCostUnified_TokenMode(t *testing.T) {
 	require.Equal(t, string(BillingModeToken), cost.BillingMode)
 }
 
+func TestCalculateCostUnified_MiniMaxM3LongContextIgnoresOpenAIOptOut(t *testing.T) {
+	bs := newTestBillingService()
+	resolver := NewModelPricingResolver(nil, bs)
+	disabled := false
+
+	cost, err := bs.CalculateCostUnified(CostInput{
+		Ctx:                       context.Background(),
+		Model:                     "minimax/minimax-m3-20260719",
+		Tokens:                    UsageTokens{InputTokens: 512001, OutputTokens: 1000000},
+		RateMultiplier:            1,
+		Resolver:                  resolver,
+		LongContextBillingEnabled: &disabled,
+	})
+	require.NoError(t, err)
+	require.True(t, cost.LongContextBillingApplied)
+	require.InDelta(t, 512001*0.60e-6, cost.InputCost, 1e-12)
+	require.InDelta(t, 2.40, cost.OutputCost, 1e-12)
+}
+
 func TestCalculateCostUnified_TokenModeAppliesRateMultiplierToImageTokens(t *testing.T) {
 	bs := newTestBillingService()
 	resolver := NewModelPricingResolver(nil, bs)

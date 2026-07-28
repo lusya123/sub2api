@@ -362,6 +362,12 @@ func matchingPlatforms(groupPlatform string) []string {
 	return []string{groupPlatform}
 }
 
+// MatchingPlatformsForGroup returns the concrete model platforms visible to a
+// group. Composite groups span all supported concrete providers.
+func MatchingPlatformsForGroup(groupPlatform string) []string {
+	return matchingPlatforms(groupPlatform)
+}
+
 func channelLookupPlatform(ctx context.Context, groupPlatform string) string {
 	if ctx != nil {
 		if forcePlatform, ok := ctx.Value(ctxkey.ForcePlatform).(string); ok && strings.TrimSpace(forcePlatform) != "" {
