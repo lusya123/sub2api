@@ -466,6 +466,8 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "minimax m2.5 standard", model: "minimax-m2.5", expectedInput: 0.3e-6},
 		{name: "minimax m2.5 highspeed exact", model: "minimax-m2.5-highspeed", expectedInput: 0.6e-6},
 		{name: "minimax m3 uses its discounted base price", model: "minimax-m3", expectedInput: 0.3e-6},
+		{name: "minimax m3 latest alias", model: "minimax/minimax-m3-latest", expectedInput: 0.3e-6},
+		{name: "minimax m3 immutable release alias", model: "minimax-m3-20260719", expectedInput: 0.3e-6},
 		// 计费安全：未知 highspeed 衍生型号必须走高速价（避免少收 50%）
 		{name: "minimax highspeed suffix variant uses highspeed price", model: "minimax-m2.5-highspeed-2026", expectedInput: 0.6e-6},
 		{name: "minimax unsupported m3 highspeed fails closed", model: "minimax-m3-highspeed", expectNilPricing: true},
