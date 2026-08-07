@@ -80,6 +80,16 @@ func PasswordHash(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldPasswordHash, v))
 }
 
+// LegacyShopPasswordHash applies equality check predicate on the "legacy_shop_password_hash" field. It's identical to LegacyShopPasswordHashEQ.
+func LegacyShopPasswordHash(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldLegacyShopPasswordHash, v))
+}
+
+// CredentialVersion applies equality check predicate on the "credential_version" field. It's identical to CredentialVersionEQ.
+func CredentialVersion(v uint64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldCredentialVersion, v))
+}
+
 // Role applies equality check predicate on the "role" field. It's identical to RoleEQ.
 func Role(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRole, v))
@@ -433,6 +443,121 @@ func PasswordHashEqualFold(v string) predicate.User {
 // PasswordHashContainsFold applies the ContainsFold predicate on the "password_hash" field.
 func PasswordHashContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldPasswordHash, v))
+}
+
+// LegacyShopPasswordHashEQ applies the EQ predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashNEQ applies the NEQ predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashIn applies the In predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldLegacyShopPasswordHash, vs...))
+}
+
+// LegacyShopPasswordHashNotIn applies the NotIn predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldLegacyShopPasswordHash, vs...))
+}
+
+// LegacyShopPasswordHashGT applies the GT predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashGTE applies the GTE predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashLT applies the LT predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashLTE applies the LTE predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashContains applies the Contains predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashHasPrefix applies the HasPrefix predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashHasSuffix applies the HasSuffix predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashIsNil applies the IsNil predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldLegacyShopPasswordHash))
+}
+
+// LegacyShopPasswordHashNotNil applies the NotNil predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldLegacyShopPasswordHash))
+}
+
+// LegacyShopPasswordHashEqualFold applies the EqualFold predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldLegacyShopPasswordHash, v))
+}
+
+// LegacyShopPasswordHashContainsFold applies the ContainsFold predicate on the "legacy_shop_password_hash" field.
+func LegacyShopPasswordHashContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldLegacyShopPasswordHash, v))
+}
+
+// CredentialVersionEQ applies the EQ predicate on the "credential_version" field.
+func CredentialVersionEQ(v uint64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldCredentialVersion, v))
+}
+
+// CredentialVersionNEQ applies the NEQ predicate on the "credential_version" field.
+func CredentialVersionNEQ(v uint64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldCredentialVersion, v))
+}
+
+// CredentialVersionIn applies the In predicate on the "credential_version" field.
+func CredentialVersionIn(vs ...uint64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldCredentialVersion, vs...))
+}
+
+// CredentialVersionNotIn applies the NotIn predicate on the "credential_version" field.
+func CredentialVersionNotIn(vs ...uint64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldCredentialVersion, vs...))
+}
+
+// CredentialVersionGT applies the GT predicate on the "credential_version" field.
+func CredentialVersionGT(v uint64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldCredentialVersion, v))
+}
+
+// CredentialVersionGTE applies the GTE predicate on the "credential_version" field.
+func CredentialVersionGTE(v uint64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldCredentialVersion, v))
+}
+
+// CredentialVersionLT applies the LT predicate on the "credential_version" field.
+func CredentialVersionLT(v uint64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldCredentialVersion, v))
+}
+
+// CredentialVersionLTE applies the LTE predicate on the "credential_version" field.
+func CredentialVersionLTE(v uint64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldCredentialVersion, v))
 }
 
 // RoleEQ applies the EQ predicate on the "role" field.

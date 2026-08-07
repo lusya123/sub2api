@@ -695,6 +695,7 @@ export default {
     updateFailed: '资料更新失败',
     usernameRequired: '用户名不能为空',
     changePassword: '修改密码',
+    passwordUnificationHint: '若此账号已与 Shop 合并，在这里修改后新密码会同时用于两个站点，两组旧密码都会失效。',
     currentPassword: '当前密码',
     newPassword: '新密码',
     confirmNewPassword: '确认新密码',

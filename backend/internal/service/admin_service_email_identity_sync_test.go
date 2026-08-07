@@ -262,3 +262,56 @@ func TestAdminService_UpdateUser_DifferentPasswordUpdatesPasswordHash(t *testing
 	require.NotEqual(t, originalHash, updated.PasswordHash)
 	require.True(t, updated.CheckPassword("next-password"))
 }
+
+func TestAdminService_UpdateUser_ExplicitPasswordClearsLegacyVerifier(t *testing.T) {
+	user := &User{
+		ID:          94,
+		Email:       "clear-legacy@example.com",
+		Role:        RoleUser,
+		Status:      StatusActive,
+		Concurrency: 3,
+	}
+	require.NoError(t, user.SetPassword("primary-password"))
+	legacyUser := &User{}
+	require.NoError(t, legacyUser.SetPassword("legacy-shop-password"))
+	legacyHash := legacyUser.PasswordHash
+	user.LegacyShopPasswordHash = &legacyHash
+	originalPrimaryHash := user.PasswordHash
+	repo := &emailSyncRepoStub{user: user}
+	svc := &adminServiceImpl{userRepo: repo}
+
+	updated, err := svc.UpdateUser(context.Background(), user.ID, &UpdateUserInput{
+		Password: "primary-password",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, originalPrimaryHash, updated.PasswordHash)
+	require.Nil(t, updated.LegacyShopPasswordHash)
+	require.False(t, updated.CheckPassword("legacy-shop-password"))
+}
+
+func TestAdminService_UpdateUser_LegacyPasswordBecomesSoleVerifier(t *testing.T) {
+	user := &User{
+		ID:          95,
+		Email:       "promote-legacy@example.com",
+		Role:        RoleUser,
+		Status:      StatusActive,
+		Concurrency: 3,
+	}
+	require.NoError(t, user.SetPassword("primary-password"))
+	legacyUser := &User{}
+	require.NoError(t, legacyUser.SetPassword("legacy-shop-password"))
+	legacyHash := legacyUser.PasswordHash
+	user.LegacyShopPasswordHash = &legacyHash
+	repo := &emailSyncRepoStub{user: user}
+	svc := &adminServiceImpl{userRepo: repo}
+
+	updated, err := svc.UpdateUser(context.Background(), user.ID, &UpdateUserInput{
+		Password: "legacy-shop-password",
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, updated.LegacyShopPasswordHash)
+	require.True(t, updated.CheckPassword("legacy-shop-password"))
+	require.False(t, updated.CheckPassword("primary-password"))
+}

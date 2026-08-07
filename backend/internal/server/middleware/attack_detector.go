@@ -59,6 +59,7 @@ func (a *AttackDetector) Middleware() gin.HandlerFunc {
 
 		path := c.Request.URL.Path
 		if IsGatewayAPIPath(path) ||
+			IsShopAccountBridgeAuthenticated(c) ||
 			GetTrustTier(c) == TierAPIKey ||
 			GetTrustTier(c) == TierUser ||
 			strings.HasPrefix(path, "/api/public/visitor/") {

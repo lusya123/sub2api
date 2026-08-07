@@ -48656,6 +48656,9 @@ type UserMutation struct {
 	deleted_at                    *time.Time
 	email                         *string
 	password_hash                 *string
+	legacy_shop_password_hash     *string
+	credential_version            *uint64
+	addcredential_version         *int64
 	role                          *string
 	balance                       *float64
 	addbalance                    *float64
@@ -49015,6 +49018,111 @@ func (m *UserMutation) OldPasswordHash(ctx context.Context) (v string, err error
 // ResetPasswordHash resets all changes to the "password_hash" field.
 func (m *UserMutation) ResetPasswordHash() {
 	m.password_hash = nil
+}
+
+// SetLegacyShopPasswordHash sets the "legacy_shop_password_hash" field.
+func (m *UserMutation) SetLegacyShopPasswordHash(s string) {
+	m.legacy_shop_password_hash = &s
+}
+
+// LegacyShopPasswordHash returns the value of the "legacy_shop_password_hash" field in the mutation.
+func (m *UserMutation) LegacyShopPasswordHash() (r string, exists bool) {
+	v := m.legacy_shop_password_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLegacyShopPasswordHash returns the old "legacy_shop_password_hash" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldLegacyShopPasswordHash(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLegacyShopPasswordHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLegacyShopPasswordHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLegacyShopPasswordHash: %w", err)
+	}
+	return oldValue.LegacyShopPasswordHash, nil
+}
+
+// ClearLegacyShopPasswordHash clears the value of the "legacy_shop_password_hash" field.
+func (m *UserMutation) ClearLegacyShopPasswordHash() {
+	m.legacy_shop_password_hash = nil
+	m.clearedFields[user.FieldLegacyShopPasswordHash] = struct{}{}
+}
+
+// LegacyShopPasswordHashCleared returns if the "legacy_shop_password_hash" field was cleared in this mutation.
+func (m *UserMutation) LegacyShopPasswordHashCleared() bool {
+	_, ok := m.clearedFields[user.FieldLegacyShopPasswordHash]
+	return ok
+}
+
+// ResetLegacyShopPasswordHash resets all changes to the "legacy_shop_password_hash" field.
+func (m *UserMutation) ResetLegacyShopPasswordHash() {
+	m.legacy_shop_password_hash = nil
+	delete(m.clearedFields, user.FieldLegacyShopPasswordHash)
+}
+
+// SetCredentialVersion sets the "credential_version" field.
+func (m *UserMutation) SetCredentialVersion(u uint64) {
+	m.credential_version = &u
+	m.addcredential_version = nil
+}
+
+// CredentialVersion returns the value of the "credential_version" field in the mutation.
+func (m *UserMutation) CredentialVersion() (r uint64, exists bool) {
+	v := m.credential_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCredentialVersion returns the old "credential_version" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldCredentialVersion(ctx context.Context) (v uint64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCredentialVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCredentialVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCredentialVersion: %w", err)
+	}
+	return oldValue.CredentialVersion, nil
+}
+
+// AddCredentialVersion adds u to the "credential_version" field.
+func (m *UserMutation) AddCredentialVersion(u int64) {
+	if m.addcredential_version != nil {
+		*m.addcredential_version += u
+	} else {
+		m.addcredential_version = &u
+	}
+}
+
+// AddedCredentialVersion returns the value that was added to the "credential_version" field in this mutation.
+func (m *UserMutation) AddedCredentialVersion() (r int64, exists bool) {
+	v := m.addcredential_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCredentialVersion resets all changes to the "credential_version" field.
+func (m *UserMutation) ResetCredentialVersion() {
+	m.credential_version = nil
+	m.addcredential_version = nil
 }
 
 // SetRole sets the "role" field.
@@ -50623,7 +50731,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 26)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -50638,6 +50746,12 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.password_hash != nil {
 		fields = append(fields, user.FieldPasswordHash)
+	}
+	if m.legacy_shop_password_hash != nil {
+		fields = append(fields, user.FieldLegacyShopPasswordHash)
+	}
+	if m.credential_version != nil {
+		fields = append(fields, user.FieldCredentialVersion)
 	}
 	if m.role != nil {
 		fields = append(fields, user.FieldRole)
@@ -50714,6 +50828,10 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Email()
 	case user.FieldPasswordHash:
 		return m.PasswordHash()
+	case user.FieldLegacyShopPasswordHash:
+		return m.LegacyShopPasswordHash()
+	case user.FieldCredentialVersion:
+		return m.CredentialVersion()
 	case user.FieldRole:
 		return m.Role()
 	case user.FieldBalance:
@@ -50771,6 +50889,10 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldEmail(ctx)
 	case user.FieldPasswordHash:
 		return m.OldPasswordHash(ctx)
+	case user.FieldLegacyShopPasswordHash:
+		return m.OldLegacyShopPasswordHash(ctx)
+	case user.FieldCredentialVersion:
+		return m.OldCredentialVersion(ctx)
 	case user.FieldRole:
 		return m.OldRole(ctx)
 	case user.FieldBalance:
@@ -50852,6 +50974,20 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPasswordHash(v)
+		return nil
+	case user.FieldLegacyShopPasswordHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLegacyShopPasswordHash(v)
+		return nil
+	case user.FieldCredentialVersion:
+		v, ok := value.(uint64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCredentialVersion(v)
 		return nil
 	case user.FieldRole:
 		v, ok := value.(string)
@@ -50994,6 +51130,9 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *UserMutation) AddedFields() []string {
 	var fields []string
+	if m.addcredential_version != nil {
+		fields = append(fields, user.FieldCredentialVersion)
+	}
 	if m.addbalance != nil {
 		fields = append(fields, user.FieldBalance)
 	}
@@ -51020,6 +51159,8 @@ func (m *UserMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case user.FieldCredentialVersion:
+		return m.AddedCredentialVersion()
 	case user.FieldBalance:
 		return m.AddedBalance()
 	case user.FieldFrozenBalance:
@@ -51041,6 +51182,13 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *UserMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case user.FieldCredentialVersion:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCredentialVersion(v)
+		return nil
 	case user.FieldBalance:
 		v, ok := value.(float64)
 		if !ok {
@@ -51094,6 +51242,9 @@ func (m *UserMutation) ClearedFields() []string {
 	if m.FieldCleared(user.FieldDeletedAt) {
 		fields = append(fields, user.FieldDeletedAt)
 	}
+	if m.FieldCleared(user.FieldLegacyShopPasswordHash) {
+		fields = append(fields, user.FieldLegacyShopPasswordHash)
+	}
 	if m.FieldCleared(user.FieldTotpSecretEncrypted) {
 		fields = append(fields, user.FieldTotpSecretEncrypted)
 	}
@@ -51125,6 +51276,9 @@ func (m *UserMutation) ClearField(name string) error {
 	switch name {
 	case user.FieldDeletedAt:
 		m.ClearDeletedAt()
+		return nil
+	case user.FieldLegacyShopPasswordHash:
+		m.ClearLegacyShopPasswordHash()
 		return nil
 	case user.FieldTotpSecretEncrypted:
 		m.ClearTotpSecretEncrypted()
@@ -51163,6 +51317,12 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldPasswordHash:
 		m.ResetPasswordHash()
+		return nil
+	case user.FieldLegacyShopPasswordHash:
+		m.ResetLegacyShopPasswordHash()
+		return nil
+	case user.FieldCredentialVersion:
+		m.ResetCredentialVersion()
 		return nil
 	case user.FieldRole:
 		m.ResetRole()

@@ -230,6 +230,63 @@ func TestAuthServiceLoginDefersLastLoginTouchUntilRecordSuccessfulLogin(t *testi
 	require.Equal(t, user.ID, identity.UserID)
 }
 
+func TestAuthServiceAcceptsPrimaryOrLegacyShopPassword(t *testing.T) {
+	svc, _, client := newAuthServiceWithEnt(t, map[string]string{
+		service.SettingKeyRegistrationEnabled: "true",
+	}, nil)
+	ctx := context.Background()
+
+	primaryHash, err := svc.HashPassword("primary-password")
+	require.NoError(t, err)
+	legacyHash, err := svc.HashPassword("legacy-shop-password")
+	require.NoError(t, err)
+
+	activeUser, err := client.User.Create().
+		SetEmail("dual-password@example.com").
+		SetPasswordHash(primaryHash).
+		SetLegacyShopPasswordHash(legacyHash).
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		SetBalance(1).
+		SetConcurrency(1).
+		Save(ctx)
+	require.NoError(t, err)
+
+	for _, password := range []string{"primary-password", "legacy-shop-password"} {
+		t.Run(password, func(t *testing.T) {
+			token, user, loginErr := svc.Login(ctx, activeUser.Email, password)
+			require.NoError(t, loginErr)
+			require.NotEmpty(t, token)
+			require.Equal(t, activeUser.ID, user.ID)
+
+			validated, validateErr := svc.ValidatePasswordCredentials(ctx, activeUser.Email, password)
+			require.NoError(t, validateErr)
+			require.Equal(t, activeUser.ID, validated.ID)
+		})
+	}
+
+	_, _, err = svc.Login(ctx, activeUser.Email, "wrong-password")
+	require.ErrorIs(t, err, service.ErrInvalidCredentials)
+	_, err = svc.ValidatePasswordCredentials(ctx, activeUser.Email, "wrong-password")
+	require.ErrorIs(t, err, service.ErrInvalidCredentials)
+
+	disabledUser, err := client.User.Create().
+		SetEmail("disabled-dual-password@example.com").
+		SetPasswordHash(primaryHash).
+		SetLegacyShopPasswordHash(legacyHash).
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusDisabled).
+		SetBalance(1).
+		SetConcurrency(1).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, _, err = svc.Login(ctx, disabledUser.Email, "legacy-shop-password")
+	require.ErrorIs(t, err, service.ErrUserNotActive)
+	_, err = svc.ValidatePasswordCredentials(ctx, disabledUser.Email, "legacy-shop-password")
+	require.ErrorIs(t, err, service.ErrUserNotActive)
+}
+
 func TestAuthServiceRecordSuccessfulLoginBackfillsEmailIdentity(t *testing.T) {
 	svc, repo, client := newAuthServiceWithEnt(t, map[string]string{
 		service.SettingKeyRegistrationEnabled: "true",

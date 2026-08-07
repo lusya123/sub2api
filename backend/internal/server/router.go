@@ -64,6 +64,11 @@ func SetupRouter(
 	// 解析模式按请求快照：兼容开关开启时信任原始转发头，关闭时使用 server.trusted_proxies。
 	r.Use(middleware2.SessionBindingContext(cfg))
 	r.Use(middleware2.Logger())
+	// Authenticate the fixed Shop bridge endpoints before any global browser
+	// defense can read, fingerprint, rate-limit, or assign cookie reputation to
+	// their bodies. Invalid signatures abort here; valid requests receive only
+	// an internal marker and a dedicated trust tier (never API-key/admin scope).
+	r.Use(middleware2.ShopAccountBridgeIngressHMACAuth(cfg.ShopAccountBridge))
 	r.Use(middleware2.CORS(cfg.CORS))
 	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, func() []string {
 		if p := cachedFrameOrigins.Load(); p != nil {
@@ -78,30 +83,11 @@ func SetupRouter(
 	r.Use(middleware2.APIPathGuard())
 	r.Use(middleware2.TrustTierDetector())
 	r.Use(middleware2.NewAttackDetector(redisClient, creditSystem).Middleware())
-	r.Use(func(c *gin.Context) {
-		if middleware2.IsGatewayAPIPath(c.Request.URL.Path) ||
-			middleware2.GetTrustTier(c) == middleware2.TierAPIKey ||
-			middleware2.GetTrustTier(c) == middleware2.TierUser {
-			c.Next()
-			return
-		}
-		cookieValue, _ := c.Cookie("_xdt_v")
-		if cookieValue != "" && creditSystem.IsBlocked(c.Request.Context(), middleware2.CookieHash(cookieValue)) {
-			c.AbortWithStatusJSON(403, gin.H{"error": "cookie reputation too low"})
-			return
-		}
-		c.Next()
-	})
+	r.Use(middleware2.CookieReputationGuard(creditSystem))
 	r.Use(middleware2.VisitorCookieIssuerMiddleware(visitorCookieMgr))
 	r.Use(middleware2.NewGlobalRateLimiter(redisClient, visitorCookieMgr).Middleware())
 	pathLimiter := middleware2.NewPathLevelRateLimiter(redisClient)
-	r.Use(func(c *gin.Context) {
-		if !pathLimiter.Allow(c.Request.Context(), c.Request.URL.Path) {
-			c.AbortWithStatusJSON(503, gin.H{"error": "path overloaded, try later"})
-			return
-		}
-		c.Next()
-	})
+	r.Use(pathLimiter.Middleware())
 	r.Use(middleware2.NewBodyFingerprint(redisClient).Middleware())
 	r.Use(web.SPAProtect(redisClient, cfg.JWT.Secret))
 	handler.PreloadLogoCache(settingService)
@@ -183,6 +169,7 @@ func registerRoutes(
 
 	// 注册各模块路由
 	routes.RegisterAuthRoutes(v1, h, jwtAuth, auditLog, redisClient, settingService, panelRateLimiter)
+	routes.RegisterShopAccountBridgeRoutes(v1, h)
 	routes.RegisterUserRoutes(v1, h, jwtAuth, auditLog, settingService, panelRateLimiter)
 	routes.RegisterModelPlazaRoutes(v1, h, optionalJWTAuth, settingService, panelRateLimiter)
 	routes.RegisterAdminRoutes(v1, h, adminAuth, adminAuditService, redisClient, auditLog, stepUpAuth, settingService, panelRateLimiter)

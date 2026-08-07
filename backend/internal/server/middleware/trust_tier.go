@@ -10,9 +10,10 @@ import (
 const (
 	TrustTierContextKey = "trust_tier"
 
-	TierAnonymous = "anonymous"
-	TierUser      = "user"
-	TierAPIKey    = "apikey"
+	TierAnonymous  = "anonymous"
+	TierUser       = "user"
+	TierAPIKey     = "apikey"
+	TierShopBridge = "shop_bridge"
 
 	minAPIKeyCredentialLength = 16
 )
@@ -29,6 +30,9 @@ func TrustTierDetector() gin.HandlerFunc {
 }
 
 func InferTrustTier(c *gin.Context) string {
+	if IsShopAccountBridgeAuthenticated(c) {
+		return TierShopBridge
+	}
 	if hasAPIKeyCredential(c) && isGatewayAPIPath(c.Request.URL.Path) {
 		return TierAPIKey
 	}

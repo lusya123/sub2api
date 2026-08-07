@@ -15,6 +15,9 @@
             {{ t('profile.changePassword') }}
           </p>
         </div>
+        <p class="rounded-lg bg-primary-50 px-3 py-2 text-sm text-primary-700 dark:bg-primary-900/20 dark:text-primary-300">
+          {{ t('profile.passwordUnificationHint') }}
+        </p>
         <div>
           <label for="old_password" class="input-label">
             {{ t('profile.currentPassword') }}

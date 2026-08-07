@@ -27,6 +27,12 @@ api.sub2api.com {
 	# =========================================================================
 	# 反向代理配置
 	# =========================================================================
+	# Reserve the complete server-to-server integration namespace for the
+	# peer-restricted private TLS sidecar. The broader public-edge denial also
+	# covers normalized/trailing path variants and future internal subroutes.
+	@private_integrations_public path /api/v1/integrations /api/v1/integrations/*
+	respond @private_integrations_public 404
+
 	reverse_proxy localhost:8080 {
 		# 健康检查
 		health_uri /health

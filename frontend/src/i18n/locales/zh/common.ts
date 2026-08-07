@@ -417,7 +417,7 @@ export default {
     resettingPassword: '重置中...',
     resetPasswordFailed: '重置密码失败，请重试。',
     passwordResetSuccess: '密码重置成功',
-    passwordResetSuccessHint: '您的密码已重置。现在可以使用新密码登录。',
+    passwordResetSuccessHint: '您的密码已重置。若账号已与 Shop 合并，新密码可用于两个站点，两组旧密码均已失效。',
     invalidResetLink: '无效的重置链接',
     invalidResetLinkHint: '此密码重置链接无效或已过期。请重新请求一个新链接。',
     requestNewResetLink: '请求新的重置链接',

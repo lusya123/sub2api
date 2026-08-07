@@ -64,6 +64,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // opsIngressRejectAggregator
 		nil, // apiKeyService
 		nil, // authCacheInvalidationWorker
+		nil, // shopCredentialEventWorker
 		schedulerSnapshotSvc,
 		tokenRefreshSvc,
 		accountExpirySvc,
@@ -99,6 +100,15 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 	require.NotPanics(t, func() {
 		cleanup()
 	})
+}
+
+func TestWireGenStartsAndCleansUpShopCredentialEventWorker(t *testing.T) {
+	src, err := os.ReadFile("wire_gen.go")
+	require.NoError(t, err)
+
+	text := string(src)
+	require.Contains(t, text, "service.ProvideShopCredentialEventWorker(shopCredentialEventOutboxRepository, configConfig)")
+	require.Contains(t, text, "shopCredentialEventWorker.Stop()")
 }
 
 func TestWireGenStartsAndCleansUpModelMarketplaceRunner(t *testing.T) {

@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -713,6 +714,32 @@ func TestBodyFingerprintBlocksAnonymousReplayAndSkipsAPIPaths(t *testing.T) {
 		req.Header.Set("x-api-key", "sk-fake")
 	})
 	require.Equal(t, http.StatusForbidden, rec.Code, "fake API key on login path must not bypass body fingerprint")
+}
+
+func TestBodyFingerprintPreservesUnknownLengthBodyBeyondInspectionLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("DEFENSE_TRUST_TIER_ENABLED", "true")
+	t.Setenv("DEFENSE_BODY_FINGERPRINT_ENABLED", "true")
+
+	rdb, cleanup := newDefenseTestRedis(t)
+	defer cleanup()
+
+	body := bytes.Repeat([]byte("b"), bodyFingerprintMaxBodyBytes+2048)
+	router := gin.New()
+	router.Use(TrustTierDetector())
+	router.Use(NewBodyFingerprint(rdb).Middleware())
+	router.POST("/api/v1/upload", func(c *gin.Context) {
+		got, err := io.ReadAll(c.Request.Body)
+		require.NoError(t, err)
+		require.Equal(t, body, got)
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/upload", bytes.NewReader(body))
+	req.ContentLength = -1 // exercise the bounded-read path used for chunked bodies
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusNoContent, recorder.Code)
 }
 
 func TestBanCheckIsDisabledForCDNFriendlyDefense(t *testing.T) {
