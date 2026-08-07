@@ -454,7 +454,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// 验证密码
-	if !s.CheckPassword(password, user.PasswordHash) {
+	if !user.CheckPassword(password) {
 		return "", nil, ErrInvalidCredentials
 	}
 
@@ -1426,11 +1426,6 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, token, newPasswo
 		return ErrUserNotActive
 	}
 
-	if err := s.syncShopPasswordReset(ctx, user.ID, email, newPassword); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Shop password sync failed for user %d: %v", user.ID, err)
-		return ErrServiceUnavailable
-	}
-
 	// Hash new password
 	hashedPassword, err := s.HashPassword(newPassword)
 	if err != nil {
@@ -1439,11 +1434,15 @@ func (s *AuthService) ResetPassword(ctx context.Context, email, token, newPasswo
 
 	// Update password and increment TokenVersion
 	user.PasswordHash = hashedPassword
+	user.LegacyShopPasswordHash = nil
 	user.TokenVersion++ // Invalidate all existing tokens
 
 	// TokenVersion 无对应数据库列（见 resolvedTokenVersion：由 email+password_hash 指纹推导），
 	// 写回 password_hash 本身即可让旧 token 失效。
-	if err := s.userRepo.Update(ctx, user, UserUpdateFields{PasswordHash: true}); err != nil {
+	if err := s.userRepo.Update(ctx, user, UserUpdateFields{
+		PasswordHash:           true,
+		LegacyShopPasswordHash: true,
+	}); err != nil {
 		logger.LegacyPrintf("service.auth", "[Auth] Database error updating password for user %d: %v", user.ID, err)
 		return ErrServiceUnavailable
 	}
@@ -1713,7 +1712,11 @@ func resolvedTokenVersion(user *User) int64 {
 		return user.TokenVersion
 	}
 
-	material := strings.ToLower(strings.TrimSpace(user.Email)) + "\n" + user.PasswordHash
+	legacyHash := ""
+	if user.LegacyShopPasswordHash != nil {
+		legacyHash = *user.LegacyShopPasswordHash
+	}
+	material := strings.ToLower(strings.TrimSpace(user.Email)) + "\n" + user.PasswordHash + "\n" + legacyHash
 	sum := sha256.Sum256([]byte(material))
 	fingerprint := int64(binary.BigEndian.Uint64(sum[:8]) & 0x7fffffffffffffff)
 	return user.TokenVersion ^ fingerprint

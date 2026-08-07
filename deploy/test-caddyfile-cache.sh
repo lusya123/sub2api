@@ -50,6 +50,20 @@ if ! printf '%s\n' "$normalized_config" | grep -Eq '^reverse_proxy localhost:808
 	exit 1
 fi
 
+expected_private_integrations_match='@private_integrations_public path /api/v1/integrations /api/v1/integrations/*'
+if ! printf '%s\n' "$normalized_config" | grep -Fqx "$expected_private_integrations_match"; then
+	echo "Caddyfile must reserve the complete private integration namespace" >&2
+	exit 1
+fi
+if ! printf '%s\n' "$normalized_config" | grep -Fqx 'respond @private_integrations_public 404'; then
+	echo "Caddyfile must return 404 for the public integration namespace" >&2
+	exit 1
+fi
+if [ "$(printf '%s\n' "$normalized_config" | grep -Fc '@private_integrations_public')" -ne 2 ]; then
+	echo "Caddyfile private integration matcher must have one definition and one response" >&2
+	exit 1
+fi
+
 if printf '%s\n' "$normalized_config" | grep -Eq '^import([[:space:]]|$)'; then
 	echo "Caddyfile must not import configuration outside this canonical policy check" >&2
 	exit 1

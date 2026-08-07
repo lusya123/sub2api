@@ -690,6 +690,7 @@ export default {
     updateFailed: 'Failed to update profile',
     usernameRequired: 'Username is required',
     changePassword: 'Change Password',
+    passwordUnificationHint: 'For an account merged with Shop, changing the password here updates both sites and invalidates both previous passwords.',
     currentPassword: 'Current Password',
     newPassword: 'New Password',
     confirmNewPassword: 'Confirm New Password',

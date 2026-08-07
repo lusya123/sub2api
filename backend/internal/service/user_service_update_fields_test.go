@@ -60,7 +60,7 @@ func TestUpdateProfile_AvatarOnlySkipsUserRowWrite(t *testing.T) {
 	require.Equal(t, []UserUpdateFields{{}}, repo.updateFields, "no user column should be declared")
 }
 
-func TestChangePassword_OnlyDeclaresPasswordHash(t *testing.T) {
+func TestChangePassword_OnlyDeclaresPasswordVerifierColumns(t *testing.T) {
 	user := &User{ID: 7, Balance: 0.30}
 	require.NoError(t, user.SetPassword("old-password"))
 	repo := &mockUserRepo{getByIDUser: user}
@@ -71,7 +71,66 @@ func TestChangePassword_OnlyDeclaresPasswordHash(t *testing.T) {
 		NewPassword:     "new-password",
 	})
 	require.NoError(t, err)
-	require.Equal(t, []UserUpdateFields{{PasswordHash: true}}, repo.updateFields)
+	require.Equal(t, []UserUpdateFields{{
+		PasswordHash:           true,
+		LegacyShopPasswordHash: true,
+	}}, repo.updateFields)
+}
+
+func TestChangePassword_AcceptsLegacyPasswordAndClearsIt(t *testing.T) {
+	user := &User{ID: 8, Balance: 0.30, Role: RoleUser, Status: StatusActive}
+	require.NoError(t, user.SetPassword("primary-password"))
+	legacyUser := &User{}
+	require.NoError(t, legacyUser.SetPassword("legacy-shop-password"))
+	legacyHash := legacyUser.PasswordHash
+	user.LegacyShopPasswordHash = &legacyHash
+
+	var updated *User
+	repo := &mockUserRepo{
+		getByIDUser: user,
+		updateFn: func(_ context.Context, user *User) error {
+			clone := *user
+			updated = &clone
+			return nil
+		},
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	err := svc.ChangePassword(context.Background(), user.ID, ChangePasswordRequest{
+		CurrentPassword: "legacy-shop-password",
+		NewPassword:     "new-password",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.Nil(t, updated.LegacyShopPasswordHash)
+	require.True(t, updated.CheckPassword("new-password"))
+	require.False(t, updated.CheckPassword("primary-password"))
+	require.False(t, updated.CheckPassword("legacy-shop-password"))
+	require.Equal(t, []UserUpdateFields{{
+		PasswordHash:           true,
+		LegacyShopPasswordHash: true,
+	}}, repo.updateFields)
+}
+
+func TestChangePassword_RejectsWrongCurrentPasswordWithoutClearingLegacy(t *testing.T) {
+	user := &User{ID: 9, Balance: 0.30, Role: RoleUser, Status: StatusActive}
+	require.NoError(t, user.SetPassword("primary-password"))
+	legacyUser := &User{}
+	require.NoError(t, legacyUser.SetPassword("legacy-shop-password"))
+	legacyHash := legacyUser.PasswordHash
+	user.LegacyShopPasswordHash = &legacyHash
+	repo := &mockUserRepo{getByIDUser: user}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	err := svc.ChangePassword(context.Background(), user.ID, ChangePasswordRequest{
+		CurrentPassword: "wrong-password",
+		NewPassword:     "new-password",
+	})
+
+	require.ErrorIs(t, err, ErrPasswordIncorrect)
+	require.Zero(t, repo.updateCalls)
+	require.NotNil(t, user.LegacyShopPasswordHash)
 }
 
 func TestUpdateStatus_OnlyDeclaresStatus(t *testing.T) {

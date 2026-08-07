@@ -81,7 +81,8 @@ type Config struct {
 	WeChat     WeChatConnectConfig  `mapstructure:"wechat_connect"`
 	// OIDCConnect 是 Sub2API 作为 OIDC Client/Relying Party 接入第三方登录的配置。
 	OIDCConnect             OIDCConnectConfig             `mapstructure:"oidc_connect"`
-	ShopAccountSync         ShopAccountSyncConfig         `mapstructure:"shop_account_sync"`
+	ShopCredentialEvents    ShopCredentialEventsConfig    `mapstructure:"shop_credential_events"`
+	ShopAccountBridge       ShopAccountBridgeConfig       `mapstructure:"shop_account_bridge"`
 	DingTalk                DingTalkConnectConfig         `mapstructure:"dingtalk_connect"`
 	GitHubOAuth             EmailOAuthProviderConfig      `mapstructure:"github_oauth"`
 	GoogleOAuth             EmailOAuthProviderConfig      `mapstructure:"google_oauth"`
@@ -306,10 +307,20 @@ type LobeConfig struct {
 	ChatURL              string `mapstructure:"chat_url"`
 }
 
-type ShopAccountSyncConfig struct {
+type ShopCredentialEventsConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
 	BaseURL        string `mapstructure:"base_url"`
 	SharedSecret   string `mapstructure:"shared_secret"`
 	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
+}
+
+// ShopAccountBridgeConfig protects the narrowly scoped Shop -> Sub2API
+// identity bridge. This secret is deliberately independent from every admin
+// credential and from the outbound credential-event secret.
+type ShopAccountBridgeConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	SharedSecret     string `mapstructure:"shared_secret"`
+	ClockSkewSeconds int    `mapstructure:"clock_skew_seconds"`
 }
 
 type WeChatConnectConfig struct {
@@ -2047,9 +2058,13 @@ func setDefaults() {
 	viper.SetDefault("oidc_connect.userinfo_email_path", "")
 	viper.SetDefault("oidc_connect.userinfo_id_path", "")
 	viper.SetDefault("oidc_connect.userinfo_username_path", "")
-	viper.SetDefault("shop_account_sync.base_url", "")
-	viper.SetDefault("shop_account_sync.shared_secret", "")
-	viper.SetDefault("shop_account_sync.timeout_seconds", 10)
+	viper.SetDefault("shop_credential_events.enabled", false)
+	viper.SetDefault("shop_credential_events.base_url", "")
+	viper.SetDefault("shop_credential_events.shared_secret", "")
+	viper.SetDefault("shop_credential_events.timeout_seconds", 10)
+	viper.SetDefault("shop_account_bridge.enabled", false)
+	viper.SetDefault("shop_account_bridge.shared_secret", "")
+	viper.SetDefault("shop_account_bridge.clock_skew_seconds", 60)
 
 	// DingTalk Connect OAuth 登录
 	viper.SetDefault("dingtalk_connect.enabled", false)
@@ -2554,7 +2569,50 @@ func setEnvReachableDefaults() {
 	viper.SetDefault("dingtalk_connect.sync_corp_email_attr_name", "")
 }
 
+func validateShopCredentialEventsConfig(cfg ShopCredentialEventsConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+	if baseURL == "" {
+		return fmt.Errorf("shop_credential_events.base_url is required when enabled")
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.Opaque != "" {
+		return fmt.Errorf("shop_credential_events.base_url must be an absolute HTTPS origin")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.EscapedPath() != "" && parsed.EscapedPath() != "/") {
+		return fmt.Errorf("shop_credential_events.base_url must not contain credentials, path, query, or fragment")
+	}
+	if len([]byte(strings.TrimSpace(cfg.SharedSecret))) < 32 {
+		return fmt.Errorf("shop_credential_events.shared_secret must be at least 32 bytes when enabled")
+	}
+	if cfg.TimeoutSeconds < 1 || cfg.TimeoutSeconds > 60 {
+		return fmt.Errorf("shop_credential_events.timeout_seconds must be between 1 and 60")
+	}
+	return nil
+}
+
+func validateShopAccountBridgeConfig(cfg ShopAccountBridgeConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if len([]byte(strings.TrimSpace(cfg.SharedSecret))) < 32 {
+		return fmt.Errorf("shop_account_bridge.shared_secret must be at least 32 bytes when enabled")
+	}
+	if cfg.ClockSkewSeconds < 1 || cfg.ClockSkewSeconds > 300 {
+		return fmt.Errorf("shop_account_bridge.clock_skew_seconds must be between 1 and 300")
+	}
+	return nil
+}
+
 func (c *Config) Validate() error {
+	if err := validateShopCredentialEventsConfig(c.ShopCredentialEvents); err != nil {
+		return err
+	}
+	if err := validateShopAccountBridgeConfig(c.ShopAccountBridge); err != nil {
+		return err
+	}
 	forwardedClientIPHeaders, err := NormalizeForwardedClientIPHeaders(c.Security.ForwardedClientIPHeaders)
 	if err != nil {
 		return fmt.Errorf("security.forwarded_client_ip_headers: %w", err)

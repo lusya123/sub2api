@@ -60,10 +60,11 @@ type AuthCacheInvalidationHealth struct {
 }
 
 type OpsAuthCacheInvalidationHealth struct {
-	Outbox       AuthCacheInvalidationHealth           `json:"outbox"`
-	Subscriber   AuthCacheInvalidationSubscriberHealth `json:"subscriber"`
-	Lookup       APIKeyAuthLookupMetrics               `json:"lookup"`
-	InvalidAbuse InvalidAuthAbuseHealth                `json:"invalid_abuse"`
+	Outbox               AuthCacheInvalidationHealth           `json:"outbox"`
+	ShopCredentialEvents ShopCredentialEventWorkerHealth       `json:"shop_credential_events"`
+	Subscriber           AuthCacheInvalidationSubscriberHealth `json:"subscriber"`
+	Lookup               APIKeyAuthLookupMetrics               `json:"lookup"`
+	InvalidAbuse         InvalidAuthAbuseHealth                `json:"invalid_abuse"`
 }
 
 func (s *OpsService) GetAuthCacheInvalidationHealth(ctx context.Context) OpsAuthCacheInvalidationHealth {
@@ -73,6 +74,9 @@ func (s *OpsService) GetAuthCacheInvalidationHealth(ctx context.Context) OpsAuth
 	health := OpsAuthCacheInvalidationHealth{}
 	if s.authCacheInvalidationWorker != nil {
 		health.Outbox = s.authCacheInvalidationWorker.Health(ctx)
+	}
+	if s.shopCredentialEventWorker != nil {
+		health.ShopCredentialEvents = s.shopCredentialEventWorker.Health(ctx)
 	}
 	if s.apiKeyService != nil {
 		health.Subscriber = s.apiKeyService.AuthCacheInvalidationSubscriberHealth()

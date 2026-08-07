@@ -221,6 +221,10 @@ func VisitorCookieIssuerMiddleware(mgr *VisitorCookieManager) gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		if IsShopAccountBridgeAuthenticated(c) {
+			c.Next()
+			return
+		}
 		if !isFrontendDocumentRequest(c) {
 			c.Next()
 			return

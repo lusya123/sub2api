@@ -1115,6 +1115,39 @@ oidc_connect:
   userinfo_username_path: ""
 
 # =============================================================================
+# Shop Credential-Version Events
+# Shop 凭据版本事件（仅撤销会话，不传输密码或密码哈希）
+# =============================================================================
+shop_credential_events:
+  # Keep disabled until the Shop receiver, baseline credential versions, and
+  # shared secret have been deployed and verified.
+  # Shop 接收端、版本基线和独立密钥完成部署验收前必须保持关闭。
+  enabled: false
+  # HTTPS origin only; the fixed delivery path is
+  # /api/v1/integrations/sub2api/credential-events.
+  # 只填写 HTTPS 源站，不要包含路径、查询参数或 fragment。
+  base_url: ""
+  # Independent HMAC secret (at least 32 bytes). It must match Shop
+  # integrations.sub2api_credential_events.shared_secret and must not reuse
+  # the retired plaintext password-sync secret.
+  # 独立 HMAC 密钥（至少 32 字节），不得复用旧明文密码同步密钥。
+  shared_secret: ""
+  timeout_seconds: 10
+
+# =============================================================================
+# Scoped Shop Account Bridge
+# Shop -> Sub2API 最小权限账号桥接（不接受管理员 API Key）
+# =============================================================================
+shop_account_bridge:
+  # Keep disabled until the matching Shop HMAC client is deployed and tested.
+  enabled: false
+  # Independent HMAC-SHA256 secret, at least 32 bytes. Do not reuse any admin
+  # credential or the outbound shop_credential_events secret.
+  shared_secret: ""
+  # Requests outside this signed timestamp window are rejected.
+  clock_skew_seconds: 60
+
+# =============================================================================
 # Default Settings
 # 默认设置
 # =============================================================================

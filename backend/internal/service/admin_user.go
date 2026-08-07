@@ -236,11 +236,20 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		user.Email = input.Email
 		fields.Email = true
 	}
-	if input.Password != "" && !user.CheckPassword(input.Password) {
-		if err := user.SetPassword(input.Password); err != nil {
-			return nil, err
+	if input.Password != "" {
+		switch {
+		case !user.checkPrimaryPassword(input.Password):
+			if err := user.SetPassword(input.Password); err != nil {
+				return nil, err
+			}
+			fields.PasswordHash = true
+			fields.LegacyShopPasswordHash = true
+		case user.LegacyShopPasswordHash != nil:
+			// Re-submitting the primary password is still an explicit password
+			// set operation, so retire the imported Shop verifier.
+			user.LegacyShopPasswordHash = nil
+			fields.LegacyShopPasswordHash = true
 		}
-		fields.PasswordHash = true
 	}
 
 	if input.Username != nil {
@@ -263,15 +272,24 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		if err != nil {
 			return nil, err
 		}
+		roleChanged := user.Role != role
 		// 防锁死保护：不允许降级系统中最后一个管理员（自我降级已在 handler 层拦截，
 		// 此处兜底覆盖跨管理员互降导致零 admin 的场景）。
-		if user.Role == RoleAdmin && role == RoleUser {
+		if roleChanged && user.Role == RoleAdmin && role == RoleUser {
 			if err := s.ensureNotLastAdmin(ctx); err != nil {
 				return nil, err
 			}
 		}
 		user.Role = role
 		fields.Role = true
+		if roleChanged && user.LegacyShopPasswordHash != nil {
+			// The imported Shop verifier is valid only while this is an exact
+			// ordinary-user identity.  Retire it permanently on every role
+			// transition so promotion cannot leave a dormant credential that
+			// silently becomes active again after a later demotion.
+			user.LegacyShopPasswordHash = nil
+			fields.LegacyShopPasswordHash = true
+		}
 	}
 
 	if input.Concurrency != nil {
@@ -360,7 +378,12 @@ func (s *adminServiceImpl) UpdateUserRole(ctx context.Context, id int64, role st
 		return user, nil
 	}
 	user.Role = role
-	if err := s.userRepo.Update(ctx, user, UserUpdateFields{Role: true}); err != nil {
+	fields := UserUpdateFields{Role: true}
+	if user.LegacyShopPasswordHash != nil {
+		user.LegacyShopPasswordHash = nil
+		fields.LegacyShopPasswordHash = true
+	}
+	if err := s.userRepo.Update(ctx, user, fields); err != nil {
 		return nil, err
 	}
 	if s.authCacheInvalidator != nil {

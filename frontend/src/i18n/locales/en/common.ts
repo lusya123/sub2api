@@ -418,7 +418,7 @@ export default {
     resettingPassword: 'Resetting...',
     resetPasswordFailed: 'Failed to reset password. Please try again.',
     passwordResetSuccess: 'Password Reset Successful',
-    passwordResetSuccessHint: 'Your password has been reset. You can now sign in with your new password.',
+    passwordResetSuccessHint: 'Your password has been reset. If the account is merged with Shop, the new password works on both sites and both previous passwords are invalid.',
     invalidResetLink: 'Invalid Reset Link',
     invalidResetLinkHint: 'This password reset link is invalid or has expired. Please request a new one.',
     requestNewResetLink: 'Request New Reset Link',

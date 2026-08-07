@@ -54,6 +54,38 @@ func TestUserRepositoryGetByEmailNormalizesLegacySpacingAndCase(t *testing.T) {
 	require.Equal(t, " Legacy@Example.com ", got.Email)
 }
 
+func TestUserRepositoryPersistsAndClearsLegacyShopPasswordHash(t *testing.T) {
+	repo, client := newUserEntRepo(t)
+	ctx := context.Background()
+	legacyHash := "legacy-shop-hash"
+	user := &service.User{
+		Email:                  "dual-password@example.com",
+		Username:               "dual-password-user",
+		PasswordHash:           "primary-hash",
+		LegacyShopPasswordHash: &legacyHash,
+		Role:                   service.RoleUser,
+		Status:                 service.StatusActive,
+	}
+	require.NoError(t, repo.Create(ctx, user))
+
+	loaded, err := repo.GetByEmail(ctx, user.Email)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.LegacyShopPasswordHash)
+	require.Equal(t, legacyHash, *loaded.LegacyShopPasswordHash)
+
+	loaded.PasswordHash = "new-primary-hash"
+	loaded.LegacyShopPasswordHash = nil
+	require.NoError(t, repo.Update(ctx, loaded, service.UserUpdateFields{
+		PasswordHash:           true,
+		LegacyShopPasswordHash: true,
+	}))
+
+	stored, err := client.User.Get(ctx, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, "new-primary-hash", stored.PasswordHash)
+	require.Nil(t, stored.LegacyShopPasswordHash)
+}
+
 func TestUserRepositoryExistsByEmailNormalizesLegacySpacingAndCase(t *testing.T) {
 	repo, _ := newUserEntRepo(t)
 	ctx := context.Background()

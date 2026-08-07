@@ -126,6 +126,17 @@ services:
       - JWT_SECRET=${JWT_SECRET:-}
       - JWT_EXPIRE_HOUR=${JWT_EXPIRE_HOUR:-24}
 
+      # Durable version-only Shop session revocation (disabled by default)
+      - SHOP_CREDENTIAL_EVENTS_ENABLED=${SHOP_CREDENTIAL_EVENTS_ENABLED:-false}
+      - SHOP_CREDENTIAL_EVENTS_BASE_URL=${SHOP_CREDENTIAL_EVENTS_BASE_URL:-}
+      - SHOP_CREDENTIAL_EVENTS_SHARED_SECRET=${SHOP_CREDENTIAL_EVENTS_SHARED_SECRET:-}
+      - SHOP_CREDENTIAL_EVENTS_TIMEOUT_SECONDS=${SHOP_CREDENTIAL_EVENTS_TIMEOUT_SECONDS:-10}
+
+      # Scoped Shop -> Sub2API identity bridge (never an admin API key)
+      - SHOP_ACCOUNT_BRIDGE_ENABLED=${SHOP_ACCOUNT_BRIDGE_ENABLED:-false}
+      - SHOP_ACCOUNT_BRIDGE_SHARED_SECRET=${SHOP_ACCOUNT_BRIDGE_SHARED_SECRET:-}
+      - SHOP_ACCOUNT_BRIDGE_CLOCK_SKEW_SECONDS=${SHOP_ACCOUNT_BRIDGE_CLOCK_SKEW_SECONDS:-60}
+
       # =======================================================================
       # Setup Configuration
       # =======================================================================

@@ -522,15 +522,10 @@ func ProvideAPIKeyAuthCacheInvalidator(apiKeyService *APIKeyService) APIKeyAuthC
 	return apiKeyService
 }
 
-// ProvideUserService wires UserService with optional cross-system password sync.
-func ProvideUserService(userRepo UserRepository, settingRepo SettingRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCache BillingCache, authService *AuthService) *UserService {
-	svc := NewUserService(userRepo, settingRepo, authCacheInvalidator, billingCache)
-	if authService != nil {
-		svc.SetShopPasswordSync(authService.SyncShopPasswordChange)
-		svc.SetShopPasswordLoginSyncBlocker(authService.BlockShopPasswordLoginSyncHash)
-		svc.SetShopPasswordLoginSyncUnblocker(authService.UnblockShopPasswordLoginSyncHash)
-	}
-	return svc
+// ProvideUserService wires the authoritative local user service. Cross-system
+// credential changes are emitted transactionally by the database outbox.
+func ProvideUserService(userRepo UserRepository, settingRepo SettingRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCache BillingCache) *UserService {
+	return NewUserService(userRepo, settingRepo, authCacheInvalidator, billingCache)
 }
 
 // ProvideImageStorageSettingService 构造异步生图对象存储的后台设置服务。
@@ -593,6 +588,7 @@ func ProvideOpsService(
 	systemLogSink *OpsSystemLogSink,
 	settingService *SettingService,
 	authCacheInvalidationWorker *AuthCacheInvalidationWorker,
+	shopCredentialEventWorker *ShopCredentialEventWorker,
 	apiKeyService *APIKeyService,
 ) *OpsService {
 	svc := NewOpsService(
@@ -615,6 +611,7 @@ func ProvideOpsService(
 		settingService.WarmOpenAIQuotaAutoPauseSettings(context.Background())
 	}
 	svc.authCacheInvalidationWorker = authCacheInvalidationWorker
+	svc.shopCredentialEventWorker = shopCredentialEventWorker
 	svc.apiKeyService = apiKeyService
 	svc.StartRuntimeSettingsRefresh(context.Background())
 	return svc
@@ -693,6 +690,7 @@ var ProviderSet = wire.NewSet(
 	ProvideAPIKeyService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	ProvideAuthCacheInvalidationWorker,
+	ProvideShopCredentialEventWorker,
 	NewGroupService,
 	NewCompositeRouteResolver,
 	NewAccountService,

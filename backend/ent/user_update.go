@@ -94,6 +94,26 @@ func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
 	return _u
 }
 
+// SetLegacyShopPasswordHash sets the "legacy_shop_password_hash" field.
+func (_u *UserUpdate) SetLegacyShopPasswordHash(v string) *UserUpdate {
+	_u.mutation.SetLegacyShopPasswordHash(v)
+	return _u
+}
+
+// SetNillableLegacyShopPasswordHash sets the "legacy_shop_password_hash" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableLegacyShopPasswordHash(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetLegacyShopPasswordHash(*v)
+	}
+	return _u
+}
+
+// ClearLegacyShopPasswordHash clears the value of the "legacy_shop_password_hash" field.
+func (_u *UserUpdate) ClearLegacyShopPasswordHash() *UserUpdate {
+	_u.mutation.ClearLegacyShopPasswordHash()
+	return _u
+}
+
 // SetRole sets the "role" field.
 func (_u *UserUpdate) SetRole(v string) *UserUpdate {
 	_u.mutation.SetRole(v)
@@ -959,6 +979,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.LegacyShopPasswordHash(); ok {
+		if err := user.LegacyShopPasswordHashValidator(v); err != nil {
+			return &ValidationError{Name: "legacy_shop_password_hash", err: fmt.Errorf(`ent: validator failed for field "User.legacy_shop_password_hash": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Role(); ok {
 		if err := user.RoleValidator(v); err != nil {
 			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "User.role": %w`, err)}
@@ -1008,6 +1033,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LegacyShopPasswordHash(); ok {
+		_spec.SetField(user.FieldLegacyShopPasswordHash, field.TypeString, value)
+	}
+	if _u.mutation.LegacyShopPasswordHashCleared() {
+		_spec.ClearField(user.FieldLegacyShopPasswordHash, field.TypeString)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeString, value)
@@ -1767,6 +1798,26 @@ func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetPasswordHash(*v)
 	}
+	return _u
+}
+
+// SetLegacyShopPasswordHash sets the "legacy_shop_password_hash" field.
+func (_u *UserUpdateOne) SetLegacyShopPasswordHash(v string) *UserUpdateOne {
+	_u.mutation.SetLegacyShopPasswordHash(v)
+	return _u
+}
+
+// SetNillableLegacyShopPasswordHash sets the "legacy_shop_password_hash" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableLegacyShopPasswordHash(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetLegacyShopPasswordHash(*v)
+	}
+	return _u
+}
+
+// ClearLegacyShopPasswordHash clears the value of the "legacy_shop_password_hash" field.
+func (_u *UserUpdateOne) ClearLegacyShopPasswordHash() *UserUpdateOne {
+	_u.mutation.ClearLegacyShopPasswordHash()
 	return _u
 }
 
@@ -2648,6 +2699,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.LegacyShopPasswordHash(); ok {
+		if err := user.LegacyShopPasswordHashValidator(v); err != nil {
+			return &ValidationError{Name: "legacy_shop_password_hash", err: fmt.Errorf(`ent: validator failed for field "User.legacy_shop_password_hash": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Role(); ok {
 		if err := user.RoleValidator(v); err != nil {
 			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "User.role": %w`, err)}
@@ -2714,6 +2770,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LegacyShopPasswordHash(); ok {
+		_spec.SetField(user.FieldLegacyShopPasswordHash, field.TypeString, value)
+	}
+	if _u.mutation.LegacyShopPasswordHashCleared() {
+		_spec.ClearField(user.FieldLegacyShopPasswordHash, field.TypeString)
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeString, value)

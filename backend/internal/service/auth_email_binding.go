@@ -52,7 +52,7 @@ func (s *AuthService) BindEmailIdentity(
 	if firstRealEmailBind && len(password) < 6 {
 		return nil, infraerrors.BadRequest("PASSWORD_TOO_SHORT", "password must be at least 6 characters")
 	}
-	if !firstRealEmailBind && !s.CheckPassword(password, currentUser.PasswordHash) {
+	if !firstRealEmailBind && !currentUser.CheckPassword(password) {
 		return nil, ErrPasswordIncorrect
 	}
 
@@ -79,7 +79,12 @@ func (s *AuthService) BindEmailIdentity(
 
 	currentUser.Email = normalizedEmail
 	currentUser.PasswordHash = hashedPassword
-	if err := s.userRepo.Update(ctx, currentUser, UserUpdateFields{Email: true, PasswordHash: true}); err != nil {
+	currentUser.LegacyShopPasswordHash = nil
+	if err := s.userRepo.Update(ctx, currentUser, UserUpdateFields{
+		Email:                  true,
+		PasswordHash:           true,
+		LegacyShopPasswordHash: true,
+	}); err != nil {
 		if errors.Is(err, ErrEmailExists) {
 			return nil, ErrEmailExists
 		}
@@ -196,6 +201,7 @@ func (s *AuthService) updateBoundEmailIdentityWithClient(
 	if _, err := client.User.UpdateOneID(currentUser.ID).
 		SetEmail(email).
 		SetPasswordHash(hashedPassword).
+		ClearLegacyShopPasswordHash().
 		Save(ctx); err != nil {
 		if dbent.IsConstraintError(err) {
 			return ErrEmailExists
@@ -222,6 +228,7 @@ func (s *AuthService) updateBoundEmailIdentityWithClient(
 	}
 	currentUser.Email = updatedUser.Email
 	currentUser.PasswordHash = updatedUser.PasswordHash
+	currentUser.LegacyShopPasswordHash = updatedUser.LegacyShopPasswordHash
 	currentUser.Balance = updatedUser.Balance
 	currentUser.Concurrency = updatedUser.Concurrency
 	currentUser.UpdatedAt = updatedUser.UpdatedAt

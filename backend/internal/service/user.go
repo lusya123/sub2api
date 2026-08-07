@@ -17,13 +17,21 @@ type User struct {
 	AvatarByteSize int
 	AvatarSHA256   string
 	PasswordHash   string
-	Role           string
-	Balance        float64
-	FrozenBalance  float64
-	Concurrency    int
-	Status         string
-	AllowedGroups  []int64
-	TokenVersion   int64 // Incremented on password change to invalidate existing tokens
+	// LegacyShopPasswordHash is the optional bcrypt verifier imported from the
+	// Shop account during account unification. New passwords replace both old
+	// credentials, so every active password-setting path must clear this field.
+	LegacyShopPasswordHash *string
+	// CredentialVersion is trigger-managed and advances whenever either stored
+	// password verifier, email identity, account status, or TOTP policy changes.
+	// It is independent from the JWT fingerprint.
+	CredentialVersion uint64
+	Role              string
+	Balance           float64
+	FrozenBalance     float64
+	Concurrency       int
+	Status            string
+	AllowedGroups     []int64
+	TokenVersion      int64 // Incremented on password change to invalidate existing tokens
 	// TokenVersionResolved indicates TokenVersion already contains the fingerprint-derived
 	// value expected in JWT claims and refresh-token state.
 	TokenVersionResolved bool
@@ -116,9 +124,46 @@ func (u *User) SetPassword(password string) error {
 		return err
 	}
 	u.PasswordHash = string(hash)
+	u.LegacyShopPasswordHash = nil
 	return nil
 }
 
 func (u *User) CheckPassword(password string) bool {
+	return u.checkPasswordWithComparator(password, bcrypt.CompareHashAndPassword)
+}
+
+func (u *User) checkPasswordWithComparator(password string, compare func([]byte, []byte) error) bool {
+	if u == nil {
+		return false
+	}
+	primaryOK := false
+	if u.PasswordHash != "" {
+		primaryOK = compare([]byte(u.PasswordHash), []byte(password)) == nil
+	}
+	// The migration-era Shop verifier is an ordinary-customer compatibility
+	// credential, never an administrator/operator credential.  The planner and
+	// apply bundle already prohibit writing it to privileged rows; keep this
+	// runtime guard as an independent last line of defense if a row is ever
+	// corrupted or changed outside the reviewed migration path.
+	if u.Role != RoleUser {
+		return primaryOK
+	}
+	if u.LegacyShopPasswordHash == nil || *u.LegacyShopPasswordHash == "" || *u.LegacyShopPasswordHash == u.PasswordHash {
+		return primaryOK
+	}
+	// Always evaluate the distinct legacy verifier, even when the primary one
+	// matched, so callers cannot infer which stored credential accepted the
+	// password from a one-vs-two-bcrypt timing difference.
+	legacyOK := compare([]byte(*u.LegacyShopPasswordHash), []byte(password)) == nil
+	return primaryOK || legacyOK
+}
+
+// checkPrimaryPassword is intentionally limited to admin password-replacement
+// decisions. Login authentication must use CheckPassword so a distinct legacy
+// verifier is evaluated without a source-dependent timing shortcut.
+func (u *User) checkPrimaryPassword(password string) bool {
+	if u == nil || u.PasswordHash == "" {
+		return false
+	}
 	return bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil
 }

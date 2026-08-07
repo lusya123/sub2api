@@ -85,8 +85,12 @@ func newPasskeyPwService(t *testing.T, user *User) (*PasskeyService, *passkeyPwR
 // 注册与吊销必须验证账号密码：被窃会话不得静默添加/移除凭据。
 // 用密码而非 TOTP step-up，保证未配置 TOTP 加密密钥的部署同样受保护。
 func TestPasskeyEnrollmentAndRevocationRequireAccountPassword(t *testing.T) {
-	user := &User{ID: 7, Email: "user@example.com", Status: StatusActive}
+	user := &User{ID: 7, Email: "user@example.com", Role: RoleUser, Status: StatusActive}
 	require.NoError(t, user.SetPassword("correct-password"))
+	legacyUser := &User{}
+	require.NoError(t, legacyUser.SetPassword("legacy-shop-password"))
+	legacyHash := legacyUser.PasswordHash
+	user.LegacyShopPasswordHash = &legacyHash
 	svc, repo := newPasskeyPwService(t, user)
 
 	_, _, err := svc.BeginRegistration(context.Background(), user.ID, "")
@@ -108,5 +112,9 @@ func TestPasskeyEnrollmentAndRevocationRequireAccountPassword(t *testing.T) {
 	require.False(t, repo.deleteCalled)
 
 	require.NoError(t, svc.Delete(context.Background(), user.ID, 1, "correct-password"))
+	require.True(t, repo.deleteCalled)
+
+	repo.deleteCalled = false
+	require.NoError(t, svc.Delete(context.Background(), user.ID, 2, "legacy-shop-password"))
 	require.True(t, repo.deleteCalled)
 }

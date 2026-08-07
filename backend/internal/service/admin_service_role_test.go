@@ -49,7 +49,8 @@ func TestAdminService_CreateUser_InvalidRoleRejected(t *testing.T) {
 }
 
 func TestAdminService_UpdateUser_PromoteToAdmin(t *testing.T) {
-	base := &userRepoStub{user: &User{ID: 42, Email: "u@example.com", Role: RoleUser}}
+	legacy := "legacy-shop-hash"
+	base := &userRepoStub{user: &User{ID: 42, Email: "u@example.com", Role: RoleUser, LegacyShopPasswordHash: &legacy}}
 	repo := &rpmUserRepoStub{userRepoStub: base}
 	invalidator := &authCacheInvalidatorStub{}
 	svc := &adminServiceImpl{
@@ -61,6 +62,8 @@ func TestAdminService_UpdateUser_PromoteToAdmin(t *testing.T) {
 	updated, err := svc.UpdateUser(context.Background(), 42, &UpdateUserInput{Role: RoleAdmin})
 	require.NoError(t, err)
 	require.Equal(t, RoleAdmin, updated.Role)
+	require.Nil(t, updated.LegacyShopPasswordHash, "promotion must retire the Shop legacy verifier")
+	require.Nil(t, repo.lastUpdated.LegacyShopPasswordHash)
 	require.Equal(t, []int64{42}, invalidator.userIDs, "角色变更应失效认证缓存")
 }
 
@@ -111,7 +114,8 @@ func TestAdminService_UpdateUser_DemoteLastAdminRejected(t *testing.T) {
 }
 
 func TestAdminService_UpdateUser_DemoteAdminAllowedWhenOthersExist(t *testing.T) {
-	base := &userRepoStub{user: &User{ID: 42, Email: "a@example.com", Role: RoleAdmin}}
+	legacy := "unexpected-privileged-legacy-hash"
+	base := &userRepoStub{user: &User{ID: 42, Email: "a@example.com", Role: RoleAdmin, LegacyShopPasswordHash: &legacy}}
 	repo := &roleGuardUserRepoStub{rpmUserRepoStub: &rpmUserRepoStub{userRepoStub: base}, adminTotal: 2}
 	invalidator := &authCacheInvalidatorStub{}
 	svc := &adminServiceImpl{
@@ -125,6 +129,7 @@ func TestAdminService_UpdateUser_DemoteAdminAllowedWhenOthersExist(t *testing.T)
 	require.Equal(t, RoleUser, updated.Role)
 	require.NotNil(t, repo.lastUpdated)
 	require.Equal(t, RoleUser, repo.lastUpdated.Role, "存在其他管理员时允许降级")
+	require.Nil(t, updated.LegacyShopPasswordHash, "demotion must not reactivate a stale legacy verifier")
 }
 
 func TestAdminService_UpdateUser_PromoteDoesNotCountAdmins(t *testing.T) {
@@ -140,4 +145,20 @@ func TestAdminService_UpdateUser_PromoteDoesNotCountAdmins(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RoleAdmin, updated.Role)
 	require.Equal(t, 0, repo.listCalls, "升级路径不应触发管理员计数")
+}
+
+func TestAdminService_UpdateUserRole_RetiresLegacyVerifierOnOperatorTransition(t *testing.T) {
+	legacy := "legacy-shop-hash"
+	base := &userRepoStub{user: &User{
+		ID: 42, Email: "u@example.com", Role: RoleUser,
+		LegacyShopPasswordHash: &legacy,
+	}}
+	svc := &adminServiceImpl{userRepo: base, authCacheInvalidator: &authCacheInvalidatorStub{}}
+
+	updated, err := svc.UpdateUserRole(context.Background(), 42, RoleOperator)
+	require.NoError(t, err)
+	require.Equal(t, RoleOperator, updated.Role)
+	require.Nil(t, updated.LegacyShopPasswordHash)
+	require.Len(t, base.updated, 1)
+	require.Nil(t, base.updated[0].LegacyShopPasswordHash)
 }

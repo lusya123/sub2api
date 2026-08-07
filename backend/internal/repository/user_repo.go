@@ -115,6 +115,7 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		SetUsername(userIn.Username).
 		SetNotes(userIn.Notes).
 		SetPasswordHash(userIn.PasswordHash).
+		SetNillableLegacyShopPasswordHash(userIn.LegacyShopPasswordHash).
 		SetRole(userIn.Role).
 		SetBalance(userIn.Balance).
 		SetConcurrency(userIn.Concurrency).
@@ -274,6 +275,13 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User, field
 	}
 	if fields.PasswordHash {
 		updateOp = updateOp.SetPasswordHash(userIn.PasswordHash)
+	}
+	if fields.LegacyShopPasswordHash {
+		if userIn.LegacyShopPasswordHash == nil {
+			updateOp = updateOp.ClearLegacyShopPasswordHash()
+		} else {
+			updateOp = updateOp.SetLegacyShopPasswordHash(*userIn.LegacyShopPasswordHash)
+		}
 	}
 	if fields.Role {
 		updateOp = updateOp.SetRole(userIn.Role)
@@ -1348,6 +1356,8 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 		return
 	}
 	dst.ID = src.ID
+	dst.LegacyShopPasswordHash = src.LegacyShopPasswordHash
+	dst.CredentialVersion = src.CredentialVersion
 	dst.SignupSource = src.SignupSource
 	dst.LastLoginAt = src.LastLoginAt
 	dst.LastActiveAt = src.LastActiveAt

@@ -374,6 +374,58 @@ func TestAuthServiceBindEmailIdentity_ReplacesBoundEmailAndSkipsFirstBindDefault
 	require.Equal(t, 0, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
 }
 
+func TestAuthServiceBindEmailIdentity_AcceptsLegacyPasswordAndRetiresBothOldVerifiers(t *testing.T) {
+	cache := &emailBindCacheStub{
+		data: &service.VerificationCodeData{
+			Code:      "123456",
+			CreatedAt: time.Now().UTC(),
+			ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+		},
+	}
+	svc, _, client := newAuthServiceForEmailBind(t, nil, cache, nil)
+	ctx := context.Background()
+
+	primaryHash, err := svc.HashPassword("primary-password")
+	require.NoError(t, err)
+	legacyHash, err := svc.HashPassword("legacy-shop-password")
+	require.NoError(t, err)
+	user, err := client.User.Create().
+		SetEmail("legacy-bound@example.com").
+		SetUsername("legacy-bound-user").
+		SetPasswordHash(primaryHash).
+		SetLegacyShopPasswordHash(legacyHash).
+		SetBalance(1).
+		SetConcurrency(1).
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+	require.NoError(t, client.AuthIdentity.Create().
+		SetUserID(user.ID).
+		SetProviderType("email").
+		SetProviderKey("email").
+		SetProviderSubject(user.Email).
+		SetVerifiedAt(time.Now().UTC()).
+		SetMetadata(map[string]any{"source": "test"}).
+		Exec(ctx))
+
+	updatedUser, err := svc.BindEmailIdentity(
+		ctx,
+		user.ID,
+		"legacy-rebound@example.com",
+		"123456",
+		"legacy-shop-password",
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, updatedUser)
+	storedUser, err := client.User.Get(ctx, user.ID)
+	require.NoError(t, err)
+	require.Nil(t, storedUser.LegacyShopPasswordHash)
+	require.True(t, svc.CheckPassword("legacy-shop-password", storedUser.PasswordHash))
+	require.False(t, svc.CheckPassword("primary-password", storedUser.PasswordHash))
+}
+
 func TestAuthServiceBindEmailIdentity_RejectsWrongCurrentPasswordForBoundEmail(t *testing.T) {
 	cache := &emailBindCacheStub{
 		data: &service.VerificationCodeData{

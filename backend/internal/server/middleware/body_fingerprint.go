@@ -14,6 +14,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const bodyFingerprintMaxBodyBytes = 4096
+
+type replayableRequestBody struct {
+	io.Reader
+	io.Closer
+}
+
 type BodyFingerprint struct {
 	rdb *redis.Client
 }
@@ -28,7 +35,9 @@ func (b *BodyFingerprint) Middleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if GetTrustTier(c) != TierAnonymous || c.Request.Method != http.MethodPost {
+		if c == nil || c.Request == nil || c.Request.Body == nil ||
+			IsShopAccountBridgeAuthenticated(c) ||
+			GetTrustTier(c) != TierAnonymous || c.Request.Method != http.MethodPost {
 			c.Next()
 			return
 		}
@@ -38,14 +47,26 @@ func (b *BodyFingerprint) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		body, err := io.ReadAll(c.Request.Body)
+		if c.Request.ContentLength > bodyFingerprintMaxBodyBytes {
+			c.Next()
+			return
+		}
+
+		originalBody := c.Request.Body
+		body, err := io.ReadAll(io.LimitReader(originalBody, bodyFingerprintMaxBodyBytes+1))
+		// Preserve both the bytes already consumed and the unread suffix. This is
+		// important for chunked/unknown-length bodies that exceed the fingerprint
+		// limit: downstream handlers still receive the exact original stream.
+		c.Request.Body = &replayableRequestBody{
+			Reader: io.MultiReader(bytes.NewReader(body), originalBody),
+			Closer: originalBody,
+		}
 		if err != nil {
 			c.Next()
 			return
 		}
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		if len(body) == 0 || len(body) > 4096 {
+		if len(body) == 0 || len(body) > bodyFingerprintMaxBodyBytes {
 			c.Next()
 			return
 		}

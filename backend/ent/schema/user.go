@@ -43,6 +43,21 @@ func (User) Fields() []ent.Field {
 		field.String("password_hash").
 			MaxLen(255).
 			NotEmpty(),
+		// legacy_shop_password_hash temporarily preserves the password verifier
+		// imported from the Shop account during account unification. It remains
+		// nullable so users that do not have a distinct Shop password keep the
+		// existing single-password storage and login path.
+		field.String("legacy_shop_password_hash").
+			MaxLen(255).
+			Sensitive().
+			Optional().
+			Nillable(),
+		// credential_version is advanced by a PostgreSQL trigger whenever either
+		// password verifier, email identity, account status, or TOTP policy
+		// changes. Application code can read it but cannot set it.
+		field.Uint64("credential_version").
+			Default(1).
+			Immutable(),
 		field.String("role").
 			MaxLen(20).
 			Default(domain.RoleUser),
