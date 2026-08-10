@@ -1048,6 +1048,9 @@ lobe:
   # Internal shared secret for /internal APIs.
   # /internal 接口的内部共享密钥，需与 LobeChat 网关侧一致。
   internal_shared_secret: ""
+  # Internal LobeChat origin used only for server-to-server config sync.
+  # LobeChat 内部地址，仅用于服务间配置同步，例如: "http://lobehub:3210"
+  internal_url: ""
   # Public base URL used by LobeChat to call this Sub2API gateway.
   # LobeChat 访问 Sub2API 网关的公开地址，例如: "https://api.example.com"
   gateway_base_url: ""

@@ -194,6 +194,39 @@ func TestSyncLobeUserConfig(t *testing.T) {
 	}
 }
 
+func TestSyncLobeUserConfigUsesInternalURL(t *testing.T) {
+	t.Parallel()
+
+	var gotURL string
+	h := &ChatHandler{
+		cfg: &config.Config{},
+		lobeSyncClient: chatHTTPClientFunc(func(r *http.Request) (*http.Response, error) {
+			gotURL = r.URL.String()
+			return &http.Response{
+				Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+				StatusCode: http.StatusOK,
+			}, nil
+		}),
+	}
+	h.cfg.Lobe.InternalSharedSecret = "shared-secret"
+	h.cfg.Lobe.InternalURL = "http://lobehub-personal:3210/"
+
+	err := h.syncLobeUserConfig(
+		context.Background(),
+		2412,
+		"https://chat.example.com/signin?source=sub2api",
+	)
+	if err != nil {
+		t.Fatalf("syncLobeUserConfig returned error: %v", err)
+	}
+	if gotURL != "http://lobehub-personal:3210/api/internal/sync-user" {
+		t.Fatalf(
+			"sync URL = %q, want http://lobehub-personal:3210/api/internal/sync-user",
+			gotURL,
+		)
+	}
+}
+
 func TestSyncLobeUserConfigDoesNotExposeResponseBody(t *testing.T) {
 	t.Parallel()
 

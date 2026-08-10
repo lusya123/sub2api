@@ -302,6 +302,7 @@ type LinuxDoConnectConfig struct {
 
 type LobeConfig struct {
 	InternalSharedSecret string `mapstructure:"internal_shared_secret"`
+	InternalURL          string `mapstructure:"internal_url"`
 	GatewayBaseURL       string `mapstructure:"gateway_base_url"`
 	ChatURL              string `mapstructure:"chat_url"`
 }
@@ -2003,6 +2004,7 @@ func setDefaults() {
 
 	// LobeChat bridge
 	viper.SetDefault("lobe.internal_shared_secret", "")
+	viper.SetDefault("lobe.internal_url", "")
 	viper.SetDefault("lobe.gateway_base_url", "")
 	viper.SetDefault("lobe.chat_url", "")
 

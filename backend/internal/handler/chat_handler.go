@@ -154,7 +154,11 @@ func (h *ChatHandler) syncLobeUserConfig(ctx context.Context, userID int64, chat
 		return nil
 	}
 
-	parsed, err := url.Parse(strings.TrimSpace(chatSignInURL))
+	lobeBaseURL := strings.TrimSpace(h.cfg.Lobe.InternalURL)
+	if lobeBaseURL == "" {
+		lobeBaseURL = strings.TrimSpace(chatSignInURL)
+	}
+	parsed, err := url.Parse(lobeBaseURL)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return fmt.Errorf("invalid lobe chat URL")
 	}
