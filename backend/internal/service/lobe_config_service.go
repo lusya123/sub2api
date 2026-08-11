@@ -63,14 +63,14 @@ func (s *LobeConfigService) GetUserConfig(ctx context.Context, userID int64) (*L
 			continue
 		}
 
-		chatKey, err := s.apiKeyService.EnsureChatKeyForGroup(ctx, userID, &group)
-		if err != nil {
-			return nil, err
-		}
-
 		models := s.modelsForGroup(ctx, &group)
 		if len(models) == 0 {
 			continue
+		}
+
+		chatKey, err := s.apiKeyService.EnsureChatKeyForGroup(ctx, userID, &group)
+		if err != nil {
+			return nil, err
 		}
 
 		out.Providers = append(out.Providers, LobeProviderConfig{
@@ -226,25 +226,114 @@ func displayNameForModel(id string) string {
 	parts := strings.FieldsFunc(id, func(r rune) bool {
 		return r == '-' || r == '_' || r == ':'
 	})
+	if name, ok := displayNameForClaudeModel(parts); ok {
+		return name
+	}
+
 	for i := range parts {
-		if parts[i] == "" {
-			continue
-		}
-		if isKnownModelToken(parts[i]) {
-			parts[i] = strings.ToUpper(parts[i])
-			continue
-		}
-		parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		parts[i] = displayNameToken(parts[i])
 	}
 	return strings.Join(parts, " ")
 }
 
-func isKnownModelToken(token string) bool {
+func displayNameForClaudeModel(parts []string) (string, bool) {
+	if len(parts) < 3 || !strings.EqualFold(parts[0], "claude") {
+		return "", false
+	}
+
+	var family string
+	var nameParts []string
+	var suffixStart int
+
+	if isClaudeFamily(parts[1]) {
+		family = displayNameToken(parts[1])
+		version, next, ok := modelVersion(parts, 2)
+		if !ok {
+			return "", false
+		}
+		nameParts = []string{"Claude", family, version}
+		suffixStart = next
+	} else {
+		version, next, ok := modelVersion(parts, 1)
+		if !ok || next >= len(parts) || !isClaudeFamily(parts[next]) {
+			return "", false
+		}
+		family = displayNameToken(parts[next])
+		nameParts = []string{"Claude", version, family}
+		suffixStart = next + 1
+	}
+
+	for _, part := range parts[suffixStart:] {
+		if isModelDate(part) {
+			nameParts = append(nameParts, fmt.Sprintf("(%s-%s-%s)", part[:4], part[4:6], part[6:]))
+			continue
+		}
+		nameParts = append(nameParts, displayNameToken(part))
+	}
+
+	return strings.Join(nameParts, " "), true
+}
+
+func modelVersion(parts []string, start int) (string, int, bool) {
+	if start >= len(parts) || !isDigits(parts[start]) {
+		return "", start, false
+	}
+
+	version := parts[start]
+	next := start + 1
+	if next < len(parts) && len(parts[next]) <= 2 && isDigits(parts[next]) {
+		version += "." + parts[next]
+		next++
+	}
+	return version, next, true
+}
+
+func isClaudeFamily(token string) bool {
 	switch strings.ToLower(token) {
-	case "gpt", "glm", "ai", "m2.5", "hd", "tts":
+	case "haiku", "opus", "sonnet":
 		return true
 	default:
 		return false
+	}
+}
+
+func isModelDate(token string) bool {
+	return len(token) == 8 && isDigits(token)
+}
+
+func isDigits(token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, r := range token {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func displayNameToken(token string) string {
+	if token == "" {
+		return ""
+	}
+	switch strings.ToLower(token) {
+	case "ai":
+		return "AI"
+	case "deepseek":
+		return "DeepSeek"
+	case "glm":
+		return "GLM"
+	case "gpt":
+		return "GPT"
+	case "hd":
+		return "HD"
+	case "minimax":
+		return "MiniMax"
+	case "tts":
+		return "TTS"
+	default:
+		return strings.ToUpper(token[:1]) + token[1:]
 	}
 }
 

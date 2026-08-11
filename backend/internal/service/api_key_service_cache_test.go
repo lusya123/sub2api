@@ -704,7 +704,8 @@ func TestAPIKeyService_EnsureChatKeyForGroupCreatesWhenMissing(t *testing.T) {
 	repo := &authRepoStub{
 		listByUserID: func(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
 			require.Equal(t, int64(42), userID)
-			require.Equal(t, APIKeyTypeChat, filters.Type)
+			require.Equal(t, StatusActive, filters.Status)
+			require.Equal(t, "all", filters.Type)
 			require.NotNil(t, filters.GroupID)
 			require.Equal(t, groupID, *filters.GroupID)
 			return nil, &pagination.PaginationResult{Total: 0, Page: params.Page, PageSize: params.PageSize, Pages: 0}, nil
@@ -729,28 +730,33 @@ func TestAPIKeyService_EnsureChatKeyForGroupCreatesWhenMissing(t *testing.T) {
 	require.NotNil(t, key)
 	require.Same(t, created, key)
 	require.Equal(t, APIKeyTypeChat, key.Type)
-	require.Equal(t, "[chat] Chat Group", key.Name)
+	require.Equal(t, "[LobeHub] Chat Group", key.Name)
 	require.Equal(t, &groupID, key.GroupID)
 	require.Equal(t, StatusActive, key.Status)
 	require.Contains(t, key.Key, "sk-test-")
 }
 
-func TestAPIKeyService_EnsureChatKeyForGroupReusesExisting(t *testing.T) {
+func TestAPIKeyService_EnsureChatKeyForGroupPrefersExistingUserKey(t *testing.T) {
 	groupID := int64(7)
 	existing := APIKey{
 		ID:      9,
 		UserID:  42,
 		Key:     "sk-existing",
-		Type:    APIKeyTypeChat,
+		Type:    APIKeyTypeUser,
 		GroupID: &groupID,
 		Status:  StatusActive,
 	}
 	repo := &authRepoStub{
 		listByUserID: func(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
-			return []APIKey{existing}, &pagination.PaginationResult{Total: 1, Page: params.Page, PageSize: params.PageSize, Pages: 1}, nil
+			require.Equal(t, "all", filters.Type)
+			require.Equal(t, StatusActive, filters.Status)
+			older := existing
+			older.ID = 3
+			older.Key = "sk-older"
+			return []APIKey{older, existing}, &pagination.PaginationResult{Total: 2, Page: params.Page, PageSize: params.PageSize, Pages: 1}, nil
 		},
 		create: func(ctx context.Context, key *APIKey) error {
-			t.Fatal("existing chat key should be reused")
+			t.Fatal("existing user key should be reused")
 			return nil
 		},
 	}
@@ -761,4 +767,66 @@ func TestAPIKeyService_EnsureChatKeyForGroupReusesExisting(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, existing.ID, key.ID)
 	require.Equal(t, existing.Key, key.Key)
+}
+
+func TestAPIKeyService_EnsureChatKeyForGroupFallsBackToManagedKey(t *testing.T) {
+	groupID := int64(7)
+	restrictedUserKey := APIKey{
+		ID:          8,
+		UserID:      42,
+		Key:         "sk-restricted",
+		Type:        APIKeyTypeUser,
+		GroupID:     &groupID,
+		Status:      StatusActive,
+		IPWhitelist: []string{"203.0.113.10"},
+	}
+	managedKey := APIKey{
+		ID:      9,
+		UserID:  42,
+		Key:     "sk-managed",
+		Type:    APIKeyTypeChat,
+		GroupID: &groupID,
+		Status:  StatusActive,
+	}
+	repo := &authRepoStub{
+		listByUserID: func(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
+			require.Equal(t, "all", filters.Type)
+			return []APIKey{restrictedUserKey, managedKey}, &pagination.PaginationResult{Total: 2}, nil
+		},
+		create: func(ctx context.Context, key *APIKey) error {
+			t.Fatal("managed key should be reused")
+			return nil
+		},
+	}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, &authCacheStub{}, &config.Config{})
+
+	key, err := svc.EnsureChatKeyForGroup(context.Background(), 42, &Group{ID: groupID, Name: "Chat Group"})
+
+	require.NoError(t, err)
+	require.Equal(t, managedKey.ID, key.ID)
+	require.Equal(t, managedKey.Key, key.Key)
+}
+
+func TestIsReusableLobeKey(t *testing.T) {
+	expiredAt := time.Now().Add(-time.Minute)
+	cases := []struct {
+		key  *APIKey
+		name string
+		want bool
+	}{
+		{name: "active unrestricted", key: &APIKey{Status: StatusActive, Type: APIKeyTypeUser}, want: true},
+		{name: "disabled", key: &APIKey{Status: StatusAPIKeyDisabled, Type: APIKeyTypeUser}},
+		{name: "expired", key: &APIKey{Status: StatusActive, Type: APIKeyTypeUser, ExpiresAt: &expiredAt}},
+		{name: "quota exhausted", key: &APIKey{Status: StatusActive, Type: APIKeyTypeUser, Quota: 1, QuotaUsed: 1}},
+		{name: "ip whitelist", key: &APIKey{Status: StatusActive, Type: APIKeyTypeUser, IPWhitelist: []string{"127.0.0.1"}}},
+		{name: "ip blacklist", key: &APIKey{Status: StatusActive, Type: APIKeyTypeUser, IPBlacklist: []string{"127.0.0.1"}}},
+		{name: "unknown key type", key: &APIKey{Status: StatusActive, Type: "internal"}},
+		{name: "nil key", key: nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, isReusableLobeKey(tc.key))
+		})
+	}
 }

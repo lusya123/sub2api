@@ -621,7 +621,7 @@ func (s *APIKeyService) EnsureChatKeyForGroup(ctx context.Context, userID int64,
 	if group == nil {
 		return nil, ErrGroupNotFound
 	}
-	if existing, err := s.findChatKeyForGroup(ctx, userID, group.ID); err == nil {
+	if existing, err := s.findReusableKeyForGroup(ctx, userID, group.ID); err == nil {
 		return existing, nil
 	} else if err != nil && !errors.Is(err, ErrAPIKeyNotFound) {
 		return nil, err
@@ -635,7 +635,7 @@ func (s *APIKeyService) EnsureChatKeyForGroup(ctx context.Context, userID int64,
 	apiKey := &APIKey{
 		UserID:      userID,
 		Key:         key,
-		Name:        fmt.Sprintf("[chat] %s", group.Name),
+		Name:        fmt.Sprintf("[LobeHub] %s", group.Name),
 		Type:        APIKeyTypeChat,
 		GroupID:     &group.ID,
 		Status:      StatusActive,
@@ -644,7 +644,7 @@ func (s *APIKeyService) EnsureChatKeyForGroup(ctx context.Context, userID int64,
 	}
 	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
 		if errors.Is(err, ErrAPIKeyExists) {
-			existing, getErr := s.findChatKeyForGroup(ctx, userID, group.ID)
+			existing, getErr := s.findReusableKeyForGroup(ctx, userID, group.ID)
 			if getErr == nil {
 				return existing, nil
 			}
@@ -657,20 +657,70 @@ func (s *APIKeyService) EnsureChatKeyForGroup(ctx context.Context, userID int64,
 	return apiKey, nil
 }
 
-func (s *APIKeyService) findChatKeyForGroup(ctx context.Context, userID int64, groupID int64) (*APIKey, error) {
-	keys, _, err := s.apiKeyRepo.ListByUserID(ctx, userID, pagination.PaginationParams{Page: 1, PageSize: 1}, APIKeyListFilters{
-		GroupID: &groupID,
-		Type:    APIKeyTypeChat,
-	})
+func (s *APIKeyService) findReusableKeyForGroup(ctx context.Context, userID int64, groupID int64) (*APIKey, error) {
+	// Prefer a user-managed key so LobeHub usage stays attributed to the key name
+	// the user already recognizes. Fall back to the managed LobeHub key to keep
+	// repeat launches idempotent.
+	keys, err := s.listActiveKeysForGroup(ctx, userID, groupID)
 	if err != nil {
-		return nil, fmt.Errorf("get chat api key: %w", err)
+		return nil, err
 	}
-	if len(keys) == 0 {
-		return nil, ErrAPIKeyNotFound
+	sort.SliceStable(keys, func(i, j int) bool {
+		priority := func(keyType string) int {
+			if keyType == APIKeyTypeUser {
+				return 0
+			}
+			return 1
+		}
+		left, right := priority(keys[i].Type), priority(keys[j].Type)
+		if left != right {
+			return left < right
+		}
+		return keys[i].ID > keys[j].ID
+	})
+	for i := range keys {
+		key := &keys[i]
+		if !isReusableLobeKey(key) {
+			continue
+		}
+		s.compileAPIKeyIPRules(key)
+		return key, nil
 	}
-	key := &keys[0]
-	s.compileAPIKeyIPRules(key)
-	return key, nil
+
+	return nil, ErrAPIKeyNotFound
+}
+
+func (s *APIKeyService) listActiveKeysForGroup(ctx context.Context, userID, groupID int64) ([]APIKey, error) {
+	filters := APIKeyListFilters{
+		GroupID: &groupID,
+		Status:  StatusActive,
+		Type:    "all",
+	}
+	if repo, ok := s.apiKeyRepo.(apiKeyAllByUserIDLister); ok {
+		keys, err := repo.ListAllByUserID(ctx, userID, filters)
+		if err != nil {
+			return nil, fmt.Errorf("get reusable lobe api key: %w", err)
+		}
+		return keys, nil
+	}
+
+	keys, _, err := s.apiKeyRepo.ListByUserID(ctx, userID, pagination.PaginationParams{Page: 1, PageSize: 100}, filters)
+	if err != nil {
+		return nil, fmt.Errorf("get reusable lobe api key: %w", err)
+	}
+	return keys, nil
+}
+
+func isReusableLobeKey(key *APIKey) bool {
+	if key == nil || !key.IsActive() || key.IsExpired() || key.IsQuotaExhausted() {
+		return false
+	}
+	if key.Type != APIKeyTypeUser && key.Type != APIKeyTypeChat {
+		return false
+	}
+	// A browser-created key can be restricted to a client IP. LobeHub calls the
+	// gateway from its container, so importing that key would fail unpredictably.
+	return len(key.IPWhitelist) == 0 && len(key.IPBlacklist) == 0
 }
 
 func (s *APIKeyService) listByCurrentConcurrency(ctx context.Context, userID int64, params pagination.PaginationParams, filters APIKeyListFilters) ([]APIKey, *pagination.PaginationResult, error) {
