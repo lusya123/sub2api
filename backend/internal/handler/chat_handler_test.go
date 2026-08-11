@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -55,6 +57,81 @@ func TestCreateChatLaunchWithoutConfigurationReturnsServiceUnavailable(t *testin
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	require.Equal(t, "CHAT_UNAVAILABLE", got.Reason)
 	require.NotContains(t, got.Message, "lobe.chat_url")
+}
+
+func TestCreateChatLaunchRefreshesCookiesWithoutWaitingForLobeSync(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	syncStarted := make(chan struct{})
+	releaseSync := make(chan struct{})
+	var startedOnce sync.Once
+	h := &ChatHandler{
+		cfg:         &config.Config{},
+		authSvc:     chatAuthServiceStub{},
+		userService: chatUserServiceStub{},
+		lobeSyncClient: chatHTTPClientFunc(func(*http.Request) (*http.Response, error) {
+			startedOnce.Do(func() { close(syncStarted) })
+			<-releaseSync
+			return &http.Response{
+				Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+				StatusCode: http.StatusOK,
+			}, nil
+		}),
+	}
+	h.cfg.Lobe.ChatURL = "https://chat.example.com"
+	h.cfg.Lobe.InternalSharedSecret = "shared-secret"
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7})
+		c.Next()
+	})
+	router.POST("/api/v1/chat/launch", h.CreateLaunch)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/chat/launch", nil)
+	requestFinished := make(chan struct{})
+	go func() {
+		router.ServeHTTP(rec, req)
+		close(requestFinished)
+	}()
+
+	select {
+	case <-requestFinished:
+	case <-time.After(500 * time.Millisecond):
+		close(releaseSync)
+		<-requestFinished
+		t.Fatal("chat launch waited for the LobeHub config sync")
+	}
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var launchResponse struct {
+		Data ChatLaunchResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &launchResponse))
+	launchURL, err := url.Parse(launchResponse.Data.URL)
+	require.NoError(t, err)
+	require.Equal(t, "7", launchURL.Query().Get("sub2apiUserId"))
+	cookies := rec.Result().Cookies()
+	require.Equal(t, "test-token", cookieValue(cookies, spaProtectTokenCookieName))
+	require.Equal(t, "test-token", cookieValue(cookies, "sub2api_access_token"))
+
+	select {
+	case <-syncStarted:
+	case <-time.After(time.Second):
+		close(releaseSync)
+		t.Fatal("background LobeHub config sync did not start")
+	}
+	close(releaseSync)
+}
+
+func cookieValue(cookies []*http.Cookie, name string) string {
+	for _, cookie := range cookies {
+		if cookie.Name == name {
+			return cookie.Value
+		}
+	}
+	return ""
 }
 
 func TestChatSignInURLUsesConfiguredChatURL(t *testing.T) {

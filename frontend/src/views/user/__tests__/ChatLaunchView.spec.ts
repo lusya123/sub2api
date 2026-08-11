@@ -101,7 +101,26 @@ describe('ChatLaunchView', () => {
     expect(navigateInCurrentTab).toHaveBeenCalledWith(
       'https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox'
     )
+    expect(getLobeConfig).not.toHaveBeenCalled()
+    expect(listKeys).not.toHaveBeenCalled()
     expect(wrapper.find('iframe').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('does not wait for model or API key loading before launching chat', async () => {
+    getLobeConfig.mockReturnValue(new Promise(() => {}))
+    listKeys.mockReturnValue(new Promise(() => {}))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(launch).toHaveBeenCalledOnce()
+    expect(navigateInCurrentTab).toHaveBeenCalledWith(
+      'https://chat.example.com/signin?callbackUrl=%2Fagent%2Finbox'
+    )
+    expect(getLobeConfig).not.toHaveBeenCalled()
+    expect(listKeys).not.toHaveBeenCalled()
 
     wrapper.unmount()
   })

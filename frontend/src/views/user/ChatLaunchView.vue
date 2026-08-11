@@ -443,6 +443,10 @@ async function loadAgentKeys() {
   }
 }
 
+async function loadAgentResources() {
+  await Promise.allSettled([loadModels(), loadAgentKeys()])
+}
+
 async function prepareChatUrl(): Promise<string> {
   const { url } = selectedProvider.value && selectedModel.value
     ? await chatAPI.launchWithModel(selectedProvider.value, selectedModel.value)
@@ -479,6 +483,7 @@ async function launchChatInCurrentTab() {
   } catch {
     chatNavigationPending.value = false
     launchError.value = t('chatLaunch.failed')
+    if (providers.value.length === 0) void loadModels()
   }
 }
 
@@ -502,6 +507,9 @@ async function switchTo(next: ModeKey) {
   if (next === 'chat') {
     await launchChatInCurrentTab()
   } else if (!agentFrameUrl.value) {
+    if (providers.value.length === 0 || agentKeys.value.length === 0) {
+      await loadAgentResources()
+    }
     if (selectedProviderOption.value) {
       await prewarmAgent()
     }
@@ -566,7 +574,11 @@ watch(selectedAgentKey, () => {
   advancedDirty.agent = true
 })
 watch(showAdvanced, async (open) => {
-  if (open) return
+  if (open) {
+    if (providers.value.length === 0) await loadModels()
+    if (mode.value === 'agent' && agentKeys.value.length === 0) await loadAgentKeys()
+    return
+  }
   if (advancedDirty.chat) {
     advancedDirty.chat = false
   }
@@ -597,21 +609,21 @@ onMounted(async () => {
     mode.value = visibleModes.value[0].key
   }
 
-  await Promise.allSettled([loadModels(), loadAgentKeys()])
   await nextTick()
   updateSlider()
   maybeShowFirstHint()
 
-  if (mode.value === 'chat') {
-    void launchChatInCurrentTab()
-  } else if (agentAppEnabled.value) {
-    const ready = selectedProviderOption.value || selectRecommendedAgentModel()
-    if (ready) void prewarmAgent()
-  }
-
   window.addEventListener('resize', updateSlider, { passive: true })
   document.addEventListener('click', handleDocClick, true)
   document.addEventListener('keydown', handleKeydown)
+
+  if (mode.value === 'chat') {
+    void launchChatInCurrentTab()
+  } else if (agentAppEnabled.value) {
+    await loadAgentResources()
+    const ready = selectedProviderOption.value || selectRecommendedAgentModel()
+    if (ready) void prewarmAgent()
+  }
 })
 
 onBeforeUnmount(() => {

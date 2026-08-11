@@ -124,7 +124,9 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 		response.InternalError(c, "Failed to create chat session")
 		return "", false
 	}
-	h.setOIDCSessionCookie(c, token, h.authSvc.GetAccessTokenExpiresIn())
+	maxAge := h.authSvc.GetAccessTokenExpiresIn()
+	setSPAProtectTokenCookie(c, maxAge, token)
+	h.setOIDCSessionCookie(c, token, maxAge)
 
 	preference, err := h.resolveLaunchPreference(c.Request.Context(), subject.UserID, c)
 	if err != nil {
@@ -138,11 +140,37 @@ func (h *ChatHandler) prepareLaunch(c *gin.Context) (string, bool) {
 		response.ErrorFrom(c, infraerrors.ServiceUnavailable("CHAT_UNAVAILABLE", "Chat service is not configured or unavailable"))
 		return "", false
 	}
-	if err := h.syncLobeUserConfig(c.Request.Context(), subject.UserID, target); err != nil {
-		slog.Warn("lobe_user_config_sync_failed", "user_id", subject.UserID, "error", err)
+	target, err = addSub2ApiUserID(target, subject.UserID)
+	if err != nil {
+		slog.Warn("chat_launch_invalid_target", "error", err)
+		response.ErrorFrom(c, infraerrors.ServiceUnavailable("CHAT_UNAVAILABLE", "Chat service is not configured or unavailable"))
+		return "", false
 	}
+	h.syncLobeUserConfigInBackground(subject.UserID, target)
 
 	return target, true
+}
+
+func addSub2ApiUserID(rawURL string, userID int64) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("invalid lobe chat URL")
+	}
+	q := u.Query()
+	q.Set("sub2apiUserId", strconvFormatInt(userID))
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+func (h *ChatHandler) syncLobeUserConfigInBackground(userID int64, chatSignInURL string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+
+		if err := h.syncLobeUserConfig(ctx, userID, chatSignInURL); err != nil {
+			slog.Warn("lobe_user_config_sync_failed", "user_id", userID, "error", err)
+		}
+	}()
 }
 
 func (h *ChatHandler) syncLobeUserConfig(ctx context.Context, userID int64, chatSignInURL string) error {
