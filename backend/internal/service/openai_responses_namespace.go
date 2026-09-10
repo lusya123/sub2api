@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
@@ -41,6 +42,57 @@ func shouldStripOpenAIResponsesInputNamespaces(account *Account, transport OpenA
 	return true
 }
 
+// Namespace-capable API-key providers need the same tool identity in declarations
+// and replayed calls. Keep compact and OAuth cleanup unchanged in this backport.
+func shouldKeepOpenAIResponsesToolCallNamespaces(account *Account, compactPath bool, body []byte) bool {
+	return account != nil && account.IsOpenAIApiKey() && !compactPath &&
+		hasOpenAIResponsesNamespaceToolDeclaration(body)
+}
+
+func hasOpenAIResponsesNamespaceToolDeclaration(body []byte) bool {
+	hasNamespace := func(tools gjson.Result) bool {
+		if !tools.IsArray() {
+			return false
+		}
+		found := false
+		tools.ForEach(func(_, tool gjson.Result) bool {
+			if strings.EqualFold(strings.TrimSpace(tool.Get("type").String()), "namespace") {
+				found = true
+				return false
+			}
+			return true
+		})
+		return found
+	}
+	if hasNamespace(gjson.GetBytes(body, "tools")) {
+		return true
+	}
+	// Recent Codex clients declare tools inside Responses Lite input items,
+	// without any top-level tools. The declaration has the same wire semantics.
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return false
+	}
+	found := false
+	input.ForEach(func(_, item gjson.Result) bool {
+		if strings.EqualFold(strings.TrimSpace(item.Get("type").String()), "additional_tools") && hasNamespace(item.Get("tools")) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func isOpenAIResponsesToolCallItemType(itemType string) bool {
+	switch strings.ToLower(strings.TrimSpace(itemType)) {
+	case "function_call", "custom_tool_call", "tool_call", "mcp_tool_call":
+		return true
+	default:
+		return false
+	}
+}
+
 func flattenOpenAIResponsesNamespaces(c *gin.Context, body []byte) ([]byte, error) {
 	if !bytes.Contains(body, []byte(`"namespace"`)) {
 		return body, nil
@@ -68,7 +120,9 @@ func flattenOpenAIResponsesNamespaces(c *gin.Context, body []byte) ([]byte, erro
 // array items. Namespace declarations and nested namespace fields are left
 // untouched. Rebuilding the input array once keeps this linear for long
 // histories and avoids decoding JSON numbers through float64.
-func stripOpenAIResponsesInputNamespaces(body []byte) ([]byte, error) {
+// keepToolCallNamespaces applies only to call items; residual namespaces on
+// messages, reasoning, and outputs still need cleanup for strict upstreams.
+func stripOpenAIResponsesInputNamespaces(body []byte, keepToolCallNamespaces bool) ([]byte, error) {
 	if !bytes.Contains(body, []byte(`"namespace"`)) {
 		return body, nil
 	}
@@ -89,7 +143,8 @@ func stripOpenAIResponsesInputNamespaces(body []byte) ([]byte, error) {
 		}
 		first = false
 		itemBody := []byte(item.Raw)
-		if item.IsObject() && item.Get("namespace").Exists() {
+		if item.IsObject() && item.Get("namespace").Exists() &&
+			(!keepToolCallNamespaces || !isOpenAIResponsesToolCallItemType(item.Get("type").String())) {
 			itemBody, stripErr = sjson.DeleteBytes(itemBody, "namespace")
 			if stripErr != nil {
 				return false

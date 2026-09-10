@@ -85,7 +85,7 @@ func TestStripOpenAIResponsesInputNamespaces(t *testing.T) {
 		]
 	}`)
 
-	stripped, err := stripOpenAIResponsesInputNamespaces(body)
+	stripped, err := stripOpenAIResponsesInputNamespaces(body, false)
 	require.NoError(t, err)
 	for index := 0; index < 8; index++ {
 		require.False(t, gjson.GetBytes(stripped, "input."+strconv.Itoa(index)+".namespace").Exists())
@@ -106,8 +106,58 @@ func TestStripOpenAIResponsesInputNamespacesLeavesOtherShapesByteExact(t *testin
 		[]byte(`{"input":[{"content":{"namespace":"nested-only"}}],"tools":[{"namespace":"keep"}]}`),
 	}
 	for _, body := range tests {
-		stripped, err := stripOpenAIResponsesInputNamespaces(body)
+		stripped, err := stripOpenAIResponsesInputNamespaces(body, false)
 		require.NoError(t, err)
 		require.Equal(t, body, stripped)
+	}
+}
+
+func TestKeepOpenAIResponsesToolCallNamespacesScope(t *testing.T) {
+	apiKey := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	namespaced := []byte(`{"tools":[{"type":"namespace","name":"functions"}]}`)
+	for _, tt := range []struct {
+		name    string
+		account *Account
+		compact bool
+		body    []byte
+		want    bool
+	}{
+		{name: "API key native namespace", account: apiKey, body: namespaced, want: true},
+		{name: "compact", account: apiKey, compact: true, body: namespaced},
+		{name: "OAuth retains legacy handling", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, body: namespaced},
+		{name: "other platform", account: &Account{Platform: PlatformGrok, Type: AccountTypeAPIKey}, body: namespaced},
+		{name: "missing account", body: namespaced},
+		{name: "ordinary tools", account: apiKey, body: []byte(`{"tools":[{"type":"function","name":"namespace"}]}`)},
+		{name: "input text is not a declaration", account: apiKey, body: []byte(`{"input":[{"type":"message","content":"namespace","tools":[{"type":"namespace"}]}]}`)},
+		{name: "malformed tools object", account: apiKey, body: []byte(`{"tools":{"type":"namespace"}}`)},
+		{name: "malformed additional tools", account: apiKey, body: []byte(`{"input":[{"type":"additional_tools","tools":{"type":"namespace"}}]}`)},
+		{name: "later additional tools item", account: apiKey, body: []byte(`{"tools":[],"input":[{"type":"additional_tools","tools":[]},{"type":"message"},{"type":"additional_tools","tools":[{"type":"namespace","name":"functions"}]}]}`), want: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, shouldKeepOpenAIResponsesToolCallNamespaces(tt.account, tt.compact, tt.body))
+		})
+	}
+}
+
+func TestStripOpenAIResponsesInputNamespacesKeepsOnlyCallItems(t *testing.T) {
+	body := []byte(`{"input":[
+		{"type":"function_call","namespace":"functions","name":"read_file","large":9007199254740993},
+		{"type":"custom_tool_call","namespace":"functions","name":"exec","input":"line\n\u003ctag\u003e"},
+		{"type":"tool_call","namespace":"functions"},
+		{"type":"mcp_tool_call","namespace":"mcp"},
+		{"type":"message","namespace":"residual"},
+		{"type":"reasoning","namespace":"residual"},
+		{"type":"function_call_output","namespace":"residual"},
+		{"type":"custom_tool_call_output","namespace":"residual"},
+		{"type":"unknown","namespace":"residual"}
+	]}`)
+	stripped, err := stripOpenAIResponsesInputNamespaces(body, true)
+	require.NoError(t, err)
+	for i := 0; i < 4; i++ {
+		path := "input." + strconv.Itoa(i)
+		require.Equal(t, gjson.GetBytes(body, path).Raw, gjson.GetBytes(stripped, path).Raw, "call items must remain byte-exact")
+	}
+	for i := 4; i < 9; i++ {
+		require.False(t, gjson.GetBytes(stripped, "input."+strconv.Itoa(i)+".namespace").Exists())
 	}
 }
