@@ -146,6 +146,8 @@ func TestApplyMatchedPairRunsMainThenShopAndCanBeRetried(t *testing.T) {
 		MainUserIDs: []int64{11}, ShopUserIDs: []uint64{22},
 		MainPasswordFingerprint: passwordFingerprint(mainHash),
 		ShopPasswordFingerprint: passwordFingerprint(shopHash),
+		MainLegacyFingerprint:   passwordFingerprint(""), ShopLegacyFingerprint: passwordFingerprint(""),
+		MainCredentialVersion: 4, ShopTokenVersion: 3,
 	}
 	shopColumns := []string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified"}
 	mainColumns := []string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}
@@ -167,16 +169,16 @@ func TestApplyMatchedPairRunsMainThenShopAndCanBeRetried(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(mainColumns).AddRow(11, "user@example.com", mainHash, shopHash, 5, "user", "active", false))
 
 	shopMock.ExpectBegin()
+	shopMock.ExpectExec("INSERT INTO sub2api_credential_watermarks").WithArgs(int64(11)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	shopMock.ExpectQuery("SELECT credential_version").WithArgs(int64(11)).
+		WillReturnRows(sqlmock.NewRows([]string{"credential_version"}).AddRow(0))
 	shopMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(uint64(22)).
 		WillReturnRows(sqlmock.NewRows(shopColumns).AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true))
 	shopMock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM users WHERE LOWER").WithArgs("user@example.com").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	shopMock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM users WHERE sub2_api_user_id").WithArgs(int64(11), uint64(22)).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-	shopMock.ExpectExec("INSERT INTO sub2api_credential_watermarks").WithArgs(int64(11)).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	shopMock.ExpectQuery("SELECT credential_version").WithArgs(int64(11)).
-		WillReturnRows(sqlmock.NewRows([]string{"credential_version"}).AddRow(0))
 	shopMock.ExpectExec("UPDATE sub2api_credential_watermarks").WithArgs(uint64(5), int64(11)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	shopMock.ExpectExec("UPDATE users").
@@ -209,6 +211,59 @@ func mustTestHash(t *testing.T, password string) string {
 		t.Fatal(err)
 	}
 	return string(hash)
+}
+
+// These tests catch re-use of a plan after a revoke/restore cycle, even when
+// the primary verifier and final visible policy have not changed.
+func TestValidateMainRejectsCredentialDriftExceptOwnResumableImport(t *testing.T) {
+	mainHash, shopHash := mustTestHash(t, "MainPassword123"), mustTestHash(t, "ShopPassword456")
+	main := mainUser{ID: 11, Email: "u@example.com", PasswordHash: mainHash, CredentialVersion: 4, Role: "user", Status: "active"}
+	shop := shopUser{ID: 22, Email: main.Email, PasswordHash: shopHash, Status: "active", EmailVerified: true}
+	item := classify(main.Email, []mainUser{main}, []shopUser{shop})
+	for _, tt := range []struct {
+		name    string
+		version uint64
+		legacy  string
+		wantErr bool
+	}{
+		{"unchanged", 4, "", false},
+		{"own committed import", 5, shopHash, false},
+		{"revoked after planning", 5, "", true},
+		{"disable then restore", 6, "", true},
+		{"import then policy cycle", 7, shopHash, true},
+		{"unversioned legacy change", 4, shopHash, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			current := main
+			current.CredentialVersion, current.LegacyShopHash = tt.version, tt.legacy
+			if err := validateMainForPromotion(current, item, shopHash); (err != nil) != tt.wantErr {
+				t.Fatalf("want error=%v, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidateShopRejectsLocalCredentialAndBindingDrift(t *testing.T) {
+	main := mainUser{ID: 11, Email: "u@example.com", PasswordHash: mustTestHash(t, "MainPassword123"), CredentialVersion: 4, Role: "user", Status: "active"}
+	shop := shopUser{ID: 22, Email: main.Email, PasswordHash: mustTestHash(t, "ShopPassword456"), TokenVersion: 3, Status: "active", EmailVerified: true}
+	item := classify(main.Email, []mainUser{main}, []shopUser{shop})
+	for _, tt := range []struct {
+		name   string
+		mutate func(*shopUser)
+	}{
+		{"revocation", func(s *shopUser) { s.TokenVersion++ }},
+		{"different binding", func(s *shopUser) { s.Sub2APIUserID = 999 }},
+		{"unreviewed local binding", func(s *shopUser) { s.Sub2APIUserID = 11 }},
+		{"legacy verifier", func(s *shopUser) { s.LegacySub2APIHash = main.PasswordHash }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			current := shop
+			tt.mutate(&current)
+			if err := validateShopAgainstPlan(current, item); err == nil {
+				t.Fatal("accepted stale plan")
+			}
+		})
+	}
 }
 
 var bcryptGenerate = func(password []byte) ([]byte, error) {

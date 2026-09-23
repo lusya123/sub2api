@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	PlanVersion       = 1
+	PlanVersion       = 2
 	ActionApply       = "apply"
 	ActionAlreadyDone = "already_applied"
 	ActionManual      = "manual_review"
@@ -43,6 +43,8 @@ type PlanItem struct {
 	ShopUserIDs             []uint64 `json:"shop_user_ids,omitempty"`
 	MainPasswordFingerprint string   `json:"main_password_fingerprint,omitempty"`
 	ShopPasswordFingerprint string   `json:"shop_password_fingerprint,omitempty"`
+	MainLegacyFingerprint   string   `json:"main_legacy_fingerprint,omitempty"`
+	ShopLegacyFingerprint   string   `json:"shop_legacy_fingerprint,omitempty"`
 	MainCredentialVersion   uint64   `json:"main_credential_version,omitempty"`
 	ShopAuthorityVersion    uint64   `json:"shop_authority_version,omitempty"`
 	ShopTokenVersion        uint64   `json:"shop_token_version,omitempty"`
@@ -164,6 +166,8 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 	shop := shops[0]
 	item.MainPasswordFingerprint = passwordFingerprint(main.PasswordHash)
 	item.ShopPasswordFingerprint = passwordFingerprint(shop.PasswordHash)
+	item.MainLegacyFingerprint = passwordFingerprint(main.LegacyShopHash)
+	item.ShopLegacyFingerprint = passwordFingerprint(shop.LegacySub2APIHash)
 	item.MainCredentialVersion = main.CredentialVersion
 	item.ShopAuthorityVersion = shop.AuthorityCredentialVersion
 	item.ShopTokenVersion = shop.TokenVersion
@@ -346,6 +350,27 @@ func applyShopAuthority(ctx context.Context, db *sql.DB, item PlanItem, main mai
 	}
 	defer tx.Rollback()
 
+	// Match online credential events and login promotion: watermark first,
+	// user second. Reversing these locks deadlocks against a concurrent event.
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO sub2api_credential_watermarks
+			(sub2_api_user_id, credential_version, last_event_id, created_at, updated_at)
+		VALUES ($1, 0, 0, NOW(), NOW())
+		ON CONFLICT (sub2_api_user_id) DO NOTHING`, main.ID); err != nil {
+		return false, fmt.Errorf("seed Shop credential watermark: %w", err)
+	}
+	var watermark uint64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT credential_version
+		FROM sub2api_credential_watermarks
+		WHERE sub2_api_user_id = $1
+		FOR UPDATE`, main.ID).Scan(&watermark); err != nil {
+		return false, fmt.Errorf("lock Shop credential watermark: %w", err)
+	}
+	if watermark > main.CredentialVersion {
+		return false, errors.New("Shop credential watermark is ahead of Main proof")
+	}
+
 	shop, err := loadShopUserByID(ctx, tx, item.ShopUserIDs[0], true)
 	if err != nil {
 		return false, err
@@ -376,24 +401,6 @@ func applyShopAuthority(ctx context.Context, db *sql.DB, item PlanItem, main mai
 		return false, errors.New("Shop token version exhausted")
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO sub2api_credential_watermarks
-			(sub2_api_user_id, credential_version, last_event_id, created_at, updated_at)
-		VALUES ($1, 0, 0, NOW(), NOW())
-		ON CONFLICT (sub2_api_user_id) DO NOTHING`, main.ID); err != nil {
-		return false, fmt.Errorf("seed Shop credential watermark: %w", err)
-	}
-	var watermark uint64
-	if err := tx.QueryRowContext(ctx, `
-		SELECT credential_version
-		FROM sub2api_credential_watermarks
-		WHERE sub2_api_user_id = $1
-		FOR UPDATE`, main.ID).Scan(&watermark); err != nil {
-		return false, fmt.Errorf("lock Shop credential watermark: %w", err)
-	}
-	if watermark > main.CredentialVersion {
-		return false, errors.New("Shop credential watermark is ahead of Main proof")
-	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE sub2api_credential_watermarks
 		SET credential_version = $1, updated_at = NOW()
@@ -443,6 +450,18 @@ func validateMainForPromotion(main mainUser, item PlanItem, shopPasswordHash str
 	if main.LegacyShopHash != "" && main.LegacyShopHash != shopPasswordHash && main.PasswordHash != shopPasswordHash {
 		return errors.New("Main legacy Shop password conflicts with the planned Shop password")
 	}
+	unchanged := main.CredentialVersion == item.MainCredentialVersion &&
+		passwordFingerprint(main.LegacyShopHash) == item.MainLegacyFingerprint
+	// The sole allowed version advance is our own committed compatibility
+	// import. Any revoke/restore cycle invalidates the plan, even if the final
+	// role, email, status and primary verifier happen to be identical again.
+	resumable := item.MainCredentialVersion > 0 && item.MainCredentialVersion < math.MaxInt64 &&
+		item.MainLegacyFingerprint == passwordFingerprint("") &&
+		main.PasswordHash != shopPasswordHash && main.LegacyShopHash == shopPasswordHash &&
+		main.CredentialVersion == item.MainCredentialVersion+1
+	if item.MainCredentialVersion == 0 || (!unchanged && !resumable) {
+		return errors.New("Main credential version or legacy verifier changed after planning")
+	}
 	return nil
 }
 
@@ -456,6 +475,16 @@ func validateShopAgainstPlan(shop shopUser, item PlanItem) error {
 	authority := normalizedAuthority(shop.AuthAuthority)
 	if authority != "local" && authority != "sub2api" {
 		return errors.New("unknown Shop authentication authority")
+	}
+	if authority == "local" && (normalizedAuthority(item.ShopAuthAuthority) != "local" ||
+		shop.TokenVersion != item.ShopTokenVersion ||
+		shop.Sub2APIUserID != item.ShopBoundSub2APIUserID ||
+		shop.AuthorityCredentialVersion != item.ShopAuthorityVersion ||
+		passwordFingerprint(shop.LegacySub2APIHash) != item.ShopLegacyFingerprint) {
+		return errors.New("Shop local credential state changed after planning")
+	}
+	if authority == "sub2api" && (len(item.MainUserIDs) != 1 || shop.Sub2APIUserID != item.MainUserIDs[0]) {
+		return errors.New("Shop authority binding changed after planning")
 	}
 	return nil
 }

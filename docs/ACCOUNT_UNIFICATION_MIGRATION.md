@@ -89,6 +89,14 @@ go run ./cmd/account-unification-migrate apply \
 eligibility rules, and stops on the first drift or conflict. Recreate the plan
 after any password, email, role, status, TOTP, binding, or authority change.
 
+Plan version 2 also fingerprints both legacy verifiers and checks Main's
+credential epoch. The only accepted epoch advance is the tool's own single
+compatibility import, allowing a failed Shop phase to resume. A disable/restore
+or revoke/re-enable cycle invalidates the old plan even if the final visible
+account fields are unchanged. Version 1 plans must be regenerated. Shop's local
+token epoch and binding are checked before promotion; its watermark is locked
+before the user row, matching live login and credential-event lock order.
+
 An all-account apply additionally requires `--all`. A production-labeled plan
 also requires `--allow-production` and the exact confirmation
 `APPLY_MATCHED_ACCOUNTS_TO_PRODUCTION`. Those gates do not replace a reviewed
@@ -106,3 +114,16 @@ For each migrated staging cohort verify all of the following:
 - Previously issued Shop sessions are rejected.
 - Disabling the Main account blocks Shop login.
 - Duplicate and out-of-order credential events remain idempotent.
+
+## Local PostgreSQL regression suite
+
+Use a dedicated disposable local database, never either deployed database:
+
+```bash
+ACCOUNT_UNIFICATION_TEST_DSN='postgres://postgres@127.0.0.1:25439/postgres?sslmode=disable' \
+  go test -tags postgresintegration ./internal/accountunification
+```
+
+The fixture refuses non-loopback hosts and isolates all tables in temporary
+schemas. It exercises real migration triggers, bounded apply, idempotent retry,
+stale-plan refusal, and concurrent event/migration lock ordering.
