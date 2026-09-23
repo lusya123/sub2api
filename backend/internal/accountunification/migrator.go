@@ -100,15 +100,19 @@ func BuildPlan(ctx context.Context, mainDB, shopDB *sql.DB, now time.Time) (*Pla
 
 	mainByEmail := make(map[string][]mainUser)
 	shopByEmail := make(map[string][]shopUser)
+	mainByInbox := make(map[string]struct{})
+	shopInboxCounts := make(map[string]int)
 	emails := make(map[string]struct{})
 	for _, user := range mainUsers {
 		email := normalizeEmail(user.Email)
 		mainByEmail[email] = append(mainByEmail[email], user)
+		mainByInbox[inboxIdentity(user.Email)] = struct{}{}
 		emails[email] = struct{}{}
 	}
 	for _, user := range shopUsers {
 		email := normalizeEmail(user.Email)
 		shopByEmail[email] = append(shopByEmail[email], user)
+		shopInboxCounts[inboxIdentity(user.Email)]++
 		emails[email] = struct{}{}
 	}
 
@@ -126,6 +130,14 @@ func BuildPlan(ctx context.Context, mainDB, shopDB *sql.DB, now time.Time) (*Pla
 	}
 	for _, email := range orderedEmails {
 		item := classify(email, mainByEmail[email], shopByEmail[email])
+		if item.Reason == "shop_only" {
+			inbox := inboxIdentity(email)
+			if _, collision := mainByInbox[inbox]; collision {
+				item.Reason = "shop_only_main_alias_collision"
+			} else if shopInboxCounts[inbox] > 1 {
+				item.Reason = "shop_only_shop_alias_collision"
+			}
+		}
 		plan.Items = append(plan.Items, item)
 		plan.Counts[item.Action]++
 		plan.Counts["reason:"+item.Reason]++
@@ -650,6 +662,31 @@ func writePrivateFile(path string, data []byte) (retErr error) {
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// inboxIdentity mirrors Main registration's alias deduplication rules for
+// migration planning. It is used only to reject ambiguous Shop-only rows;
+// malformed addresses retain their literal normalized form for manual review.
+func inboxIdentity(email string) string {
+	email = normalizeEmail(email)
+	local, domain, found := strings.Cut(email, "@")
+	if !found || local == "" || domain == "" || strings.Contains(domain, "@") {
+		return email
+	}
+	domain = strings.TrimRight(domain, ".")
+	if domain == "" {
+		return email
+	}
+	if index := strings.IndexByte(local, '+'); index > 0 {
+		local = local[:index]
+	}
+	if domain == "gmail.com" || domain == "googlemail.com" {
+		if withoutDots := strings.ReplaceAll(local, ".", ""); withoutDots != "" {
+			local = withoutDots
+		}
+		domain = "gmail.com"
+	}
+	return local + "@" + domain
 }
 
 func normalizedAuthority(authority string) string {

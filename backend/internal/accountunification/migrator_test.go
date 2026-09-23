@@ -76,6 +76,75 @@ func TestClassifySafePairAndRedactHashes(t *testing.T) {
 	}
 }
 
+func TestBuildPlanFlagsShopOnlyMainInboxAliasCollision(t *testing.T) {
+	mainDB, mainMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mainDB.Close() }()
+	shopDB, shopMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shopDB.Close() }()
+
+	hash := mustTestHash(t, "AnyPassword123")
+	mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}).
+			AddRow(11, "some.one@gmail.com", hash, "", 1, "user", "active", false))
+	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified"}).
+			AddRow(22, "someone+shop@googlemail.com", hash, "", "local", 0, 0, 0, "active", true))
+
+	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range plan.Items {
+		if item.Email == "someone+shop@googlemail.com" {
+			if item.Action != ActionManual || item.Reason != "shop_only_main_alias_collision" {
+				t.Fatalf("Shop-only alias classification = %s/%s", item.Action, item.Reason)
+			}
+			return
+		}
+	}
+	t.Fatal("Shop-only alias item missing")
+}
+
+func TestBuildPlanFlagsAliasesBetweenTwoShopOnlyAccounts(t *testing.T) {
+	mainDB, mainMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mainDB.Close() }()
+	shopDB, shopMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shopDB.Close() }()
+
+	hash := mustTestHash(t, "AnyPassword123")
+	mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}))
+	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified"}).
+			AddRow(21, "first.last@qq.com", hash, "", "local", 0, 0, 0, "active", true).
+			AddRow(22, "first.last+shop@qq.com", hash, "", "local", 0, 0, 0, "active", true))
+
+	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := plan.Counts["reason:shop_only_shop_alias_collision"]; got != 2 {
+		t.Fatalf("Shop-only alias collision count = %d, want 2", got)
+	}
+	for _, item := range plan.Items {
+		if item.Action != ActionManual || item.Reason != "shop_only_shop_alias_collision" {
+			t.Fatalf("Shop-only alias classification = %s/%s", item.Action, item.Reason)
+		}
+	}
+}
+
 func TestClassifyRejectsPrivilegedTOTPAndConflicts(t *testing.T) {
 	mainHash := mustTestHash(t, "MainPassword123")
 	shopHash := mustTestHash(t, "ShopPassword456")
