@@ -116,6 +116,52 @@ func TestBuildPlanRejectsShopPasswordSetupRequired(t *testing.T) {
 	}
 }
 
+func TestClassifyShopOnlySeparatesUnsafeAccountsFromMirrorCandidates(t *testing.T) {
+	valid := shopUser{
+		ID: 22, Email: "user@example.com", PasswordHash: mustTestHash(t, "ShopPassword456"),
+		AuthAuthority: "local", Status: "active", EmailVerified: true,
+	}
+	tests := []struct {
+		name       string
+		change     func(*shopUser)
+		wantReason string
+	}{
+		{name: "inactive", change: func(u *shopUser) { u.Status = "disabled" }, wantReason: "shop_only_inactive"},
+		{name: "unverified", change: func(u *shopUser) { u.EmailVerified = false }, wantReason: "shop_only_email_unverified"},
+		{name: "unsupported verifier", change: func(u *shopUser) { u.PasswordHash = "not-bcrypt" }, wantReason: "shop_only_unsupported_password_hash"},
+		{name: "bound to missing Main user", change: func(u *shopUser) { u.Sub2APIUserID = 99 }, wantReason: "shop_only_preexisting_binding"},
+		{name: "remote authority", change: func(u *shopUser) { u.AuthAuthority = "sub2api" }, wantReason: "shop_only_nonlocal_authority"},
+		{name: "legacy Main hash", change: func(u *shopUser) { u.LegacySub2APIHash = valid.PasswordHash }, wantReason: "shop_only_existing_main_verifier"},
+		{name: "authority version", change: func(u *shopUser) { u.AuthorityCredentialVersion = 2 }, wantReason: "shop_only_authority_version_conflict"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			user := valid
+			tc.change(&user)
+			item := classify("user@example.com", nil, []shopUser{user})
+			if item.Action != ActionManual || item.Reason != tc.wantReason {
+				t.Fatalf("classification = %s/%s, want manual/%s", item.Action, item.Reason, tc.wantReason)
+			}
+		})
+	}
+	item := classify("user@example.com", nil, []shopUser{valid})
+	if item.Action != ActionManual || item.Reason != "shop_only" {
+		t.Fatalf("valid Shop-only classification = %s/%s, want manual/shop_only", item.Action, item.Reason)
+	}
+}
+
+func TestClassifyShopOnlyDoesNotLabelDuplicateEmailAsMirrorCandidate(t *testing.T) {
+	hash := mustTestHash(t, "ShopPassword456")
+	shops := []shopUser{
+		{ID: 22, Email: "user@example.com", PasswordHash: hash, AuthAuthority: "local", Status: "active", EmailVerified: true},
+		{ID: 23, Email: "USER@example.com", PasswordHash: hash, AuthAuthority: "local", Status: "active", EmailVerified: true},
+	}
+	item := classify("user@example.com", nil, shops)
+	if item.Action != ActionManual || item.Reason != "duplicate_shop_email" {
+		t.Fatalf("classification = %s/%s, want manual/duplicate_shop_email", item.Action, item.Reason)
+	}
+}
+
 func TestBuildPlanFlagsShopOnlyMainInboxAliasCollision(t *testing.T) {
 	mainDB, mainMock, err := sqlmock.New()
 	if err != nil {

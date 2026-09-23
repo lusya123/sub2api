@@ -159,8 +159,34 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 		return item
 	}
 	if len(mains) == 0 {
+		if len(shops) > 1 {
+			item.Reason = "duplicate_shop_email"
+			return item
+		}
 		if len(shops) == 1 && shops[0].PasswordSetupRequired {
 			item.Reason = "shop_only_password_setup_required"
+			return item
+		}
+		if len(shops) == 1 {
+			shop := shops[0]
+			switch {
+			case strings.ToLower(strings.TrimSpace(shop.Status)) != "active":
+				item.Reason = "shop_only_inactive"
+			case !shop.EmailVerified:
+				item.Reason = "shop_only_email_unverified"
+			case !isBcryptHash(shop.PasswordHash):
+				item.Reason = "shop_only_unsupported_password_hash"
+			case shop.Sub2APIUserID != 0:
+				item.Reason = "shop_only_preexisting_binding"
+			case normalizedAuthority(shop.AuthAuthority) != "local":
+				item.Reason = "shop_only_nonlocal_authority"
+			case shop.LegacySub2APIHash != "":
+				item.Reason = "shop_only_existing_main_verifier"
+			case shop.AuthorityCredentialVersion != 0:
+				item.Reason = "shop_only_authority_version_conflict"
+			default:
+				item.Reason = "shop_only"
+			}
 			return item
 		}
 		item.Reason = "shop_only"
