@@ -295,7 +295,7 @@ func applyItem(ctx context.Context, mainDB, shopDB *sql.DB, item PlanItem) (Appl
 	if err != nil {
 		// The Main-side addition is intentionally left in place. Re-running the
 		// same plan is idempotent and can finish this second phase safely.
-		return ApplyResult{}, fmt.Errorf("Main compatibility credential is present; Shop phase can be retried safely: %w", err)
+		return ApplyResult{}, fmt.Errorf("main compatibility credential is present; shop phase can be retried safely: %w", err)
 	}
 	return ApplyResult{
 		Email:                 item.Email,
@@ -312,7 +312,7 @@ func applyMainLegacy(ctx context.Context, db *sql.DB, item PlanItem, shopPasswor
 	if err != nil {
 		return mainUser{}, false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	main, err := loadMainUserByID(ctx, tx, item.MainUserIDs[0], true)
 	if err != nil {
@@ -348,7 +348,7 @@ func applyShopAuthority(ctx context.Context, db *sql.DB, item PlanItem, main mai
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Match online credential events and login promotion: watermark first,
 	// user second. Reversing these locks deadlocks against a concurrent event.
@@ -368,7 +368,7 @@ func applyShopAuthority(ctx context.Context, db *sql.DB, item PlanItem, main mai
 		return false, fmt.Errorf("lock Shop credential watermark: %w", err)
 	}
 	if watermark > main.CredentialVersion {
-		return false, errors.New("Shop credential watermark is ahead of Main proof")
+		return false, errors.New("shop credential watermark is ahead of main proof")
 	}
 
 	shop, err := loadShopUserByID(ctx, tx, item.ShopUserIDs[0], true)
@@ -382,23 +382,23 @@ func applyShopAuthority(ctx context.Context, db *sql.DB, item PlanItem, main mai
 		return false, err
 	}
 	if shop.Sub2APIUserID != 0 && shop.Sub2APIUserID != main.ID {
-		return false, errors.New("Shop user was concurrently bound to a different Main user")
+		return false, errors.New("shop user was concurrently bound to a different main user")
 	}
 	var bindingCount int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE sub2_api_user_id = $1 AND id <> $2 AND deleted_at IS NULL`, main.ID, shop.ID).Scan(&bindingCount); err != nil {
 		return false, err
 	}
 	if bindingCount != 0 {
-		return false, errors.New("Main user ID is already bound to another Shop user")
+		return false, errors.New("main user ID is already bound to another shop user")
 	}
 	if shop.LegacySub2APIHash != "" && shop.LegacySub2APIHash != main.PasswordHash {
-		return false, errors.New("Shop legacy Main password changed after planning")
+		return false, errors.New("shop legacy main password changed after planning")
 	}
 	if shop.AuthorityCredentialVersion > main.CredentialVersion {
-		return false, errors.New("Shop authority version is ahead of Main")
+		return false, errors.New("shop authority version is ahead of main")
 	}
 	if shop.TokenVersion == math.MaxUint64 {
-		return false, errors.New("Shop token version exhausted")
+		return false, errors.New("shop token version exhausted")
 	}
 
 	if _, err := tx.ExecContext(ctx, `
@@ -428,7 +428,7 @@ func applyShopAuthority(ctx context.Context, db *sql.DB, item PlanItem, main mai
 			return false, fmt.Errorf("promote Shop authentication authority: %w", err)
 		}
 		if rows, err := result.RowsAffected(); err != nil || rows != 1 {
-			return false, errors.New("Shop authority compare-and-swap did not update exactly one row")
+			return false, errors.New("shop authority compare-and-swap did not update exactly one row")
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -439,16 +439,16 @@ func applyShopAuthority(ctx context.Context, db *sql.DB, item PlanItem, main mai
 
 func validateMainForPromotion(main mainUser, item PlanItem, shopPasswordHash string) error {
 	if normalizeEmail(main.Email) != item.Email || passwordFingerprint(main.PasswordHash) != item.MainPasswordFingerprint {
-		return errors.New("Main identity or primary password changed after planning")
+		return errors.New("main identity or primary password changed after planning")
 	}
 	if strings.ToLower(strings.TrimSpace(main.Role)) != "user" || strings.ToLower(strings.TrimSpace(main.Status)) != "active" || main.TOTPEnabled {
-		return errors.New("Main role, status, or TOTP policy is no longer eligible")
+		return errors.New("main role, status, or TOTP policy is no longer eligible")
 	}
 	if !isBcryptHash(main.PasswordHash) || !isBcryptHash(shopPasswordHash) {
 		return errors.New("unsupported password hash")
 	}
 	if main.LegacyShopHash != "" && main.LegacyShopHash != shopPasswordHash && main.PasswordHash != shopPasswordHash {
-		return errors.New("Main legacy Shop password conflicts with the planned Shop password")
+		return errors.New("main legacy shop password conflicts with the planned shop password")
 	}
 	unchanged := main.CredentialVersion == item.MainCredentialVersion &&
 		passwordFingerprint(main.LegacyShopHash) == item.MainLegacyFingerprint
@@ -460,17 +460,17 @@ func validateMainForPromotion(main mainUser, item PlanItem, shopPasswordHash str
 		main.PasswordHash != shopPasswordHash && main.LegacyShopHash == shopPasswordHash &&
 		main.CredentialVersion == item.MainCredentialVersion+1
 	if item.MainCredentialVersion == 0 || (!unchanged && !resumable) {
-		return errors.New("Main credential version or legacy verifier changed after planning")
+		return errors.New("main credential version or legacy verifier changed after planning")
 	}
 	return nil
 }
 
 func validateShopAgainstPlan(shop shopUser, item PlanItem) error {
 	if normalizeEmail(shop.Email) != item.Email || passwordFingerprint(shop.PasswordHash) != item.ShopPasswordFingerprint {
-		return errors.New("Shop identity or primary password changed after planning")
+		return errors.New("shop identity or primary password changed after planning")
 	}
 	if strings.ToLower(strings.TrimSpace(shop.Status)) != "active" || !shop.EmailVerified {
-		return errors.New("Shop status or email verification is no longer eligible")
+		return errors.New("shop status or email verification is no longer eligible")
 	}
 	authority := normalizedAuthority(shop.AuthAuthority)
 	if authority != "local" && authority != "sub2api" {
@@ -481,10 +481,10 @@ func validateShopAgainstPlan(shop shopUser, item PlanItem) error {
 		shop.Sub2APIUserID != item.ShopBoundSub2APIUserID ||
 		shop.AuthorityCredentialVersion != item.ShopAuthorityVersion ||
 		passwordFingerprint(shop.LegacySub2APIHash) != item.ShopLegacyFingerprint) {
-		return errors.New("Shop local credential state changed after planning")
+		return errors.New("shop local credential state changed after planning")
 	}
 	if authority == "sub2api" && (len(item.MainUserIDs) != 1 || shop.Sub2APIUserID != item.MainUserIDs[0]) {
-		return errors.New("Shop authority binding changed after planning")
+		return errors.New("shop authority binding changed after planning")
 	}
 	return nil
 }
@@ -541,7 +541,7 @@ func loadMainUsers(ctx context.Context, db *sql.DB) ([]mainUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var users []mainUser
 	for rows.Next() {
 		var user mainUser
@@ -562,7 +562,7 @@ func loadShopUsers(ctx context.Context, db *sql.DB) ([]shopUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var users []shopUser
 	for rows.Next() {
 		var user shopUser
@@ -632,12 +632,16 @@ func WriteResults(path string, results []ApplyResult) error {
 	return writePrivateFile(path, append(data, '\n'))
 }
 
-func writePrivateFile(path string, data []byte) error {
+func writePrivateFile(path string, data []byte) (retErr error) {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); retErr == nil {
+			retErr = err
+		}
+	}()
 	if _, err := file.Write(data); err != nil {
 		return err
 	}

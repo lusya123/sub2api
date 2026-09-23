@@ -136,7 +136,11 @@ func secureShopCredentialHTTPClient(baseClient *http.Client, timeout time.Durati
 	if baseClient != nil {
 		client = *baseClient
 	} else {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
+		baseTransport, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			baseTransport = &http.Transport{Proxy: http.ProxyFromEnvironment}
+		}
+		transport := baseTransport.Clone()
 		if transport.TLSClientConfig == nil {
 			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 		} else {

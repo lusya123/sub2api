@@ -164,14 +164,14 @@ func openDatabases() (*sql.DB, *sql.DB, func(), error) {
 	}
 	shopDB, err := sql.Open("postgres", shopDSN)
 	if err != nil {
-		mainDB.Close()
+		_ = mainDB.Close()
 		return nil, nil, func() {}, err
 	}
 	mainDB.SetMaxOpenConns(2)
 	shopDB.SetMaxOpenConns(2)
 	return mainDB, shopDB, func() {
-		mainDB.Close()
-		shopDB.Close()
+		_ = mainDB.Close()
+		_ = shopDB.Close()
 	}, nil
 }
 

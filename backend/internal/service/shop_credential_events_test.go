@@ -82,7 +82,9 @@ func TestShopCredentialEventClient_UsesFixedContractAndNoCredentialMaterial(t *t
 		ID: 11, UserID: 42, CredentialVersion: 8, OccurredAt: occurredAt,
 	}))
 	if value := handlerErr.Load(); value != nil {
-		require.NoError(t, value.(error))
+		capturedErr, ok := value.(error)
+		require.True(t, ok)
+		require.NoError(t, capturedErr)
 	}
 }
 

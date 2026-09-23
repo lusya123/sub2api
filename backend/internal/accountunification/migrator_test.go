@@ -16,12 +16,12 @@ func TestBuildPlanReadsBothDatabasesWithoutExportingVerifiers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mainDB.Close()
+	defer func() { _ = mainDB.Close() }()
 	shopDB, shopMock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer shopDB.Close()
+	defer func() { _ = shopDB.Close() }()
 
 	mainHash := mustTestHash(t, "MainPassword123")
 	shopHash := mustTestHash(t, "ShopPassword456")
@@ -132,12 +132,12 @@ func TestApplyMatchedPairRunsMainThenShopAndCanBeRetried(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mainDB.Close()
+	defer func() { _ = mainDB.Close() }()
 	shopDB, shopMock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer shopDB.Close()
+	defer func() { _ = shopDB.Close() }()
 
 	mainHash := mustTestHash(t, "MainPassword123")
 	shopHash := mustTestHash(t, "ShopPassword456")
