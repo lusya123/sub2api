@@ -59,7 +59,8 @@ func migrationFixture(t *testing.T) (*sql.DB, *sql.DB, string) {
 	 password_hash TEXT NOT NULL, legacy_sub2api_password_hash TEXT NOT NULL DEFAULT '',
 	 auth_authority TEXT NOT NULL DEFAULT 'local', authority_credential_version BIGINT NOT NULL DEFAULT 0,
 	 sub2_api_user_id BIGINT NOT NULL DEFAULT 0, token_version BIGINT NOT NULL DEFAULT 0,
-	 status TEXT NOT NULL DEFAULT 'active', email_verified_at TIMESTAMPTZ, deleted_at TIMESTAMPTZ,
+	 status TEXT NOT NULL DEFAULT 'active', email_verified_at TIMESTAMPTZ,
+	 password_setup_required BOOLEAN NOT NULL DEFAULT FALSE, deleted_at TIMESTAMPTZ,
 	 token_invalid_before TIMESTAMPTZ, updated_at TIMESTAMPTZ);
 	 CREATE TABLE sub2api_credential_watermarks (sub2_api_user_id BIGINT PRIMARY KEY,
 	 credential_version BIGINT NOT NULL, last_event_id BIGINT NOT NULL, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)`)

@@ -83,6 +83,7 @@ type shopUser struct {
 	TokenVersion               uint64
 	Status                     string
 	EmailVerified              bool
+	PasswordSetupRequired      bool
 }
 
 func BuildPlan(ctx context.Context, mainDB, shopDB *sql.DB, now time.Time) (*Plan, error) {
@@ -158,6 +159,10 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 		return item
 	}
 	if len(mains) == 0 {
+		if len(shops) == 1 && shops[0].PasswordSetupRequired {
+			item.Reason = "shop_only_password_setup_required"
+			return item
+		}
 		item.Reason = "shop_only"
 		return item
 	}
@@ -204,6 +209,9 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 		return item
 	case !shop.EmailVerified:
 		item.Reason = "shop_email_unverified"
+		return item
+	case shop.PasswordSetupRequired:
+		item.Reason = "shop_password_setup_required"
 		return item
 	case !isBcryptHash(main.PasswordHash):
 		item.Reason = "unsupported_main_password_hash"
@@ -481,8 +489,8 @@ func validateShopAgainstPlan(shop shopUser, item PlanItem) error {
 	if normalizeEmail(shop.Email) != item.Email || passwordFingerprint(shop.PasswordHash) != item.ShopPasswordFingerprint {
 		return errors.New("shop identity or primary password changed after planning")
 	}
-	if strings.ToLower(strings.TrimSpace(shop.Status)) != "active" || !shop.EmailVerified {
-		return errors.New("shop status or email verification is no longer eligible")
+	if strings.ToLower(strings.TrimSpace(shop.Status)) != "active" || !shop.EmailVerified || shop.PasswordSetupRequired {
+		return errors.New("shop status, email verification, or password setup policy is no longer eligible")
 	}
 	authority := normalizedAuthority(shop.AuthAuthority)
 	if authority != "local" && authority != "sub2api" {
@@ -528,7 +536,8 @@ func loadShopUserByID(ctx context.Context, q rowQuerier, id uint64, forUpdate bo
 	query := `
 		SELECT id, email, password_hash, COALESCE(legacy_sub2api_password_hash, ''),
 			COALESCE(NULLIF(auth_authority, ''), 'local'), authority_credential_version,
-			sub2_api_user_id, token_version, status, email_verified_at IS NOT NULL
+			sub2_api_user_id, token_version, status, email_verified_at IS NOT NULL,
+			password_setup_required
 		FROM users WHERE id = $1 AND deleted_at IS NULL`
 	if forUpdate {
 		query += " FOR UPDATE"
@@ -538,6 +547,7 @@ func loadShopUserByID(ctx context.Context, q rowQuerier, id uint64, forUpdate bo
 		&user.ID, &user.Email, &user.PasswordHash, &user.LegacySub2APIHash,
 		&user.AuthAuthority, &user.AuthorityCredentialVersion, &user.Sub2APIUserID,
 		&user.TokenVersion, &user.Status, &user.EmailVerified,
+		&user.PasswordSetupRequired,
 	)
 	if err != nil {
 		return shopUser{}, fmt.Errorf("load Shop user %d: %w", id, err)
@@ -569,7 +579,8 @@ func loadShopUsers(ctx context.Context, db *sql.DB) ([]shopUser, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, email, password_hash, COALESCE(legacy_sub2api_password_hash, ''),
 			COALESCE(NULLIF(auth_authority, ''), 'local'), authority_credential_version,
-			sub2_api_user_id, token_version, status, email_verified_at IS NOT NULL
+			sub2_api_user_id, token_version, status, email_verified_at IS NOT NULL,
+			password_setup_required
 		FROM users WHERE deleted_at IS NULL ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -578,7 +589,7 @@ func loadShopUsers(ctx context.Context, db *sql.DB) ([]shopUser, error) {
 	var users []shopUser
 	for rows.Next() {
 		var user shopUser
-		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.LegacySub2APIHash, &user.AuthAuthority, &user.AuthorityCredentialVersion, &user.Sub2APIUserID, &user.TokenVersion, &user.Status, &user.EmailVerified); err != nil {
+		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.LegacySub2APIHash, &user.AuthAuthority, &user.AuthorityCredentialVersion, &user.Sub2APIUserID, &user.TokenVersion, &user.Status, &user.EmailVerified, &user.PasswordSetupRequired); err != nil {
 			return nil, err
 		}
 		users = append(users, user)

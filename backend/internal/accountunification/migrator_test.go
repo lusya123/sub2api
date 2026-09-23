@@ -29,8 +29,8 @@ func TestBuildPlanReadsBothDatabasesWithoutExportingVerifiers(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}).
 			AddRow(11, "user@example.com", mainHash, "", 4, "user", "active", false))
 	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified"}).
-			AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+			AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true, false))
 
 	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
 	if err != nil {
@@ -76,6 +76,46 @@ func TestClassifySafePairAndRedactHashes(t *testing.T) {
 	}
 }
 
+func TestBuildPlanRejectsShopPasswordSetupRequired(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		withMain   bool
+		wantReason string
+	}{
+		{name: "matched pair", withMain: true, wantReason: "shop_password_setup_required"},
+		{name: "shop only", withMain: false, wantReason: "shop_only_password_setup_required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mainDB, mainMock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = mainDB.Close() }()
+			shopDB, shopMock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = shopDB.Close() }()
+			hash := mustTestHash(t, "AnyPassword123")
+			mainRows := sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"})
+			if tc.withMain {
+				mainRows.AddRow(11, "user@example.com", hash, "", 1, "user", "active", false)
+			}
+			mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").WillReturnRows(mainRows)
+			shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
+				WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+					AddRow(22, "user@example.com", hash, "", "local", 0, 0, 3, "active", true, true))
+			plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(plan.Items) != 1 || plan.Items[0].Action != ActionManual || plan.Items[0].Reason != tc.wantReason {
+				t.Fatalf("classification = %#v, want manual/%s", plan.Items, tc.wantReason)
+			}
+		})
+	}
+}
+
 func TestBuildPlanFlagsShopOnlyMainInboxAliasCollision(t *testing.T) {
 	mainDB, mainMock, err := sqlmock.New()
 	if err != nil {
@@ -93,8 +133,8 @@ func TestBuildPlanFlagsShopOnlyMainInboxAliasCollision(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}).
 			AddRow(11, "some.one@gmail.com", hash, "", 1, "user", "active", false))
 	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified"}).
-			AddRow(22, "someone+shop@googlemail.com", hash, "", "local", 0, 0, 0, "active", true))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+			AddRow(22, "someone+shop@googlemail.com", hash, "", "local", 0, 0, 0, "active", true, false))
 
 	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
 	if err != nil {
@@ -127,9 +167,9 @@ func TestBuildPlanFlagsAliasesBetweenTwoShopOnlyAccounts(t *testing.T) {
 	mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}))
 	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified"}).
-			AddRow(21, "first.last@qq.com", hash, "", "local", 0, 0, 0, "active", true).
-			AddRow(22, "first.last+shop@qq.com", hash, "", "local", 0, 0, 0, "active", true))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+			AddRow(21, "first.last@qq.com", hash, "", "local", 0, 0, 0, "active", true, false).
+			AddRow(22, "first.last+shop@qq.com", hash, "", "local", 0, 0, 0, "active", true, false))
 
 	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
 	if err != nil {
@@ -218,12 +258,12 @@ func TestApplyMatchedPairRunsMainThenShopAndCanBeRetried(t *testing.T) {
 		MainLegacyFingerprint:   passwordFingerprint(""), ShopLegacyFingerprint: passwordFingerprint(""),
 		MainCredentialVersion: 4, ShopTokenVersion: 3,
 	}
-	shopColumns := []string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified"}
+	shopColumns := []string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}
 	mainColumns := []string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}
 
 	// Read Shop verifier before the Main-side transaction.
 	shopMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(uint64(22)).
-		WillReturnRows(sqlmock.NewRows(shopColumns).AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true))
+		WillReturnRows(sqlmock.NewRows(shopColumns).AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true, false))
 
 	mainMock.ExpectBegin()
 	mainMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(int64(11)).
@@ -243,7 +283,7 @@ func TestApplyMatchedPairRunsMainThenShopAndCanBeRetried(t *testing.T) {
 	shopMock.ExpectQuery("SELECT credential_version").WithArgs(int64(11)).
 		WillReturnRows(sqlmock.NewRows([]string{"credential_version"}).AddRow(0))
 	shopMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(uint64(22)).
-		WillReturnRows(sqlmock.NewRows(shopColumns).AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true))
+		WillReturnRows(sqlmock.NewRows(shopColumns).AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true, false))
 	shopMock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM users WHERE LOWER").WithArgs("user@example.com").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	shopMock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM users WHERE sub2_api_user_id").WithArgs(int64(11), uint64(22)).
@@ -324,6 +364,7 @@ func TestValidateShopRejectsLocalCredentialAndBindingDrift(t *testing.T) {
 		{"different binding", func(s *shopUser) { s.Sub2APIUserID = 999 }},
 		{"unreviewed local binding", func(s *shopUser) { s.Sub2APIUserID = 11 }},
 		{"legacy verifier", func(s *shopUser) { s.LegacySub2APIHash = main.PasswordHash }},
+		{"password setup required", func(s *shopUser) { s.PasswordSetupRequired = true }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			current := shop
