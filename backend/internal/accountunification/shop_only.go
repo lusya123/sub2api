@@ -53,7 +53,7 @@ func applyShopOnlyItem(ctx context.Context, mainDB, shopDB *sql.DB, item PlanIte
 			return ApplyResult{}, err
 		}
 		if err := requireUniqueInbox(ctx, shopDB, item.Email, shop.ID); err != nil {
-			return ApplyResult{}, fmt.Errorf("Shop inbox collision: %w", err)
+			return ApplyResult{}, fmt.Errorf("shop inbox collision: %w", err)
 		}
 	}
 
@@ -64,17 +64,17 @@ func applyShopOnlyItem(ctx context.Context, mainDB, shopDB *sql.DB, item PlanIte
 	if normalizedAuthority(shop.AuthAuthority) == "sub2api" {
 		if shop.Sub2APIUserID != main.ID || shop.LegacySub2APIHash != main.PasswordHash ||
 			shop.AuthorityCredentialVersion == 0 || shop.AuthorityCredentialVersion > main.CredentialVersion {
-			return ApplyResult{}, errors.New("Shop authority does not match the resumable Main mirror")
+			return ApplyResult{}, errors.New("shop authority does not match the resumable Main mirror")
 		}
 	} else {
 		if main.Status != "disabled" {
-			return ApplyResult{}, errors.New("Main mirror is active before Shop authority promotion")
+			return ApplyResult{}, errors.New("main mirror is active before Shop authority promotion")
 		}
 		// The Main row stays disabled until Shop has atomically adopted its
 		// stable ID. A stale Shop password or binding fails without making the
 		// copied verifier usable at Main.
 		if _, err := applyShopAuthority(ctx, shopDB, item, main); err != nil {
-			return ApplyResult{}, fmt.Errorf("Main mirror remains disabled; Shop promotion can be retried: %w", err)
+			return ApplyResult{}, fmt.Errorf("main mirror remains disabled; Shop promotion can be retried: %w", err)
 		}
 	}
 
@@ -94,15 +94,15 @@ func applyShopOnlyItem(ctx context.Context, mainDB, shopDB *sql.DB, item PlanIte
 		strings.ToLower(strings.TrimSpace(currentShop.Status)) != "active" || !currentShop.EmailVerified ||
 		currentShop.PasswordSetupRequired || currentShop.AuthorityCredentialVersion == 0 ||
 		currentShop.AuthorityCredentialVersion > main.CredentialVersion {
-		return ApplyResult{}, errors.New("Shop authority or status changed before Main activation")
+		return ApplyResult{}, errors.New("shop authority or status changed before Main activation")
 	}
 	if main.Status == "disabled" && (currentShop.TokenVersion != item.ShopTokenVersion+1 ||
 		currentShop.AuthorityCredentialVersion != main.CredentialVersion) {
-		return ApplyResult{}, errors.New("Shop credential state changed before Main activation")
+		return ApplyResult{}, errors.New("shop credential state changed before Main activation")
 	}
 	version, err := activateMainMirror(ctx, mainDB, main, item)
 	if err != nil {
-		return ApplyResult{}, fmt.Errorf("Shop is bound but Main mirror remains disabled; retry the same plan: %w", err)
+		return ApplyResult{}, fmt.Errorf("shop is bound but Main mirror remains disabled; retry the same plan: %w", err)
 	}
 	if err := gate.Commit(); err != nil {
 		return ApplyResult{}, err
@@ -136,14 +136,14 @@ func createOrResumeMainMirror(ctx context.Context, db *sql.DB, item PlanItem, sh
 	}
 	marker := fmt.Sprintf("shop-account-mirror:%d", item.ShopUserIDs[0])
 	if len(rows) > 1 {
-		return mainUser{}, false, errors.New("Main inbox resolves to multiple users")
+		return mainUser{}, false, errors.New("main inbox resolves to multiple users")
 	}
 	if len(rows) == 1 {
 		row := rows[0]
 		if normalizeEmail(row.Email) != item.Email || row.Notes != marker || row.PasswordHash != shopHash ||
 			row.Role != "user" || (row.Status != "disabled" && row.Status != "active") ||
 			(row.Status == "disabled" && (!row.ZeroCredit || row.CredentialVersion != 1)) {
-			return mainUser{}, false, errors.New("Main inbox is occupied by a different or changed account")
+			return mainUser{}, false, errors.New("main inbox is occupied by a different or changed account")
 		}
 		if err := tx.Commit(); err != nil {
 			return mainUser{}, false, err
@@ -151,7 +151,7 @@ func createOrResumeMainMirror(ctx context.Context, db *sql.DB, item PlanItem, sh
 		return row.mainUser, false, nil
 	}
 	if passwordFingerprint(shopHash) != item.ShopPasswordFingerprint || !isBcryptHash(shopHash) {
-		return mainUser{}, false, errors.New("Shop password changed after planning")
+		return mainUser{}, false, errors.New("shop password changed after planning")
 	}
 	var main mainUser
 	// Explicit zero entitlements override registration defaults. Inserting a
@@ -280,7 +280,7 @@ func requireUniqueInbox(ctx context.Context, db *sql.DB, email string, shopID ui
 		_ = rows.Close()
 	}
 	if len(seen) != 1 {
-		return errors.New("Shop inbox no longer resolves uniquely")
+		return errors.New("shop inbox no longer resolves uniquely")
 	}
 	return nil
 }
@@ -290,7 +290,7 @@ type inboxPattern struct{ exact, plus string }
 func inboxLookupPatterns(email string) ([]inboxPattern, error) {
 	local, domain, ok := strings.Cut(inboxIdentity(email), "@")
 	if !ok || local == "" || domain == "" {
-		return nil, errors.New("Shop email has no valid inbox identity")
+		return nil, errors.New("shop email has no valid inbox identity")
 	}
 	domains := []string{domain}
 	if domain == "gmail.com" {
