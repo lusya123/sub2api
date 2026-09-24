@@ -17,6 +17,8 @@ env:
 
 jobs:
   cla-check:
+    # pull_request_target reads the fork's default branch, not this PR's head.
+    # Fork-local PRs must not require the upstream repository's CLA.
     if: |
       github.repository == 'Wei-Shaw/sub2api' &&
       (
