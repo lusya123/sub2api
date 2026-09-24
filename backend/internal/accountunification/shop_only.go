@@ -145,6 +145,9 @@ func createOrResumeMainMirror(ctx context.Context, db *sql.DB, item PlanItem, sh
 			(row.Status == "disabled" && (!row.ZeroCredit || row.CredentialVersion != 1)) {
 			return mainUser{}, false, errors.New("main inbox is occupied by a different or changed account")
 		}
+		if err := ensureMirrorEmailIdentity(ctx, tx, row.ID, item.Email); err != nil {
+			return mainUser{}, false, err
+		}
 		if err := tx.Commit(); err != nil {
 			return mainUser{}, false, err
 		}
@@ -158,16 +161,42 @@ func createOrResumeMainMirror(ctx context.Context, db *sql.DB, item PlanItem, sh
 	// disabled user also prevents a usable stale password if phase two fails.
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO users (email, username, notes, password_hash, role, status, balance, rpm_limit)
-		VALUES ($1, LEFT($1, 100), $2, $3, 'user', 'disabled', 0, 0)
-		RETURNING id, credential_version`, item.Email, marker, shopHash).Scan(&main.ID, &main.CredentialVersion)
+		VALUES ($1, LEFT($4::text, 100), $2, $3, 'user', 'disabled', 0, 0)
+		RETURNING id, credential_version`, item.Email, marker, shopHash, item.Email).Scan(&main.ID, &main.CredentialVersion)
 	if err != nil {
 		return mainUser{}, false, fmt.Errorf("insert disabled zero-credit Main mirror: %w", err)
+	}
+	if err := ensureMirrorEmailIdentity(ctx, tx, main.ID, item.Email); err != nil {
+		return mainUser{}, false, err
 	}
 	main.Email, main.PasswordHash, main.Role, main.Status = item.Email, shopHash, "user", "disabled"
 	if err := tx.Commit(); err != nil {
 		return mainUser{}, false, err
 	}
 	return main, true, nil
+}
+
+// Direct SQL account creation must preserve the same email-identity invariant
+// as the Main user repository. A retry also repairs a mirror created before
+// this invariant was added, but refuses an identity owned by someone else.
+func ensureMirrorEmailIdentity(ctx context.Context, tx *sql.Tx, userID int64, email string) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO auth_identities (user_id, provider_type, provider_key, provider_subject, verified_at, metadata)
+		VALUES ($1, 'email', 'email', $2, NOW(), '{"source":"shop_account_unification"}'::jsonb)
+		ON CONFLICT (provider_type, provider_key, provider_subject) DO NOTHING`, userID, email)
+	if err != nil {
+		return fmt.Errorf("ensure Main email identity: %w", err)
+	}
+	var ownerID int64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT user_id FROM auth_identities
+		WHERE provider_type = 'email' AND provider_key = 'email' AND provider_subject = $1`, email).Scan(&ownerID); err != nil {
+		return fmt.Errorf("read Main email identity: %w", err)
+	}
+	if ownerID != userID {
+		return errors.New("main email identity is owned by another user")
+	}
+	return nil
 }
 
 func activateMainMirror(ctx context.Context, db *sql.DB, main mainUser, item PlanItem) (uint64, error) {

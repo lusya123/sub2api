@@ -45,11 +45,13 @@ func migrationFixture(t *testing.T) (*sql.DB, *sql.DB, string) {
 	}
 	main, _ := makeDB("main")
 	shop, name := makeDB("shop")
-	_, err = main.Exec(`CREATE TABLE users (id BIGSERIAL PRIMARY KEY, email TEXT NOT NULL,
-	 username TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+	// Match production's differing varchar widths so PostgreSQL catches
+	// placeholders reused across email and LEFT(username) expressions.
+	_, err = main.Exec(`CREATE TABLE users (id BIGSERIAL PRIMARY KEY, email VARCHAR(255) NOT NULL,
+	 username VARCHAR(100) NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
 	 balance NUMERIC(20,8) NOT NULL DEFAULT 0, concurrency INT NOT NULL DEFAULT 5,
 	 rpm_limit INT NOT NULL DEFAULT 0,
-	 password_hash TEXT NOT NULL, legacy_shop_password_hash TEXT, role TEXT NOT NULL DEFAULT 'user',
+	 password_hash VARCHAR(255) NOT NULL, legacy_shop_password_hash TEXT, role TEXT NOT NULL DEFAULT 'user',
 	 status TEXT NOT NULL DEFAULT 'active', totp_enabled BOOLEAN DEFAULT FALSE,
 	 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), deleted_at TIMESTAMPTZ)`)
 	require.NoError(t, err)
@@ -59,6 +61,13 @@ func migrationFixture(t *testing.T) (*sql.DB, *sql.DB, string) {
 		_, err = main.Exec(string(migration))
 		require.NoError(t, err)
 	}
+	_, err = main.Exec(`CREATE TABLE auth_identities (
+	 id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	 provider_type VARCHAR(20) NOT NULL, provider_key TEXT NOT NULL,
+	 provider_subject TEXT NOT NULL, verified_at TIMESTAMPTZ,
+	 metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+	 UNIQUE (provider_type, provider_key, provider_subject))`)
+	require.NoError(t, err)
 	_, err = shop.Exec(`CREATE TABLE users (id BIGSERIAL PRIMARY KEY, email TEXT NOT NULL,
 	 password_hash TEXT NOT NULL, legacy_sub2api_password_hash TEXT NOT NULL DEFAULT '',
 	 auth_authority TEXT NOT NULL DEFAULT 'local', authority_credential_version BIGINT NOT NULL DEFAULT 0,
@@ -159,6 +168,9 @@ func TestPostgresShopOnlyCreatesIndependentZeroCreditMainIdentity(t *testing.T) 
 	require.Equal(t, "user", role)
 	require.Equal(t, "active", status)
 	require.Equal(t, "0.00000000", balance)
+	var identityOwner int64
+	require.NoError(t, main.QueryRow(`SELECT user_id FROM auth_identities WHERE provider_type='email' AND provider_key='email' AND provider_subject='shop-only@example.com'`).Scan(&identityOwner))
+	require.Equal(t, results[0].MainUserID, identityOwner)
 	require.Equal(t, 5, concurrency)
 	require.Zero(t, rpmLimit)
 	var authority string
@@ -175,9 +187,33 @@ func TestPostgresShopOnlyCreatesIndependentZeroCreditMainIdentity(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, retried, 1)
 	require.False(t, retried[0].MainCreated)
+	_, err = main.Exec(`DELETE FROM auth_identities WHERE provider_type='email' AND provider_key='email' AND provider_subject='shop-only@example.com'`)
+	require.NoError(t, err)
+	_, err = ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.NoError(t, err)
+	require.NoError(t, main.QueryRow(`SELECT user_id FROM auth_identities WHERE provider_type='email' AND provider_key='email' AND provider_subject='shop-only@example.com'`).Scan(&identityOwner))
+	require.Equal(t, results[0].MainUserID, identityOwner)
 	var mirrorCount int
 	require.NoError(t, main.QueryRow(`SELECT COUNT(*) FROM users WHERE email='shop-only@example.com'`).Scan(&mirrorCount))
 	require.Equal(t, 1, mirrorCount)
+}
+
+func TestPostgresShopOnlyRefusesEmailIdentityOwnedByAnotherUser(t *testing.T) {
+	main, shop, _ := migrationFixture(t)
+	ctx := context.Background()
+	hash := mustTestHash(t, "ShopOnlyPassword123")
+	_, err := shop.Exec(`INSERT INTO users (email, password_hash, email_verified_at) VALUES ('shop-only@example.com', $1, NOW())`, hash)
+	require.NoError(t, err)
+	plan, err := BuildPlan(ctx, main, shop, time.Now())
+	require.NoError(t, err)
+	_, err = main.Exec(`INSERT INTO auth_identities (user_id, provider_type, provider_key, provider_subject)
+	 VALUES (1, 'email', 'email', 'shop-only@example.com')`)
+	require.NoError(t, err)
+	_, err = ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.ErrorContains(t, err, "owned by another user")
+	var mirrorCount int
+	require.NoError(t, main.QueryRow(`SELECT COUNT(*) FROM users WHERE email='shop-only@example.com'`).Scan(&mirrorCount))
+	require.Zero(t, mirrorCount)
 }
 
 func TestPostgresShopOnlyRefusesAliasCreatedAfterPlanning(t *testing.T) {
