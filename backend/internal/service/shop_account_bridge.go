@@ -50,9 +50,10 @@ func (s *AuthService) VerifyShopAccountBridgePassword(ctx context.Context, email
 	return user, nil
 }
 
-// CreateShopAccountBridgeUser creates one ordinary user with the same safe
-// defaults as an email signup, but deliberately performs no login and returns
-// no token. The caller cannot select a role, balance, groups, quotas, or status.
+// CreateShopAccountBridgeUser creates a zero-credit Main identity for a Shop
+// customer. It performs no login and returns no token. Signup grants must not
+// cross the Shop/Main financial boundary, even if Main's email signup defaults
+// are changed after rollout.
 func (s *AuthService) CreateShopAccountBridgeUser(ctx context.Context, email, password, username string) (*User, error) {
 	if s == nil || s.userRepo == nil {
 		return nil, ErrServiceUnavailable
@@ -79,6 +80,7 @@ func (s *AuthService) CreateShopAccountBridgeUser(ctx context.Context, email, pa
 		return nil, err
 	}
 	plan := s.resolveSignupGrantPlan(ctx, "email")
+	plan.Balance = 0
 	defaultRPMLimit := 0
 	if s.settingService != nil {
 		defaultRPMLimit = s.settingService.GetDefaultUserRPMLimit(ctx)
@@ -101,7 +103,5 @@ func (s *AuthService) CreateShopAccountBridgeUser(ctx context.Context, email, pa
 	}
 
 	s.postAuthUserBootstrap(ctx, user, "email", false)
-	s.assignSubscriptions(ctx, user.ID, plan.Subscriptions, "auto assigned by scoped shop account bridge")
-	_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &plan)
 	return user, nil
 }
