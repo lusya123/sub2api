@@ -194,7 +194,7 @@ func ensureMirrorEmailIdentity(ctx context.Context, tx *sql.Tx, userID int64, em
 		return fmt.Errorf("read Main email identity: %w", err)
 	}
 	if ownerID != userID {
-		return errors.New("Main email identity is owned by another user")
+		return errors.New("main email identity is owned by another user")
 	}
 	return nil
 }
