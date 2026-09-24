@@ -277,20 +277,19 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 		item.Reason = "main_legacy_hash_conflict"
 		return item
 	}
-	if shop.LegacySub2APIHash != "" && shop.LegacySub2APIHash != main.PasswordHash {
-		item.Reason = "shop_legacy_hash_conflict"
-		return item
-	}
 	if shop.AuthorityCredentialVersion > main.CredentialVersion {
 		item.Reason = "shop_authority_version_ahead"
 		return item
 	}
-
-	mainAcceptsShop := main.PasswordHash == shop.PasswordHash || main.LegacyShopHash == shop.PasswordHash
-	shopMirrorReady := shop.LegacySub2APIHash == main.PasswordHash
-	if authority == "sub2api" && shop.Sub2APIUserID == main.ID && mainAcceptsShop && shopMirrorReady && shop.AuthorityCredentialVersion == main.CredentialVersion {
+	if authority == "sub2api" && shop.Sub2APIUserID == main.ID && shop.AuthorityCredentialVersion == main.CredentialVersion {
+		// After a Main password change, Shop's historical verifier can be
+		// stale while live authentication remains delegated to Main.
 		item.Action = ActionAlreadyDone
 		item.Reason = "already_applied"
+		return item
+	}
+	if shop.LegacySub2APIHash != "" && shop.LegacySub2APIHash != main.PasswordHash {
+		item.Reason = "shop_legacy_hash_conflict"
 		return item
 	}
 

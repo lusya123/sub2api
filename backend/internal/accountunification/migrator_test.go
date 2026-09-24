@@ -303,6 +303,23 @@ func TestClassifyAlreadyApplied(t *testing.T) {
 	}
 }
 
+func TestClassifyAlreadyAppliedAfterMainPasswordRotation(t *testing.T) {
+	oldMainHash := mustTestHash(t, "OriginalMainPassword123")
+	newMainHash := mustTestHash(t, "RotatedMainPassword456")
+	shopHash := mustTestHash(t, "OriginalShopPassword789")
+	item := classify("u@example.com", []mainUser{{
+		ID: 1, Email: "u@example.com", PasswordHash: newMainHash,
+		CredentialVersion: 3, Role: "user", Status: "active",
+	}}, []shopUser{{
+		ID: 2, Email: "u@example.com", PasswordHash: shopHash, LegacySub2APIHash: oldMainHash,
+		AuthAuthority: "sub2api", AuthorityCredentialVersion: 3, Sub2APIUserID: 1,
+		Status: "active", EmailVerified: true,
+	}})
+	if item.Action != ActionAlreadyDone || item.Reason != "already_applied" {
+		t.Fatalf("post-rotation classification = %s/%s, want already_applied", item.Action, item.Reason)
+	}
+}
+
 func TestApplyMatchedPairRunsMainThenShopAndCanBeRetried(t *testing.T) {
 	mainDB, mainMock, err := sqlmock.New()
 	if err != nil {
