@@ -145,8 +145,11 @@ func TestClassifyShopOnlySeparatesUnsafeAccountsFromMirrorCandidates(t *testing.
 		})
 	}
 	item := classify("user@example.com", nil, []shopUser{valid})
-	if item.Action != ActionManual || item.Reason != "shop_only" {
-		t.Fatalf("valid Shop-only classification = %s/%s, want manual/shop_only", item.Action, item.Reason)
+	if item.Action != "create_main" || item.Reason != "shop_only_create_main" {
+		t.Fatalf("valid Shop-only classification = %s/%s, want create_main/shop_only_create_main", item.Action, item.Reason)
+	}
+	if item.ShopPasswordFingerprint != passwordFingerprint(valid.PasswordHash) || item.ShopTokenVersion != valid.TokenVersion {
+		t.Fatal("Shop-only plan must freeze password and credential state without exporting a verifier")
 	}
 }
 
@@ -159,6 +162,24 @@ func TestClassifyShopOnlyDoesNotLabelDuplicateEmailAsMirrorCandidate(t *testing.
 	item := classify("user@example.com", nil, shops)
 	if item.Action != ActionManual || item.Reason != "duplicate_shop_email" {
 		t.Fatalf("classification = %s/%s, want manual/duplicate_shop_email", item.Action, item.Reason)
+	}
+}
+
+func TestClassifyShopOnlyRejectsMalformedEmailBeforeMainCreation(t *testing.T) {
+	shop := shopUser{ID: 22, Email: "not-an-email", PasswordHash: mustTestHash(t, "ShopPassword456"),
+		AuthAuthority: "local", Status: "active", EmailVerified: true}
+	item := classify(shop.Email, nil, []shopUser{shop})
+	if item.Action != ActionManual || item.Reason != "shop_only_invalid_email" {
+		t.Fatalf("malformed Shop email was offered for Main creation: %s/%s", item.Action, item.Reason)
+	}
+}
+
+func TestClassifyShopOnlyRejectsTelegramPlaceholderEmail(t *testing.T) {
+	shop := shopUser{ID: 22, Email: "telegram_123@login.local", PasswordHash: mustTestHash(t, "ShopPassword456"),
+		AuthAuthority: "local", Status: "active", EmailVerified: true}
+	item := classify(shop.Email, nil, []shopUser{shop})
+	if item.Action != ActionManual || item.Reason != "shop_only_placeholder_email" {
+		t.Fatalf("Telegram placeholder was offered for Main creation: %s/%s", item.Action, item.Reason)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/mail"
 	"os"
 	"sort"
 	"strings"
@@ -21,6 +22,7 @@ import (
 const (
 	PlanVersion       = 2
 	ActionApply       = "apply"
+	ActionCreateMain  = "create_main"
 	ActionAlreadyDone = "already_applied"
 	ActionManual      = "manual_review"
 )
@@ -57,6 +59,7 @@ type ApplyResult struct {
 	MainUserID            int64  `json:"main_user_id"`
 	ShopUserID            uint64 `json:"shop_user_id"`
 	CredentialVersion     uint64 `json:"credential_version"`
+	MainCreated           bool   `json:"main_created"`
 	MainLegacyAdded       bool   `json:"main_legacy_added"`
 	ShopAuthorityPromoted bool   `json:"shop_authority_promoted"`
 }
@@ -131,11 +134,13 @@ func BuildPlan(ctx context.Context, mainDB, shopDB *sql.DB, now time.Time) (*Pla
 	}
 	for _, email := range orderedEmails {
 		item := classify(email, mainByEmail[email], shopByEmail[email])
-		if item.Reason == "shop_only" {
+		if item.Action == ActionCreateMain {
 			inbox := inboxIdentity(email)
 			if _, collision := mainByInbox[inbox]; collision {
+				item.Action = ActionManual
 				item.Reason = "shop_only_main_alias_collision"
 			} else if shopInboxCounts[inbox] > 1 {
+				item.Action = ActionManual
 				item.Reason = "shop_only_shop_alias_collision"
 			}
 		}
@@ -169,7 +174,18 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 		}
 		if len(shops) == 1 {
 			shop := shops[0]
+			item.ShopPasswordFingerprint = passwordFingerprint(shop.PasswordHash)
+			item.ShopLegacyFingerprint = passwordFingerprint(shop.LegacySub2APIHash)
+			item.ShopAuthorityVersion = shop.AuthorityCredentialVersion
+			item.ShopTokenVersion = shop.TokenVersion
+			item.ShopAuthAuthority = normalizedAuthority(shop.AuthAuthority)
+			item.ShopBoundSub2APIUserID = shop.Sub2APIUserID
 			switch {
+			case strings.HasSuffix(email, ".invalid") ||
+				(strings.HasPrefix(email, "telegram_") && strings.HasSuffix(email, "@login.local")):
+				item.Reason = "shop_only_placeholder_email"
+			case !validMigrationEmail(email):
+				item.Reason = "shop_only_invalid_email"
 			case strings.ToLower(strings.TrimSpace(shop.Status)) != "active":
 				item.Reason = "shop_only_inactive"
 			case !shop.EmailVerified:
@@ -185,7 +201,8 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 			case shop.AuthorityCredentialVersion != 0:
 				item.Reason = "shop_only_authority_version_conflict"
 			default:
-				item.Reason = "shop_only"
+				item.Action = ActionCreateMain
+				item.Reason = "shop_only_create_main"
 			}
 			return item
 		}
@@ -280,6 +297,11 @@ func classify(email string, mains []mainUser, shops []shopUser) PlanItem {
 	item.Action = ActionApply
 	item.Reason = "matched_safe_pair"
 	return item
+}
+
+func validMigrationEmail(email string) bool {
+	address, err := mail.ParseAddress(email)
+	return err == nil && address.Address == email
 }
 
 func Apply(ctx context.Context, mainDB, shopDB *sql.DB, plan *Plan, maxUsers int, applyAll bool) ([]ApplyResult, error) {

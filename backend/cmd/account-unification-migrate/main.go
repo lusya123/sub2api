@@ -84,7 +84,8 @@ func runApply(args []string) error {
 	planPath := flags.String("plan", "", "plan file produced by the plan command")
 	planDigest := flags.String("plan-sha256", "", "exact SHA-256 printed by the plan command")
 	confirm := flags.String("confirm", "", "exact mutation confirmation")
-	maxUsers := flags.Int("max-users", 1, "maximum matched accounts to apply")
+	cohort := flags.String("cohort", "matched", "eligible cohort: matched or shop-only")
+	maxUsers := flags.Int("max-users", 1, "maximum accounts to apply")
 	applyAll := flags.Bool("all", false, "apply all eligible plan items")
 	allowProduction := flags.Bool("allow-production", false, "allow a production-labeled plan after exact confirmation")
 	resultPath := flags.String("result", "", "optional 0600 JSON result path")
@@ -109,7 +110,15 @@ func runApply(args []string) error {
 	if plan.Target == "" || !strings.EqualFold(plan.Target, target) {
 		return fmt.Errorf("plan target %q does not match ACCOUNT_UNIFICATION_TARGET %q", plan.Target, target)
 	}
-	expectedConfirmation := "APPLY_MATCHED_ACCOUNTS_TO_" + strings.ToUpper(target)
+	var expectedConfirmation string
+	switch *cohort {
+	case "matched":
+		expectedConfirmation = "APPLY_MATCHED_ACCOUNTS_TO_" + strings.ToUpper(target)
+	case "shop-only":
+		expectedConfirmation = "CREATE_SHOP_ONLY_MAIN_ACCOUNTS_IN_" + strings.ToUpper(target)
+	default:
+		return errors.New("--cohort must be matched or shop-only")
+	}
 	if *confirm != expectedConfirmation {
 		return fmt.Errorf("--confirm must equal %q", expectedConfirmation)
 	}
@@ -126,13 +135,19 @@ func runApply(args []string) error {
 	if err := pingBoth(ctx, mainDB, shopDB); err != nil {
 		return err
 	}
-	results, err := accountunification.Apply(ctx, mainDB, shopDB, plan, *maxUsers, *applyAll)
+	var results []accountunification.ApplyResult
+	if *cohort == "shop-only" {
+		results, err = accountunification.ApplyShopOnly(ctx, mainDB, shopDB, plan, *maxUsers, *applyAll)
+	} else {
+		results, err = accountunification.Apply(ctx, mainDB, shopDB, plan, *maxUsers, *applyAll)
+	}
 	if writeErr := accountunification.WriteResults(*resultPath, results); writeErr != nil && err == nil {
 		err = writeErr
 	}
 	printJSON(map[string]any{
 		"mode":          "apply",
 		"target":        target,
+		"cohort":        *cohort,
 		"applied_count": len(results),
 		"result_path":   *resultPath,
 	})

@@ -46,8 +46,12 @@ func migrationFixture(t *testing.T) (*sql.DB, *sql.DB, string) {
 	main, _ := makeDB("main")
 	shop, name := makeDB("shop")
 	_, err = main.Exec(`CREATE TABLE users (id BIGSERIAL PRIMARY KEY, email TEXT NOT NULL,
+	 username TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+	 balance NUMERIC(20,8) NOT NULL DEFAULT 0, concurrency INT NOT NULL DEFAULT 5,
+	 rpm_limit INT NOT NULL DEFAULT 0,
 	 password_hash TEXT NOT NULL, legacy_shop_password_hash TEXT, role TEXT NOT NULL DEFAULT 'user',
-	 status TEXT NOT NULL DEFAULT 'active', totp_enabled BOOLEAN DEFAULT FALSE, deleted_at TIMESTAMPTZ)`)
+	 status TEXT NOT NULL DEFAULT 'active', totp_enabled BOOLEAN DEFAULT FALSE,
+	 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), deleted_at TIMESTAMPTZ)`)
 	require.NoError(t, err)
 	for _, name := range []string{"194_user_credential_version_shop_outbox.sql", "195_user_credential_version_soft_delete.sql"} {
 		migration, err := migrations.FS.ReadFile(name)
@@ -59,6 +63,7 @@ func migrationFixture(t *testing.T) (*sql.DB, *sql.DB, string) {
 	 password_hash TEXT NOT NULL, legacy_sub2api_password_hash TEXT NOT NULL DEFAULT '',
 	 auth_authority TEXT NOT NULL DEFAULT 'local', authority_credential_version BIGINT NOT NULL DEFAULT 0,
 	 sub2_api_user_id BIGINT NOT NULL DEFAULT 0, token_version BIGINT NOT NULL DEFAULT 0,
+	 balance NUMERIC(20,8) NOT NULL DEFAULT 0,
 	 status TEXT NOT NULL DEFAULT 'active', email_verified_at TIMESTAMPTZ,
 	 password_setup_required BOOLEAN NOT NULL DEFAULT FALSE, deleted_at TIMESTAMPTZ,
 	 token_invalid_before TIMESTAMPTZ, updated_at TIMESTAMPTZ);
@@ -128,4 +133,131 @@ func TestPostgresMigrationUsesEventLockOrder(t *testing.T) {
 	migrationErr := <-done
 	require.NoError(t, lockErr, "migration held user lock while waiting for event watermark")
 	require.NoError(t, migrationErr)
+}
+
+func TestPostgresShopOnlyCreatesIndependentZeroCreditMainIdentity(t *testing.T) {
+	main, shop, _ := migrationFixture(t)
+	ctx := context.Background()
+	shopHash := mustTestHash(t, "ShopOnlyPassword123")
+	_, err := shop.Exec(`INSERT INTO users (email, password_hash, email_verified_at, balance) VALUES ('shop-only@example.com', $1, NOW(), 42)`, shopHash)
+	require.NoError(t, err)
+	plan, err := BuildPlan(ctx, main, shop, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, 1, plan.Counts[ActionCreateMain])
+
+	results, err := ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.True(t, results[0].MainCreated)
+	var mainHash, role, status string
+	var balance string
+	var concurrency, rpmLimit int
+	err = main.QueryRow(`SELECT password_hash, role, status, balance, concurrency, rpm_limit FROM users WHERE email='shop-only@example.com'`).
+		Scan(&mainHash, &role, &status, &balance, &concurrency, &rpmLimit)
+	require.NoError(t, err)
+	require.Equal(t, shopHash, mainHash)
+	require.Equal(t, "user", role)
+	require.Equal(t, "active", status)
+	require.Equal(t, "0.00000000", balance)
+	require.Equal(t, 5, concurrency)
+	require.Zero(t, rpmLimit)
+	var authority string
+	var binding int64
+	err = shop.QueryRow(`SELECT auth_authority, sub2_api_user_id FROM users WHERE email='shop-only@example.com'`).Scan(&authority, &binding)
+	require.NoError(t, err)
+	require.Equal(t, "sub2api", authority)
+	require.Equal(t, results[0].MainUserID, binding)
+	var shopBalance string
+	require.NoError(t, shop.QueryRow(`SELECT balance FROM users WHERE email='shop-only@example.com'`).Scan(&shopBalance))
+	require.Equal(t, "42.00000000", shopBalance)
+
+	retried, err := ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.NoError(t, err)
+	require.Len(t, retried, 1)
+	require.False(t, retried[0].MainCreated)
+	var mirrorCount int
+	require.NoError(t, main.QueryRow(`SELECT COUNT(*) FROM users WHERE email='shop-only@example.com'`).Scan(&mirrorCount))
+	require.Equal(t, 1, mirrorCount)
+}
+
+func TestPostgresShopOnlyRefusesAliasCreatedAfterPlanning(t *testing.T) {
+	main, shop, _ := migrationFixture(t)
+	ctx := context.Background()
+	hash := mustTestHash(t, "ShopOnlyPassword123")
+	_, err := shop.Exec(`INSERT INTO users (email, password_hash, email_verified_at) VALUES ('john.smith@gmail.com', $1, NOW())`, hash)
+	require.NoError(t, err)
+	plan, err := BuildPlan(ctx, main, shop, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, 1, plan.Counts[ActionCreateMain])
+	_, err = main.Exec(`INSERT INTO users (email, password_hash) VALUES ('johnsmith+new@googlemail.com', $1)`, hash)
+	require.NoError(t, err)
+	_, err = ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.ErrorContains(t, err, "occupied")
+	var mirrorCount int
+	require.NoError(t, main.QueryRow(`SELECT COUNT(*) FROM users WHERE email='john.smith@gmail.com'`).Scan(&mirrorCount))
+	require.Zero(t, mirrorCount)
+}
+
+func TestPostgresShopOnlyResumesDisabledMainMirror(t *testing.T) {
+	main, shop, _ := migrationFixture(t)
+	ctx := context.Background()
+	hash := mustTestHash(t, "ShopOnlyPassword123")
+	_, err := shop.Exec(`INSERT INTO users (email, password_hash, email_verified_at) VALUES ('retry@example.com', $1, NOW())`, hash)
+	require.NoError(t, err)
+	plan, err := BuildPlan(ctx, main, shop, time.Now())
+	require.NoError(t, err)
+	var shopID uint64
+	require.NoError(t, shop.QueryRow(`SELECT id FROM users WHERE email='retry@example.com'`).Scan(&shopID))
+	_, err = main.Exec(`INSERT INTO users (email, password_hash, notes, status, balance) VALUES ('retry@example.com', $1, $2, 'disabled', 0)`, hash, fmt.Sprintf("shop-account-mirror:%d", shopID))
+	require.NoError(t, err)
+	result, err := ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.False(t, result[0].MainCreated)
+	var status string
+	require.NoError(t, main.QueryRow(`SELECT status FROM users WHERE email='retry@example.com'`).Scan(&status))
+	require.Equal(t, "active", status)
+}
+
+func TestPostgresShopOnlyRetryNeverReenablesAdministrativelyDisabledMainUser(t *testing.T) {
+	main, shop, _ := migrationFixture(t)
+	ctx := context.Background()
+	hash := mustTestHash(t, "ShopOnlyPassword123")
+	_, err := shop.Exec(`INSERT INTO users (email, password_hash, email_verified_at) VALUES ('disabled@example.com', $1, NOW())`, hash)
+	require.NoError(t, err)
+	plan, err := BuildPlan(ctx, main, shop, time.Now())
+	require.NoError(t, err)
+	_, err = ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.NoError(t, err)
+	_, err = main.Exec(`UPDATE users SET status='disabled' WHERE email='disabled@example.com'`)
+	require.NoError(t, err)
+	_, err = ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.Error(t, err)
+	var status string
+	require.NoError(t, main.QueryRow(`SELECT status FROM users WHERE email='disabled@example.com'`).Scan(&status))
+	require.Equal(t, "disabled", status)
+}
+
+func TestPostgresShopOnlyRetryDoesNotActivateMainWhenShopWasDisabled(t *testing.T) {
+	main, shop, _ := migrationFixture(t)
+	ctx := context.Background()
+	hash := mustTestHash(t, "ShopOnlyPassword123")
+	_, err := shop.Exec(`INSERT INTO users (email, password_hash, email_verified_at) VALUES ('shop-disabled@example.com', $1, NOW())`, hash)
+	require.NoError(t, err)
+	plan, err := BuildPlan(ctx, main, shop, time.Now())
+	require.NoError(t, err)
+	var shopID uint64
+	require.NoError(t, shop.QueryRow(`SELECT id FROM users WHERE email='shop-disabled@example.com'`).Scan(&shopID))
+	var mainID int64
+	err = main.QueryRow(`INSERT INTO users (email, password_hash, notes, status, balance) VALUES ('shop-disabled@example.com', $1, $2, 'disabled', 0) RETURNING id`, hash, fmt.Sprintf("shop-account-mirror:%d", shopID)).Scan(&mainID)
+	require.NoError(t, err)
+	_, err = shop.Exec(`UPDATE users SET auth_authority='sub2api', sub2_api_user_id=$1,
+	 legacy_sub2api_password_hash=$2, authority_credential_version=1, status='disabled'
+	 WHERE id=$3`, mainID, hash, shopID)
+	require.NoError(t, err)
+	_, err = ApplyShopOnly(ctx, main, shop, plan, 1, false)
+	require.Error(t, err)
+	var status string
+	require.NoError(t, main.QueryRow(`SELECT status FROM users WHERE id=$1`, mainID).Scan(&status))
+	require.Equal(t, "disabled", status)
 }
