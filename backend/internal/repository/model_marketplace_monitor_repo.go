@@ -199,10 +199,31 @@ func (r *modelMarketplaceMonitorRepository) ListLatestForMonitorIDs(ctx context.
 		return out, nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT DISTINCT ON (monitor_id, model) monitor_id, model, status, latency_ms, ping_latency_ms, checked_at
-		FROM model_marketplace_monitor_histories
-		WHERE monitor_id = ANY($1)
-		ORDER BY monitor_id, model, checked_at DESC`, pq.Array(ids))
+		WITH requested_monitors AS (
+		    SELECT unnest($1::bigint[]) AS monitor_id
+		),
+		targets AS (
+		    SELECT m.id AS monitor_id, btrim(m.primary_model) AS model
+		    FROM model_marketplace_monitors m
+		    JOIN requested_monitors r ON r.monitor_id = m.id
+		    WHERE btrim(m.primary_model) <> ''
+		    UNION
+		    SELECT m.id AS monitor_id, btrim(extra.model) AS model
+		    FROM model_marketplace_monitors m
+		    JOIN requested_monitors r ON r.monitor_id = m.id
+		    CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(m.extra_models, '[]'::jsonb)) AS extra(model)
+		    WHERE btrim(extra.model) <> ''
+		)
+		SELECT t.monitor_id, t.model, h.status, h.latency_ms, h.ping_latency_ms, h.checked_at
+		FROM targets t
+		JOIN LATERAL (
+		    SELECT h.status, h.latency_ms, h.ping_latency_ms, h.checked_at
+		    FROM model_marketplace_monitor_histories h
+		    WHERE h.monitor_id = t.monitor_id AND h.model = t.model
+		    ORDER BY h.checked_at DESC
+		    LIMIT 1
+		) h ON TRUE
+		ORDER BY t.monitor_id, t.model`, pq.Array(ids))
 	if err != nil {
 		return nil, err
 	}
@@ -260,24 +281,19 @@ func (r *modelMarketplaceMonitorRepository) ListRecentHistoryForMonitors(
 
 	const q = `
 		WITH targets AS (
-		    SELECT unnest($1::bigint[]) AS monitor_id,
-		           unnest($2::text[])   AS model
-		),
-		ranked AS (
-		    SELECT h.monitor_id,
-		           h.status,
-		           h.latency_ms,
-		           h.ping_latency_ms,
-		           h.checked_at,
-		           ROW_NUMBER() OVER (PARTITION BY h.monitor_id ORDER BY h.checked_at DESC) AS rn
-		    FROM model_marketplace_monitor_histories h
-		    JOIN targets t
-		      ON t.monitor_id = h.monitor_id AND t.model = h.model
+		    SELECT *
+		    FROM unnest($1::bigint[], $2::text[]) AS t(monitor_id, model)
 		)
-		SELECT monitor_id, status, latency_ms, ping_latency_ms, checked_at
-		FROM ranked
-		WHERE rn <= $3
-		ORDER BY monitor_id, checked_at DESC
+		SELECT t.monitor_id, h.status, h.latency_ms, h.ping_latency_ms, h.checked_at
+		FROM targets t
+		JOIN LATERAL (
+		    SELECT h.status, h.latency_ms, h.ping_latency_ms, h.checked_at
+		    FROM model_marketplace_monitor_histories h
+		    WHERE h.monitor_id = t.monitor_id AND h.model = t.model
+		    ORDER BY h.checked_at DESC
+		    LIMIT $3
+		) h ON TRUE
+		ORDER BY t.monitor_id, h.checked_at DESC
 	`
 	rows, err := r.db.QueryContext(ctx, q, pq.Array(pairIDs), pq.Array(pairModels), perMonitorLimit)
 	if err != nil {
@@ -316,25 +332,19 @@ func (r *modelMarketplaceMonitorRepository) ListRecentHistoryForMonitorModels(
 
 	const q = `
 		WITH targets AS (
-		    SELECT unnest($1::bigint[]) AS monitor_id,
-		           unnest($2::text[])   AS model
-		),
-		ranked AS (
-		    SELECT h.monitor_id,
-		           h.model,
-		           h.status,
-		           h.latency_ms,
-		           h.ping_latency_ms,
-		           h.checked_at,
-		           ROW_NUMBER() OVER (PARTITION BY h.monitor_id, h.model ORDER BY h.checked_at DESC) AS rn
-		    FROM model_marketplace_monitor_histories h
-		    JOIN targets t
-		      ON t.monitor_id = h.monitor_id AND t.model = h.model
+		    SELECT *
+		    FROM unnest($1::bigint[], $2::text[]) AS t(monitor_id, model)
 		)
-		SELECT monitor_id, model, status, latency_ms, ping_latency_ms, checked_at
-		FROM ranked
-		WHERE rn <= $3
-		ORDER BY monitor_id, model, checked_at DESC
+		SELECT t.monitor_id, t.model, h.status, h.latency_ms, h.ping_latency_ms, h.checked_at
+		FROM targets t
+		JOIN LATERAL (
+		    SELECT h.status, h.latency_ms, h.ping_latency_ms, h.checked_at
+		    FROM model_marketplace_monitor_histories h
+		    WHERE h.monitor_id = t.monitor_id AND h.model = t.model
+		    ORDER BY h.checked_at DESC
+		    LIMIT $3
+		) h ON TRUE
+		ORDER BY t.monitor_id, t.model, h.checked_at DESC
 	`
 	rows, err := r.db.QueryContext(ctx, q, pq.Array(pairIDs), pq.Array(pairModels), perModelLimit)
 	if err != nil {

@@ -96,17 +96,18 @@ type UserListFilters struct {
 // 注意这里没有 balance / total_recharged：余额只能经由 AdjustBalance、
 // SetBalance、UpdateBalance、DeductBalance 等原子接口修改，Update 永远不碰它们。
 type UserUpdateFields struct {
-	Email        bool
-	Username     bool
-	Notes        bool
-	PasswordHash bool
-	Role         bool
-	Status       bool
-	Concurrency  bool
-	RPMLimit     bool
-	SignupSource bool
-	LastLoginAt  bool
-	LastActiveAt bool
+	Email                  bool
+	Username               bool
+	Notes                  bool
+	PasswordHash           bool
+	LegacyShopPasswordHash bool
+	Role                   bool
+	Status                 bool
+	Concurrency            bool
+	RPMLimit               bool
+	SignupSource           bool
+	LastLoginAt            bool
+	LastActiveAt           bool
 	// BalanceNotifySettings 覆盖 balance_notify_enabled / _threshold_type / _threshold。
 	BalanceNotifySettings bool
 	// BalanceNotifyExtraEmails 与上一项分开，避免"改通知阈值"覆盖并发的"加通知邮箱"。
@@ -286,9 +287,6 @@ type UserService struct {
 	settingRepo          SettingRepository
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	billingCache         BillingCache
-	shopPasswordSync     func(ctx context.Context, userID int64, email, newPassword string) error
-	shopPasswordBlock    func(userID int64, passwordHash string)
-	shopPasswordUnblock  func(userID int64, passwordHash string)
 	lastActiveTouchL1    sync.Map
 	lastActiveTouchSF    singleflight.Group
 }
@@ -301,31 +299,6 @@ func NewUserService(userRepo UserRepository, settingRepo SettingRepository, auth
 		authCacheInvalidator: authCacheInvalidator,
 		billingCache:         billingCache,
 	}
-}
-
-// SetShopPasswordSync injects the optional Shop account password synchronizer.
-func (s *UserService) SetShopPasswordSync(syncFn func(ctx context.Context, userID int64, email, newPassword string) error) {
-	if s == nil {
-		return
-	}
-	s.shopPasswordSync = syncFn
-}
-
-// SetShopPasswordLoginSyncBlocker injects an optional stale login-sync blocker.
-func (s *UserService) SetShopPasswordLoginSyncBlocker(blockFn func(userID int64, passwordHash string)) {
-	if s == nil {
-		return
-	}
-	s.shopPasswordBlock = blockFn
-}
-
-// SetShopPasswordLoginSyncUnblocker releases stale login-sync blockers after
-// the password change has either committed or failed.
-func (s *UserService) SetShopPasswordLoginSyncUnblocker(unblockFn func(userID int64, passwordHash string)) {
-	if s == nil {
-		return
-	}
-	s.shopPasswordUnblock = unblockFn
 }
 
 // GetFirstAdmin 获取首个管理员用户（用于 Admin API Key 认证）
@@ -1049,20 +1022,6 @@ func (s *UserService) ChangePassword(ctx context.Context, userID int64, req Chan
 		return ErrPasswordIncorrect
 	}
 
-	oldPasswordHash := strings.TrimSpace(user.PasswordHash)
-	if s.shopPasswordBlock != nil {
-		s.shopPasswordBlock(user.ID, oldPasswordHash)
-	}
-	if s.shopPasswordUnblock != nil {
-		defer s.shopPasswordUnblock(user.ID, oldPasswordHash)
-	}
-
-	if s.shopPasswordSync != nil {
-		if err := s.shopPasswordSync(ctx, user.ID, user.Email, req.NewPassword); err != nil {
-			return ErrServiceUnavailable
-		}
-	}
-
 	if err := user.SetPassword(req.NewPassword); err != nil {
 		return fmt.Errorf("set password: %w", err)
 	}
@@ -1073,7 +1032,10 @@ func (s *UserService) ChangePassword(ctx context.Context, userID int64, req Chan
 
 	// TokenVersion 没有对应的数据库列（见 resolvedTokenVersion：它由 email+password_hash
 	// 指纹推导），改密写回 password_hash 即可让旧 token 失效。
-	if err := s.userRepo.Update(ctx, user, UserUpdateFields{PasswordHash: true}); err != nil {
+	if err := s.userRepo.Update(ctx, user, UserUpdateFields{
+		PasswordHash:           true,
+		LegacyShopPasswordHash: true,
+	}); err != nil {
 		return fmt.Errorf("update user: %w", err)
 	}
 

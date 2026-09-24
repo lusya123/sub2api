@@ -25,6 +25,10 @@ const (
 	FieldEmail = "email"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
+	// FieldLegacyShopPasswordHash holds the string denoting the legacy_shop_password_hash field in the database.
+	FieldLegacyShopPasswordHash = "legacy_shop_password_hash"
+	// FieldCredentialVersion holds the string denoting the credential_version field in the database.
+	FieldCredentialVersion = "credential_version"
 	// FieldRole holds the string denoting the role field in the database.
 	FieldRole = "role"
 	// FieldBalance holds the string denoting the balance field in the database.
@@ -199,6 +203,8 @@ var Columns = []string{
 	FieldDeletedAt,
 	FieldEmail,
 	FieldPasswordHash,
+	FieldLegacyShopPasswordHash,
+	FieldCredentialVersion,
 	FieldRole,
 	FieldBalance,
 	FieldFrozenBalance,
@@ -254,6 +260,10 @@ var (
 	EmailValidator func(string) error
 	// PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	PasswordHashValidator func(string) error
+	// LegacyShopPasswordHashValidator is a validator for the "legacy_shop_password_hash" field. It is called by the builders before save.
+	LegacyShopPasswordHashValidator func(string) error
+	// DefaultCredentialVersion holds the default value on creation for the "credential_version" field.
+	DefaultCredentialVersion uint64
 	// DefaultRole holds the default value on creation for the "role" field.
 	DefaultRole string
 	// RoleValidator is a validator for the "role" field. It is called by the builders before save.
@@ -323,6 +333,16 @@ func ByEmail(opts ...sql.OrderTermOption) OrderOption {
 // ByPasswordHash orders the results by the password_hash field.
 func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
+}
+
+// ByLegacyShopPasswordHash orders the results by the legacy_shop_password_hash field.
+func ByLegacyShopPasswordHash(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLegacyShopPasswordHash, opts...).ToFunc()
+}
+
+// ByCredentialVersion orders the results by the credential_version field.
+func ByCredentialVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCredentialVersion, opts...).ToFunc()
 }
 
 // ByRole orders the results by the role field.

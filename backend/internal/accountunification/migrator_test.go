@@ -1,0 +1,448 @@
+package accountunification
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"golang.org/x/crypto/bcrypt"
+)
+
+func TestBuildPlanReadsBothDatabasesWithoutExportingVerifiers(t *testing.T) {
+	mainDB, mainMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mainDB.Close() }()
+	shopDB, shopMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shopDB.Close() }()
+
+	mainHash := mustTestHash(t, "MainPassword123")
+	shopHash := mustTestHash(t, "ShopPassword456")
+	mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}).
+			AddRow(11, "user@example.com", mainHash, "", 4, "user", "active", false))
+	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+			AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true, false))
+
+	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Counts[ActionApply] != 1 || len(plan.Items) != 1 {
+		t.Fatalf("unexpected plan counts/items: %#v %#v", plan.Counts, plan.Items)
+	}
+	encoded, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), mainHash) || strings.Contains(string(encoded), shopHash) {
+		t.Fatal("plan leaked a reusable password verifier")
+	}
+	if err := mainMock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+	if err := shopMock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClassifySafePairAndRedactHashes(t *testing.T) {
+	mainHash := mustTestHash(t, "MainPassword123")
+	shopHash := mustTestHash(t, "ShopPassword456")
+	item := classify("user@example.com", []mainUser{{
+		ID: 11, Email: "user@example.com", PasswordHash: mainHash,
+		CredentialVersion: 4, Role: "user", Status: "active",
+	}}, []shopUser{{
+		ID: 22, Email: "user@example.com", PasswordHash: shopHash,
+		AuthAuthority: "local", Status: "active", EmailVerified: true,
+	}})
+	if item.Action != ActionApply || item.Reason != "matched_safe_pair" {
+		t.Fatalf("classification = %s/%s", item.Action, item.Reason)
+	}
+	encoded, err := json.Marshal(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), mainHash) || strings.Contains(string(encoded), shopHash) {
+		t.Fatal("plan leaked a reusable password verifier")
+	}
+}
+
+func TestBuildPlanRejectsShopPasswordSetupRequired(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		withMain   bool
+		wantReason string
+	}{
+		{name: "matched pair", withMain: true, wantReason: "shop_password_setup_required"},
+		{name: "shop only", withMain: false, wantReason: "shop_only_password_setup_required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mainDB, mainMock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = mainDB.Close() }()
+			shopDB, shopMock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = shopDB.Close() }()
+			hash := mustTestHash(t, "AnyPassword123")
+			mainRows := sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"})
+			if tc.withMain {
+				mainRows.AddRow(11, "user@example.com", hash, "", 1, "user", "active", false)
+			}
+			mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").WillReturnRows(mainRows)
+			shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
+				WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+					AddRow(22, "user@example.com", hash, "", "local", 0, 0, 3, "active", true, true))
+			plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(plan.Items) != 1 || plan.Items[0].Action != ActionManual || plan.Items[0].Reason != tc.wantReason {
+				t.Fatalf("classification = %#v, want manual/%s", plan.Items, tc.wantReason)
+			}
+		})
+	}
+}
+
+func TestClassifyShopOnlySeparatesUnsafeAccountsFromMirrorCandidates(t *testing.T) {
+	valid := shopUser{
+		ID: 22, Email: "user@example.com", PasswordHash: mustTestHash(t, "ShopPassword456"),
+		AuthAuthority: "local", Status: "active", EmailVerified: true,
+	}
+	tests := []struct {
+		name       string
+		change     func(*shopUser)
+		wantReason string
+	}{
+		{name: "inactive", change: func(u *shopUser) { u.Status = "disabled" }, wantReason: "shop_only_inactive"},
+		{name: "unverified", change: func(u *shopUser) { u.EmailVerified = false }, wantReason: "shop_only_email_unverified"},
+		{name: "unsupported verifier", change: func(u *shopUser) { u.PasswordHash = "not-bcrypt" }, wantReason: "shop_only_unsupported_password_hash"},
+		{name: "bound to missing Main user", change: func(u *shopUser) { u.Sub2APIUserID = 99 }, wantReason: "shop_only_preexisting_binding"},
+		{name: "remote authority", change: func(u *shopUser) { u.AuthAuthority = "sub2api" }, wantReason: "shop_only_nonlocal_authority"},
+		{name: "legacy Main hash", change: func(u *shopUser) { u.LegacySub2APIHash = valid.PasswordHash }, wantReason: "shop_only_existing_main_verifier"},
+		{name: "authority version", change: func(u *shopUser) { u.AuthorityCredentialVersion = 2 }, wantReason: "shop_only_authority_version_conflict"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			user := valid
+			tc.change(&user)
+			item := classify("user@example.com", nil, []shopUser{user})
+			if item.Action != ActionManual || item.Reason != tc.wantReason {
+				t.Fatalf("classification = %s/%s, want manual/%s", item.Action, item.Reason, tc.wantReason)
+			}
+		})
+	}
+	item := classify("user@example.com", nil, []shopUser{valid})
+	if item.Action != "create_main" || item.Reason != "shop_only_create_main" {
+		t.Fatalf("valid Shop-only classification = %s/%s, want create_main/shop_only_create_main", item.Action, item.Reason)
+	}
+	if item.ShopPasswordFingerprint != passwordFingerprint(valid.PasswordHash) || item.ShopTokenVersion != valid.TokenVersion {
+		t.Fatal("Shop-only plan must freeze password and credential state without exporting a verifier")
+	}
+}
+
+func TestClassifyShopOnlyDoesNotLabelDuplicateEmailAsMirrorCandidate(t *testing.T) {
+	hash := mustTestHash(t, "ShopPassword456")
+	shops := []shopUser{
+		{ID: 22, Email: "user@example.com", PasswordHash: hash, AuthAuthority: "local", Status: "active", EmailVerified: true},
+		{ID: 23, Email: "USER@example.com", PasswordHash: hash, AuthAuthority: "local", Status: "active", EmailVerified: true},
+	}
+	item := classify("user@example.com", nil, shops)
+	if item.Action != ActionManual || item.Reason != "duplicate_shop_email" {
+		t.Fatalf("classification = %s/%s, want manual/duplicate_shop_email", item.Action, item.Reason)
+	}
+}
+
+func TestClassifyShopOnlyRejectsMalformedEmailBeforeMainCreation(t *testing.T) {
+	shop := shopUser{ID: 22, Email: "not-an-email", PasswordHash: mustTestHash(t, "ShopPassword456"),
+		AuthAuthority: "local", Status: "active", EmailVerified: true}
+	item := classify(shop.Email, nil, []shopUser{shop})
+	if item.Action != ActionManual || item.Reason != "shop_only_invalid_email" {
+		t.Fatalf("malformed Shop email was offered for Main creation: %s/%s", item.Action, item.Reason)
+	}
+}
+
+func TestClassifyShopOnlyRejectsTelegramPlaceholderEmail(t *testing.T) {
+	shop := shopUser{ID: 22, Email: "telegram_123@login.local", PasswordHash: mustTestHash(t, "ShopPassword456"),
+		AuthAuthority: "local", Status: "active", EmailVerified: true}
+	item := classify(shop.Email, nil, []shopUser{shop})
+	if item.Action != ActionManual || item.Reason != "shop_only_placeholder_email" {
+		t.Fatalf("Telegram placeholder was offered for Main creation: %s/%s", item.Action, item.Reason)
+	}
+}
+
+func TestBuildPlanFlagsShopOnlyMainInboxAliasCollision(t *testing.T) {
+	mainDB, mainMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mainDB.Close() }()
+	shopDB, shopMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shopDB.Close() }()
+
+	hash := mustTestHash(t, "AnyPassword123")
+	mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}).
+			AddRow(11, "some.one@gmail.com", hash, "", 1, "user", "active", false))
+	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+			AddRow(22, "someone+shop@googlemail.com", hash, "", "local", 0, 0, 0, "active", true, false))
+
+	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range plan.Items {
+		if item.Email == "someone+shop@googlemail.com" {
+			if item.Action != ActionManual || item.Reason != "shop_only_main_alias_collision" {
+				t.Fatalf("Shop-only alias classification = %s/%s", item.Action, item.Reason)
+			}
+			return
+		}
+	}
+	t.Fatal("Shop-only alias item missing")
+}
+
+func TestBuildPlanFlagsAliasesBetweenTwoShopOnlyAccounts(t *testing.T) {
+	mainDB, mainMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mainDB.Close() }()
+	shopDB, shopMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shopDB.Close() }()
+
+	hash := mustTestHash(t, "AnyPassword123")
+	mainMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_shop_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}))
+	shopMock.ExpectQuery("SELECT id, email, password_hash, COALESCE\\(legacy_sub2api_password_hash").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}).
+			AddRow(21, "first.last@qq.com", hash, "", "local", 0, 0, 0, "active", true, false).
+			AddRow(22, "first.last+shop@qq.com", hash, "", "local", 0, 0, 0, "active", true, false))
+
+	plan, err := BuildPlan(context.Background(), mainDB, shopDB, time.Unix(123, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := plan.Counts["reason:shop_only_shop_alias_collision"]; got != 2 {
+		t.Fatalf("Shop-only alias collision count = %d, want 2", got)
+	}
+	for _, item := range plan.Items {
+		if item.Action != ActionManual || item.Reason != "shop_only_shop_alias_collision" {
+			t.Fatalf("Shop-only alias classification = %s/%s", item.Action, item.Reason)
+		}
+	}
+}
+
+func TestClassifyRejectsPrivilegedTOTPAndConflicts(t *testing.T) {
+	mainHash := mustTestHash(t, "MainPassword123")
+	shopHash := mustTestHash(t, "ShopPassword456")
+	tests := []struct {
+		name   string
+		main   mainUser
+		shop   shopUser
+		reason string
+	}{
+		{
+			name: "privileged", reason: "privileged_main_account",
+			main: mainUser{ID: 1, Email: "u@example.com", PasswordHash: mainHash, Role: "admin", Status: "active"},
+			shop: shopUser{ID: 2, Email: "u@example.com", PasswordHash: shopHash, Status: "active", EmailVerified: true},
+		},
+		{
+			name: "totp", reason: "main_totp_enabled",
+			main: mainUser{ID: 1, Email: "u@example.com", PasswordHash: mainHash, Role: "user", Status: "active", TOTPEnabled: true},
+			shop: shopUser{ID: 2, Email: "u@example.com", PasswordHash: shopHash, Status: "active", EmailVerified: true},
+		},
+		{
+			name: "binding conflict", reason: "shop_bound_to_different_main_user",
+			main: mainUser{ID: 1, Email: "u@example.com", PasswordHash: mainHash, Role: "user", Status: "active"},
+			shop: shopUser{ID: 2, Email: "u@example.com", PasswordHash: shopHash, Status: "active", EmailVerified: true, Sub2APIUserID: 999},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := classify("u@example.com", []mainUser{tt.main}, []shopUser{tt.shop})
+			if item.Action != ActionManual || item.Reason != tt.reason {
+				t.Fatalf("classification = %s/%s, want manual/%s", item.Action, item.Reason, tt.reason)
+			}
+		})
+	}
+}
+
+func TestClassifyAlreadyApplied(t *testing.T) {
+	mainHash := mustTestHash(t, "MainPassword123")
+	shopHash := mustTestHash(t, "ShopPassword456")
+	item := classify("u@example.com", []mainUser{{
+		ID: 1, Email: "u@example.com", PasswordHash: mainHash, LegacyShopHash: shopHash,
+		CredentialVersion: 9, Role: "user", Status: "active",
+	}}, []shopUser{{
+		ID: 2, Email: "u@example.com", PasswordHash: shopHash, LegacySub2APIHash: mainHash,
+		AuthAuthority: "sub2api", AuthorityCredentialVersion: 9, Sub2APIUserID: 1,
+		Status: "active", EmailVerified: true,
+	}})
+	if item.Action != ActionAlreadyDone {
+		t.Fatalf("classification = %s/%s", item.Action, item.Reason)
+	}
+}
+
+func TestApplyMatchedPairRunsMainThenShopAndCanBeRetried(t *testing.T) {
+	mainDB, mainMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mainDB.Close() }()
+	shopDB, shopMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = shopDB.Close() }()
+
+	mainHash := mustTestHash(t, "MainPassword123")
+	shopHash := mustTestHash(t, "ShopPassword456")
+	item := PlanItem{
+		Email: "user@example.com", Action: ActionApply, Reason: "matched_safe_pair",
+		MainUserIDs: []int64{11}, ShopUserIDs: []uint64{22},
+		MainPasswordFingerprint: passwordFingerprint(mainHash),
+		ShopPasswordFingerprint: passwordFingerprint(shopHash),
+		MainLegacyFingerprint:   passwordFingerprint(""), ShopLegacyFingerprint: passwordFingerprint(""),
+		MainCredentialVersion: 4, ShopTokenVersion: 3,
+	}
+	shopColumns := []string{"id", "email", "password_hash", "legacy", "authority", "authority_version", "sub2api_user_id", "token_version", "status", "verified", "password_setup_required"}
+	mainColumns := []string{"id", "email", "password_hash", "legacy", "credential_version", "role", "status", "totp_enabled"}
+
+	// Read Shop verifier before the Main-side transaction.
+	shopMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(uint64(22)).
+		WillReturnRows(sqlmock.NewRows(shopColumns).AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true, false))
+
+	mainMock.ExpectBegin()
+	mainMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(int64(11)).
+		WillReturnRows(sqlmock.NewRows(mainColumns).AddRow(11, "user@example.com", mainHash, "", 4, "user", "active", false))
+	mainMock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM users WHERE LOWER").WithArgs("user@example.com").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mainMock.ExpectQuery("UPDATE users").WithArgs(shopHash, int64(11), mainHash).
+		WillReturnRows(sqlmock.NewRows([]string{"credential_version"}).AddRow(5))
+	mainMock.ExpectCommit()
+	// Re-read Main after commit before promoting Shop authority.
+	mainMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(int64(11)).
+		WillReturnRows(sqlmock.NewRows(mainColumns).AddRow(11, "user@example.com", mainHash, shopHash, 5, "user", "active", false))
+
+	shopMock.ExpectBegin()
+	shopMock.ExpectExec("INSERT INTO sub2api_credential_watermarks").WithArgs(int64(11)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	shopMock.ExpectQuery("SELECT credential_version").WithArgs(int64(11)).
+		WillReturnRows(sqlmock.NewRows([]string{"credential_version"}).AddRow(0))
+	shopMock.ExpectQuery("SELECT id, email, password_hash").WithArgs(uint64(22)).
+		WillReturnRows(sqlmock.NewRows(shopColumns).AddRow(22, "user@example.com", shopHash, "", "local", 0, 0, 3, "active", true, false))
+	shopMock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM users WHERE LOWER").WithArgs("user@example.com").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	shopMock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM users WHERE sub2_api_user_id").WithArgs(int64(11), uint64(22)).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	shopMock.ExpectExec("UPDATE sub2api_credential_watermarks").WithArgs(uint64(5), int64(11)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	shopMock.ExpectExec("UPDATE users").
+		WithArgs(mainHash, int64(11), uint64(5), uint64(22), shopHash).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	shopMock.ExpectCommit()
+
+	results, err := Apply(context.Background(), mainDB, shopDB, &Plan{
+		Version: PlanVersion,
+		Items:   []PlanItem{item},
+	}, 1, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || !results[0].MainLegacyAdded || !results[0].ShopAuthorityPromoted || results[0].CredentialVersion != 5 {
+		t.Fatalf("unexpected results: %#v", results)
+	}
+	if err := mainMock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+	if err := shopMock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustTestHash(t *testing.T, password string) string {
+	t.Helper()
+	hash, err := bcryptGenerate([]byte(password))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(hash)
+}
+
+// These tests catch re-use of a plan after a revoke/restore cycle, even when
+// the primary verifier and final visible policy have not changed.
+func TestValidateMainRejectsCredentialDriftExceptOwnResumableImport(t *testing.T) {
+	mainHash, shopHash := mustTestHash(t, "MainPassword123"), mustTestHash(t, "ShopPassword456")
+	main := mainUser{ID: 11, Email: "u@example.com", PasswordHash: mainHash, CredentialVersion: 4, Role: "user", Status: "active"}
+	shop := shopUser{ID: 22, Email: main.Email, PasswordHash: shopHash, Status: "active", EmailVerified: true}
+	item := classify(main.Email, []mainUser{main}, []shopUser{shop})
+	for _, tt := range []struct {
+		name    string
+		version uint64
+		legacy  string
+		wantErr bool
+	}{
+		{"unchanged", 4, "", false},
+		{"own committed import", 5, shopHash, false},
+		{"revoked after planning", 5, "", true},
+		{"disable then restore", 6, "", true},
+		{"import then policy cycle", 7, shopHash, true},
+		{"unversioned legacy change", 4, shopHash, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			current := main
+			current.CredentialVersion, current.LegacyShopHash = tt.version, tt.legacy
+			if err := validateMainForPromotion(current, item, shopHash); (err != nil) != tt.wantErr {
+				t.Fatalf("want error=%v, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidateShopRejectsLocalCredentialAndBindingDrift(t *testing.T) {
+	main := mainUser{ID: 11, Email: "u@example.com", PasswordHash: mustTestHash(t, "MainPassword123"), CredentialVersion: 4, Role: "user", Status: "active"}
+	shop := shopUser{ID: 22, Email: main.Email, PasswordHash: mustTestHash(t, "ShopPassword456"), TokenVersion: 3, Status: "active", EmailVerified: true}
+	item := classify(main.Email, []mainUser{main}, []shopUser{shop})
+	for _, tt := range []struct {
+		name   string
+		mutate func(*shopUser)
+	}{
+		{"revocation", func(s *shopUser) { s.TokenVersion++ }},
+		{"different binding", func(s *shopUser) { s.Sub2APIUserID = 999 }},
+		{"unreviewed local binding", func(s *shopUser) { s.Sub2APIUserID = 11 }},
+		{"legacy verifier", func(s *shopUser) { s.LegacySub2APIHash = main.PasswordHash }},
+		{"password setup required", func(s *shopUser) { s.PasswordSetupRequired = true }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			current := shop
+			tt.mutate(&current)
+			if err := validateShopAgainstPlan(current, item); err == nil {
+				t.Fatal("accepted stale plan")
+			}
+		})
+	}
+}
+
+var bcryptGenerate = func(password []byte) ([]byte, error) {
+	return bcrypt.GenerateFromPassword(password, bcrypt.MinCost)
+}

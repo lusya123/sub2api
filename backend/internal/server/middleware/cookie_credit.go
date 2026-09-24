@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -161,4 +162,24 @@ func (c *CookieCreditSystem) IsRateLimited(ctx context.Context, cookieHash strin
 	}
 	credit := c.GetCredit(ctx, cookieHash)
 	return credit < CreditMinTrust && credit >= CreditMinService
+}
+
+// CookieReputationGuard rejects low-reputation browser cookies but never
+// applies browser reputation to the separately HMAC-authenticated Shop bridge.
+func CookieReputationGuard(credit *CookieCreditSystem) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if IsShopAccountBridgeAuthenticated(c) ||
+			IsGatewayAPIPath(c.Request.URL.Path) ||
+			GetTrustTier(c) == TierAPIKey ||
+			GetTrustTier(c) == TierUser {
+			c.Next()
+			return
+		}
+		cookieValue, _ := c.Cookie(visitorCookieName)
+		if cookieValue != "" && credit.IsBlocked(c.Request.Context(), CookieHash(cookieValue)) {
+			c.AbortWithStatusJSON(403, gin.H{"error": "cookie reputation too low"})
+			return
+		}
+		c.Next()
+	}
 }

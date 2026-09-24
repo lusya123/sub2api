@@ -88,6 +88,34 @@ func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 	return _c
 }
 
+// SetLegacyShopPasswordHash sets the "legacy_shop_password_hash" field.
+func (_c *UserCreate) SetLegacyShopPasswordHash(v string) *UserCreate {
+	_c.mutation.SetLegacyShopPasswordHash(v)
+	return _c
+}
+
+// SetNillableLegacyShopPasswordHash sets the "legacy_shop_password_hash" field if the given value is not nil.
+func (_c *UserCreate) SetNillableLegacyShopPasswordHash(v *string) *UserCreate {
+	if v != nil {
+		_c.SetLegacyShopPasswordHash(*v)
+	}
+	return _c
+}
+
+// SetCredentialVersion sets the "credential_version" field.
+func (_c *UserCreate) SetCredentialVersion(v uint64) *UserCreate {
+	_c.mutation.SetCredentialVersion(v)
+	return _c
+}
+
+// SetNillableCredentialVersion sets the "credential_version" field if the given value is not nil.
+func (_c *UserCreate) SetNillableCredentialVersion(v *uint64) *UserCreate {
+	if v != nil {
+		_c.SetCredentialVersion(*v)
+	}
+	return _c
+}
+
 // SetRole sets the "role" field.
 func (_c *UserCreate) SetRole(v string) *UserCreate {
 	_c.mutation.SetRole(v)
@@ -600,6 +628,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.CredentialVersion(); !ok {
+		v := user.DefaultCredentialVersion
+		_c.mutation.SetCredentialVersion(v)
+	}
 	if _, ok := _c.mutation.Role(); !ok {
 		v := user.DefaultRole
 		_c.mutation.SetRole(v)
@@ -682,6 +714,14 @@ func (_c *UserCreate) check() error {
 		if err := user.PasswordHashValidator(v); err != nil {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
+	}
+	if v, ok := _c.mutation.LegacyShopPasswordHash(); ok {
+		if err := user.LegacyShopPasswordHashValidator(v); err != nil {
+			return &ValidationError{Name: "legacy_shop_password_hash", err: fmt.Errorf(`ent: validator failed for field "User.legacy_shop_password_hash": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CredentialVersion(); !ok {
+		return &ValidationError{Name: "credential_version", err: errors.New(`ent: missing required field "User.credential_version"`)}
 	}
 	if _, ok := _c.mutation.Role(); !ok {
 		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "User.role"`)}
@@ -791,6 +831,14 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
+	}
+	if value, ok := _c.mutation.LegacyShopPasswordHash(); ok {
+		_spec.SetField(user.FieldLegacyShopPasswordHash, field.TypeString, value)
+		_node.LegacyShopPasswordHash = &value
+	}
+	if value, ok := _c.mutation.CredentialVersion(); ok {
+		_spec.SetField(user.FieldCredentialVersion, field.TypeUint64, value)
+		_node.CredentialVersion = value
 	}
 	if value, ok := _c.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeString, value)
@@ -1186,6 +1234,24 @@ func (u *UserUpsert) UpdatePasswordHash() *UserUpsert {
 	return u
 }
 
+// SetLegacyShopPasswordHash sets the "legacy_shop_password_hash" field.
+func (u *UserUpsert) SetLegacyShopPasswordHash(v string) *UserUpsert {
+	u.Set(user.FieldLegacyShopPasswordHash, v)
+	return u
+}
+
+// UpdateLegacyShopPasswordHash sets the "legacy_shop_password_hash" field to the value that was provided on create.
+func (u *UserUpsert) UpdateLegacyShopPasswordHash() *UserUpsert {
+	u.SetExcluded(user.FieldLegacyShopPasswordHash)
+	return u
+}
+
+// ClearLegacyShopPasswordHash clears the value of the "legacy_shop_password_hash" field.
+func (u *UserUpsert) ClearLegacyShopPasswordHash() *UserUpsert {
+	u.SetNull(user.FieldLegacyShopPasswordHash)
+	return u
+}
+
 // SetRole sets the "role" field.
 func (u *UserUpsert) SetRole(v string) *UserUpsert {
 	u.Set(user.FieldRole, v)
@@ -1494,6 +1560,9 @@ func (u *UserUpsertOne) UpdateNewValues() *UserUpsertOne {
 		if _, exists := u.create.mutation.CreatedAt(); exists {
 			s.SetIgnore(user.FieldCreatedAt)
 		}
+		if _, exists := u.create.mutation.CredentialVersion(); exists {
+			s.SetIgnore(user.FieldCredentialVersion)
+		}
 	}))
 	return u
 }
@@ -1585,6 +1654,27 @@ func (u *UserUpsertOne) SetPasswordHash(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdatePasswordHash() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdatePasswordHash()
+	})
+}
+
+// SetLegacyShopPasswordHash sets the "legacy_shop_password_hash" field.
+func (u *UserUpsertOne) SetLegacyShopPasswordHash(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetLegacyShopPasswordHash(v)
+	})
+}
+
+// UpdateLegacyShopPasswordHash sets the "legacy_shop_password_hash" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateLegacyShopPasswordHash() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateLegacyShopPasswordHash()
+	})
+}
+
+// ClearLegacyShopPasswordHash clears the value of the "legacy_shop_password_hash" field.
+func (u *UserUpsertOne) ClearLegacyShopPasswordHash() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearLegacyShopPasswordHash()
 	})
 }
 
@@ -2110,6 +2200,9 @@ func (u *UserUpsertBulk) UpdateNewValues() *UserUpsertBulk {
 			if _, exists := b.mutation.CreatedAt(); exists {
 				s.SetIgnore(user.FieldCreatedAt)
 			}
+			if _, exists := b.mutation.CredentialVersion(); exists {
+				s.SetIgnore(user.FieldCredentialVersion)
+			}
 		}
 	}))
 	return u
@@ -2202,6 +2295,27 @@ func (u *UserUpsertBulk) SetPasswordHash(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdatePasswordHash() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdatePasswordHash()
+	})
+}
+
+// SetLegacyShopPasswordHash sets the "legacy_shop_password_hash" field.
+func (u *UserUpsertBulk) SetLegacyShopPasswordHash(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetLegacyShopPasswordHash(v)
+	})
+}
+
+// UpdateLegacyShopPasswordHash sets the "legacy_shop_password_hash" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateLegacyShopPasswordHash() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateLegacyShopPasswordHash()
+	})
+}
+
+// ClearLegacyShopPasswordHash clears the value of the "legacy_shop_password_hash" field.
+func (u *UserUpsertBulk) ClearLegacyShopPasswordHash() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearLegacyShopPasswordHash()
 	})
 }
 

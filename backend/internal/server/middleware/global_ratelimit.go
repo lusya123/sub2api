@@ -90,9 +90,29 @@ func (p *PathLevelRateLimiter) Allow(ctx context.Context, path string) bool {
 	return cnt <= int64(limit.limit)
 }
 
+// Middleware applies path-level overload protection while preserving the
+// separately authenticated, fixed-path Shop bridge channel.
+func (p *PathLevelRateLimiter) Middleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if IsShopAccountBridgeAuthenticated(c) {
+			c.Next()
+			return
+		}
+		if !p.Allow(c.Request.Context(), c.Request.URL.Path) {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "path overloaded, try later"})
+			return
+		}
+		c.Next()
+	}
+}
+
 func (g *GlobalRateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if os.Getenv("DEFENSE_GLOBAL_RATELIMIT_ENABLED") == "false" || g == nil || g.rdb == nil {
+			c.Next()
+			return
+		}
+		if IsShopAccountBridgeAuthenticated(c) {
 			c.Next()
 			return
 		}
