@@ -740,6 +740,21 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
 	modelID := fallbackModelIdentifier(modelLower)
 
+	if isClaudeHaiku55Model(model) {
+		p := claudeHaiku55Pricing
+		return &ModelPricing{
+			InputPricePerToken: p.InputCostPerToken, OutputPricePerToken: p.OutputCostPerToken,
+			CacheCreationPricePerToken:  p.CacheCreationInputTokenCost,
+			CacheReadPricePerToken:      p.CacheReadInputTokenCost,
+			CacheCreation5mPrice:        p.CacheCreationInputTokenCost,
+			CacheCreation1hPrice:        p.CacheCreationInputTokenCostAbove1hr,
+			SupportsCacheBreakdown:      true,
+			LongContextInputThreshold:   p.LongContextInputTokenThreshold,
+			LongContextInputMultiplier:  p.LongContextInputCostMultiplier,
+			LongContextOutputMultiplier: p.LongContextOutputCostMultiplier,
+		}
+	}
+
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {
 		// "opus-5" 必须先判：不能用裸 "5" 匹配，否则 claude-opus-4-5 会被误判。
@@ -1155,9 +1170,9 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	// 长上下文定价仅在无区间定价时应用（区间定价已包含上下文分层）
 	applyLongCtx := len(resolved.Intervals) == 0
 	if input.LongContextBillingEnabled != nil {
-		// The account flag controls optional OpenAI tiers only. MiniMax M3's
-		// >512K tier is provider-intrinsic and must not be disabled by it.
-		applyLongCtx = applyLongCtx && (*input.LongContextBillingEnabled || isMiniMaxM3Model(input.Model))
+		// The account flag controls optional OpenAI tiers only. MiniMax M3
+		// and Haiku 5.5 have intrinsic provider tiers that it cannot disable.
+		applyLongCtx = applyLongCtx && (*input.LongContextBillingEnabled || isMiniMaxM3Model(input.Model) || isClaudeHaiku55Model(input.Model))
 	}
 
 	return s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier, applyLongCtx), nil
@@ -1362,9 +1377,9 @@ func (s *BillingService) calculateCostInternalWithPolicy(
 		return nil, err
 	}
 
-	// MiniMax M3's >512K tier is mandatory provider pricing, independent of
-	// the account-level opt-in used by OpenAI long-context pricing.
-	applyLongCtx := longContextBillingEnabled || isMiniMaxM3Model(model)
+	// MiniMax M3 and Haiku 5.5 have mandatory provider context tiers,
+	// independent of the account-level opt-in for OpenAI long-context pricing.
+	applyLongCtx := longContextBillingEnabled || isMiniMaxM3Model(model) || isClaudeHaiku55Model(model)
 	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, applyLongCtx), nil
 }
 
@@ -1372,6 +1387,14 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	if pricing == nil {
 		return nil
 	}
+	if isClaudeHaiku55Model(model) {
+		cloned := *pricing
+		cloned.LongContextInputThreshold = 100000
+		cloned.LongContextInputMultiplier = 5
+		cloned.LongContextOutputMultiplier = 5
+		return &cloned
+	}
+
 	normalized := normalizeKnownOpenAICodexModel(model)
 	isGPT56 := isOpenAIGPT56Model(normalized)
 	usesLegacyLongContextPricing := usesOpenAILegacyLongContextPricing(normalized)
