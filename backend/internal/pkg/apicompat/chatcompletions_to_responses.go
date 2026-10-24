@@ -115,7 +115,7 @@ func convertChatMessagesToResponsesInput(msgs []ChatMessage) ([]ResponsesInputIt
 // ResponsesInputItem values.
 func chatMessageToResponsesItems(m ChatMessage) ([]ResponsesInputItem, error) {
 	switch m.Role {
-	case "system":
+	case "system", "developer":
 		return chatSystemToResponses(m)
 	case "user":
 		return chatUserToResponses(m)
@@ -367,15 +367,17 @@ func convertChatContentPartsToResponses(parts []ChatContentPart) []ResponsesCont
 		case "text":
 			if p.Text != "" {
 				responseParts = append(responseParts, ResponsesContentPart{
-					Type: "input_text",
-					Text: p.Text,
+					CacheControl: p.CacheControl,
+					Type:         "input_text",
+					Text:         p.Text,
 				})
 			}
 		case "image_url":
 			if p.ImageURL != nil && p.ImageURL.URL != "" && !isEmptyBase64DataURI(p.ImageURL.URL) {
 				responseParts = append(responseParts, ResponsesContentPart{
-					Type:     "input_image",
-					ImageURL: p.ImageURL.URL,
+					CacheControl: p.CacheControl,
+					Type:         "input_image",
+					ImageURL:     p.ImageURL.URL,
 				})
 			}
 		}
