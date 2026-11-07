@@ -662,6 +662,15 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 		}
 	}
 
+	// Never price Haiku 5.5 through a fuzzy match against older Haiku models.
+	if isClaudeHaiku55Model(modelName) {
+		if pricing, ok := s.pricingData["claude-haiku-5-5"]; ok {
+			return pricing
+		}
+		pricing := claudeHaiku55Pricing
+		return &pricing
+	}
+
 	// 2. 处理常见的模型名称变体
 	// claude-opus-4-5-20251101 -> claude-opus-4.5-20251101
 	for _, candidate := range lookupCandidates {

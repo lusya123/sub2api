@@ -52,6 +52,33 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 		out.ToolChoice = tc
 	}
 
+	// Haiku 5.5 accepts adaptive thinking only, without manual budgets or samplers.
+	model := strings.ToLower(strings.TrimSpace(req.Model))
+	for _, suffix := range []string{"[1m]", "-1m", "-thinking"} {
+		model = strings.TrimSuffix(model, suffix)
+	}
+	if model == "claude-haiku-5-5" || model == "claude-haiku-5.5" {
+		out.Temperature, out.TopP = nil, nil
+		effort := "medium"
+		if req.Reasoning != nil && req.Reasoning.Effort != "" {
+			effort = strings.ToLower(strings.TrimSpace(req.Reasoning.Effort))
+		}
+		if effort == "none" || effort == "minimal" {
+			out.Thinking = &AnthropicThinking{Type: "disabled"}
+		} else {
+			switch effort {
+			case "x-high", "extra-high":
+				effort = "xhigh"
+			case "low", "medium", "high", "xhigh", "max":
+			default:
+				return nil, fmt.Errorf("unsupported Haiku 5.5 reasoning effort: %s", effort)
+			}
+			out.Thinking = &AnthropicThinking{Type: "adaptive"}
+			out.OutputConfig = &AnthropicOutputConfig{Effort: effort}
+		}
+		return out, nil
+	}
+
 	// reasoning.effort → output_config.effort + thinking.
 	// Codex CLI sends "none" for non-reasoning runs. Anthropic does not accept
 	// "none" as output_config.effort, so it must be treated as absent.
@@ -137,8 +164,11 @@ func mapResponsesEffortToAnthropic(effort string) string {
 // (for Anthropic's polymorphic system field) and a list of Anthropic messages.
 func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMessage) (json.RawMessage, []AnthropicMessage, error) {
 	var systemParts []string
+	var systemBlocks []AnthropicContentBlock
+	hasSystemCache := false
 	if strings.TrimSpace(instructions) != "" {
 		systemParts = append(systemParts, strings.TrimSpace(instructions))
+		systemBlocks = append(systemBlocks, AnthropicContentBlock{Type: "text", Text: strings.TrimSpace(instructions)})
 	}
 
 	// Try as plain string input.
@@ -165,6 +195,17 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 			text := extractTextFromContent(item.Content)
 			if text != "" {
 				systemParts = append(systemParts, text)
+			}
+			var parts []ResponsesContentPart
+			if json.Unmarshal(item.Content, &parts) == nil {
+				for _, part := range parts {
+					if (part.Type == "input_text" || part.Type == "text" || part.Type == "output_text") && part.Text != "" {
+						systemBlocks = append(systemBlocks, AnthropicContentBlock{Type: "text", Text: part.Text, CacheControl: part.CacheControl})
+						hasSystemCache = hasSystemCache || part.CacheControl != nil
+					}
+				}
+			} else if text != "" {
+				systemBlocks = append(systemBlocks, AnthropicContentBlock{Type: "text", Text: text})
 			}
 
 		case item.Type == "function_call":
@@ -244,6 +285,9 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 		system, _ = json.Marshal(strings.Join(systemParts, "\n\n"))
 	}
 
+	if hasSystemCache {
+		system, _ = json.Marshal(systemBlocks)
+	}
 	return system, messages, nil
 }
 
@@ -452,16 +496,18 @@ func convertResponsesUserToAnthropicContent(raw json.RawMessage) (json.RawMessag
 		case "input_text", "text":
 			if p.Text != "" {
 				blocks = append(blocks, AnthropicContentBlock{
-					Type: "text",
-					Text: p.Text,
+					CacheControl: p.CacheControl,
+					Type:         "text",
+					Text:         p.Text,
 				})
 			}
 		case "input_image":
 			src := dataURIToAnthropicImageSource(p.ImageURL)
 			if src != nil {
 				blocks = append(blocks, AnthropicContentBlock{
-					Type:   "image",
-					Source: src,
+					CacheControl: p.CacheControl,
+					Type:         "image",
+					Source:       src,
 				})
 			}
 		}
@@ -498,8 +544,9 @@ func convertResponsesAssistantToAnthropicContent(raw json.RawMessage) (json.RawM
 		case "output_text", "text":
 			if p.Text != "" {
 				blocks = append(blocks, AnthropicContentBlock{
-					Type: "text",
-					Text: p.Text,
+					CacheControl: p.CacheControl,
+					Type:         "text",
+					Text:         p.Text,
 				})
 			}
 		}

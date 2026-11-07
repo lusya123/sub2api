@@ -283,3 +283,38 @@ func newTestChannelServiceWithCache(t *testing.T, cache *channelCache) *ChannelS
 	cs.cache.Store(cache)
 	return cs
 }
+
+func TestHaiku55OfficialPricingWithCacheAndMandatoryContextTier(t *testing.T) {
+	for _, model := range []string{"claude-haiku-5-5", "claude-haiku-5.5-thinking", "claude-haiku-5-5[1m]", "anthropic/claude-haiku-5-5-thinking-1m"} {
+		t.Run(model, func(t *testing.T) {
+			bs := newTestBillingService()
+			disabled := false
+			for _, dynamic := range []bool{false, true} {
+				if dynamic {
+					bs.pricingService = &PricingService{pricingData: map[string]*LiteLLMModelPricing{"claude-3-haiku": {InputCostPerToken: 100}}}
+				}
+				p, err := bs.GetModelPricing(model)
+				require.NoError(t, err)
+				require.InDelta(t, 0.10e-6, p.InputPricePerToken, 1e-15)
+				for _, n := range []int{10000, 10001} {
+					tokens := UsageTokens{InputTokens: n, OutputTokens: 1000, CacheReadTokens: 60000, CacheCreationTokens: 30000, CacheCreation5mTokens: 20000, CacheCreation1hTokens: 10000}
+					factor := 1.0
+					if n == 10001 {
+						factor = 5
+					}
+					expected := (float64(n)*0.10e-6 + 1000*0.50e-6 + 60000*0.01e-6 + 20000*0.125e-6 + 10000*0.20e-6) * factor
+					for _, resolver := range []*ModelPricingResolver{nil, NewModelPricingResolver(nil, bs)} {
+						cost, err := bs.CalculateCostUnified(CostInput{Ctx: context.Background(), Model: model, Tokens: tokens, RateMultiplier: 1.5, Resolver: resolver, LongContextBillingEnabled: &disabled})
+						require.NoError(t, err)
+						require.InDelta(t, expected, cost.TotalCost, 1e-12)
+						require.InDelta(t, expected*1.5, cost.ActualCost, 1e-12)
+						require.Equal(t, n == 10001, cost.LongContextBillingApplied)
+					}
+				}
+			}
+		})
+	}
+	for _, invalid := range []string{"claude-haiku-4-5", "claude-haiku-5-50", "claude-haiku-5-5-future"} {
+		require.False(t, isClaudeHaiku55Model(invalid))
+	}
+}

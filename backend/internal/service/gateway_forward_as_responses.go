@@ -283,6 +283,14 @@ func mergeAnthropicUsage(dst *ClaudeUsage, src apicompat.AnthropicUsage) {
 	if src.CacheCreationInputTokens > 0 {
 		dst.CacheCreationInputTokens = src.CacheCreationInputTokens
 	}
+	if src.CacheCreation != nil {
+		if src.CacheCreation.Ephemeral5mInputTokens > 0 {
+			dst.CacheCreation5mTokens = src.CacheCreation.Ephemeral5mInputTokens
+		}
+		if src.CacheCreation.Ephemeral1hInputTokens > 0 {
+			dst.CacheCreation1hTokens = src.CacheCreation.Ephemeral1hInputTokens
+		}
+	}
 }
 
 // parseAnthropicSSEField parses an SSE field line in the form "field:value" or "field: value".

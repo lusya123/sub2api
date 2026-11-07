@@ -181,3 +181,43 @@ func TestHandleCCStreamingFromAnthropic_PreservesMessageStartCacheUsageAndReason
 	require.Equal(t, "medium", *result.ReasoningEffort)
 	require.Contains(t, rec.Body.String(), `[DONE]`)
 }
+
+func TestHandleCCFromAnthropicPreservesCacheTTLForBilling(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		name := "buffered"
+		if stream {
+			name = "stream"
+		}
+		t.Run(name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			resp := &http.Response{Header: http.Header{}, Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+				`event: message_start`,
+				`data: {"type":"message_start","message":{"id":"msg_ttl","type":"message","role":"assistant","content":[],"model":"claude-haiku-5-5","usage":{"input_tokens":20,"cache_creation_input_tokens":7000,"cache_creation":{"ephemeral_5m_input_tokens":2000,"ephemeral_1h_input_tokens":5000}}}}`,
+				``,
+				`event: content_block_start`,
+				`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"hello"}}`,
+				``,
+				`event: message_delta`,
+				`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}`,
+				``,
+				`event: message_stop`,
+				`data: {"type":"message_stop"}`,
+				``,
+			}, "\n")))}
+			svc := &GatewayService{}
+			var result *ForwardResult
+			var err error
+			if stream {
+				result, err = svc.handleCCStreamingFromAnthropic(resp, c, "claude-haiku-5-5", "claude-haiku-5-5", nil, time.Now(), true)
+			} else {
+				result, err = svc.handleCCBufferedFromAnthropic(resp, c, "claude-haiku-5-5", "claude-haiku-5-5", nil, time.Now())
+			}
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 7000, result.Usage.CacheCreationInputTokens)
+			require.Equal(t, 2000, result.Usage.CacheCreation5mTokens)
+			require.Equal(t, 5000, result.Usage.CacheCreation1hTokens)
+			require.Equal(t, 4, result.Usage.OutputTokens)
+		})
+	}
+}
